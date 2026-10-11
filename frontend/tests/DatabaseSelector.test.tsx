@@ -81,4 +81,18 @@ describe("DatabaseSelectorView", () => {
     expect(screen.getByText("Connection timed out.")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "shop" })).toBeChecked();
   });
+
+  it("keeps long names inside their own tile, with the full name as a tooltip", () => {
+    const long = "kdlsfkdaQAd_Dab4_fdEF31VCfrpQsaS7GHDAa_Fi_Ac9Cou_trZDmGaeKDRS";
+    setup({
+      ...list,
+      databases: [
+        { name: long, is_system: false, selectable: true, selected: true, missing: false },
+      ],
+    });
+    const name = screen.getByText(long);
+    expect(name).toHaveClass("cl-db-name");
+    expect(name).toHaveAttribute("title", long);
+    expect(name.closest(".cl-db-tile")).not.toBeNull();
+  });
 });

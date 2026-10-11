@@ -299,8 +299,20 @@ stored in its `sha256` metadata.
 
 A failed upload doesn't fail the backup: the local file is kept, the run shows "Upload failed"
 with the reason, and **Retry upload** tries again. If the local file has been removed (for
-example by retention), **Download** streams the remote copy instead. Deleting a backup deletes
-its remote copy too.
+example by retention), **Download** streams the remote copy instead.
+
+**Remote copies are protected for 7 days.** The panel never deletes a remote copy, by retention or
+by hand, until 7 days after it was uploaded. This guards against a mistake, or someone with panel
+access, wiping the offsite copies along with the local ones. Within those 7 days a copy can only be
+deleted in the storage provider itself, for example in the ArvanCloud console.
+
+**Deleting a backup** in the panel or the bot deletes only the file on the server by default. The
+remote copy is kept, and the backup stays in the history so it can still be downloaded. To delete
+the remote copy too, tick **Also delete the remote copy**. While the copy is protected, the box is
+disabled and shows the date it becomes deletable.
+
+For protection that holds even if the panel itself is compromised, also enable *Object Lock* or a
+retention or lifecycle rule on the bucket in your storage provider.
 
 To use an access key with minimal permissions, allow `s3:PutObject`, `s3:GetObject`,
 `s3:DeleteObject` and `s3:ListBucket` on the bucket.
@@ -314,7 +326,8 @@ Under **Settings → Retention**, set separate rules for local files and remote 
 
 Leave a field empty to turn that rule off. When both rules are set, a backup is deleted if it
 breaks either one. **The newest backup of each database is never deleted**, even if it is older
-than the age limit. Only successful backups are affected.
+than the age limit. Only successful backups are affected. **Remote copies younger than 7 days are
+never deleted**, whatever the policy, so the remote age limit can't be set below 7 days.
 
 Retention runs after every backup (for that database) and every hour for all backups. A server
 can have its own policy on its page. **Preview and apply now** lists what would be deleted under

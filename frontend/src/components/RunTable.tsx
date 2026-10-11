@@ -2,6 +2,7 @@ import {
   ActionIcon,
   Anchor,
   Button,
+  Checkbox,
   Code,
   Collapse,
   CopyButton,
@@ -29,7 +30,7 @@ import { errorMessage } from "../api/client";
 import { formatBytes, formatDuration } from "../format";
 import { formatDateTime } from "../i18n";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { DownloadSimple } from "./Icons";
+import { DownloadSimple, Lock } from "./Icons";
 import { RemoteStatusBadge, RunStatusBadge } from "./RunStatusBadge";
 
 export interface SortState {
@@ -87,11 +88,14 @@ function StatusCell({ run }: { run: BackupRun }) {
         </>
       )}
       <RemoteCell run={run} />
-      {run.file_deleted_reason === "retention" && run.file_deleted_at && (
+      {run.file_deleted_at && (
         <Text size="xs" c="dimmed">
-          {t("backups.removedByRetention", {
-            date: formatDateTime(run.file_deleted_at, i18n.language),
-          })}
+          {t(
+            run.file_deleted_reason === "manual"
+              ? "backups.removedManually"
+              : "backups.removedByRetention",
+            { date: formatDateTime(run.file_deleted_at, i18n.language) },
+          )}
         </Text>
       )}
     </Stack>
@@ -173,10 +177,27 @@ function SortHeader({
   );
 }
 
+/** Whether the panel may delete anything of this run right now (see the 7-day rule). */
+function canDelete(run: BackupRun): boolean {
+  if (isActive(run) || run.remote_status === "uploading") return false;
+  if (run.file_deleted_at && run.remote_available) return run.remote_deletable;
+  return true;
+}
+
 export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableProps) {
   const { t, i18n } = useTranslation();
+  const deleteText = (run: BackupRun, latest: boolean) => {
+    const values = {
+      database: run.database_name,
+      date: formatDateTime(run.requested_at, i18n.language),
+    };
+    if (run.file_deleted_at && run.remote_available) return t("history.deleteRemoteOnly", values);
+    if (run.remote_available) return t("history.deleteLocal", values);
+    return t(latest ? "history.deleteConfirmLatest" : "history.deleteConfirm", values);
+  };
   const remove = useDeleteRun();
   const [pending, setPending] = useState<{ run: BackupRun; latest: boolean } | null>(null);
+  const [deleteRemote, setDeleteRemote] = useState(false);
 
   const askDelete = async (run: BackupRun) => {
     let latest = false;
@@ -185,21 +206,30 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
     } catch {
       // Fall back to the regular confirmation text.
     }
+    // With no local file left, the remote copy is the only thing to delete.
+    setDeleteRemote(Boolean(run.file_deleted_at) && run.remote_available);
     setPending({ run, latest });
   };
 
   const confirmDelete = () => {
     if (!pending) return;
-    remove.mutate(pending.run.id, {
-      onSuccess: () => {
-        notifications.show({ color: "green", message: t("history.deleted") });
-        setPending(null);
+    remove.mutate(
+      { runId: pending.run.id, remote: deleteRemote },
+      {
+        onSuccess: () => {
+          const kept = pending.run.remote_available && !deleteRemote;
+          notifications.show({
+            color: "green",
+            message: kept ? t("history.deletedLocalKept") : t("history.deleted"),
+          });
+          setPending(null);
+        },
+        onError: (error) => {
+          notifications.show({ color: "red", message: errorMessage(t, error) });
+          setPending(null);
+        },
       },
-      onError: (error) => {
-        notifications.show({ color: "red", message: errorMessage(t, error) });
-        setPending(null);
-      },
-    });
+    );
   };
 
   const header = (column: SortColumn, label: string) => (
@@ -285,7 +315,23 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
                             : t("backups.fileMissing")}
                         </Button>
                       ))}
-                    {!isActive(run) && (
+                    {!canDelete(run) && run.file_deleted_at && run.remote_available && (
+                      <Tooltip
+                        label={t("history.remoteProtectedShort", {
+                          date: run.remote_deletable_at
+                            ? formatDateTime(run.remote_deletable_at, i18n.language)
+                            : "",
+                        })}
+                      >
+                        <span
+                          aria-label={t("history.remoteProtectedLabel")}
+                          style={{ display: "inline-flex", color: "var(--color-neutral-500)" }}
+                        >
+                          <Lock size={15} />
+                        </span>
+                      </Tooltip>
+                    )}
+                    {canDelete(run) && (
                       <Tooltip label={t("backups.delete")}>
                         <ActionIcon
                           color="red"
@@ -315,19 +361,35 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
       <ConfirmDialog
         opened={pending !== null}
         title={t("history.deleteTitle")}
-        body={
-          pending
-            ? t(pending.latest ? "history.deleteConfirmLatest" : "history.deleteConfirm", {
-                database: pending.run.database_name,
-                date: formatDateTime(pending.run.requested_at, i18n.language),
-              })
-            : ""
-        }
+        body={pending ? deleteText(pending.run, pending.latest) : ""}
         confirmLabel={t("backups.delete")}
         loading={remove.isPending}
+        confirmDisabled={Boolean(pending?.run.file_deleted_at) && !deleteRemote}
         onConfirm={confirmDelete}
         onCancel={() => setPending(null)}
-      />
+      >
+        {pending?.run.remote_available && (
+          <Checkbox
+            mb="lg"
+            data-testid="delete-remote"
+            label={t("history.deleteRemote")}
+            checked={deleteRemote}
+            disabled={!pending.run.remote_deletable || Boolean(pending.run.file_deleted_at)}
+            onChange={(e) => setDeleteRemote(e.currentTarget.checked)}
+            description={
+              pending.run.remote_deletable
+                ? deleteRemote
+                  ? t("history.deleteRemoteWarning")
+                  : t("history.deleteRemoteKept")
+                : t("history.deleteRemoteProtected", {
+                    date: pending.run.remote_deletable_at
+                      ? formatDateTime(pending.run.remote_deletable_at, i18n.language)
+                      : "",
+                  })
+            }
+          />
+        )}
+      </ConfirmDialog>
     </>
   );
 }

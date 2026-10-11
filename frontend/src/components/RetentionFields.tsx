@@ -44,9 +44,13 @@ export function RetentionFields({ value, onChange, disabled }: RetentionFieldsPr
           />
           <NumberInput
             label={t("retention.maxAge")}
-            description={t("retention.maxAgeHelp")}
+            description={
+              group.age === "remote_max_age_days"
+                ? t("retention.remoteMaxAgeHelp")
+                : t("retention.maxAgeHelp")
+            }
             placeholder={t("retention.noLimit")}
-            min={1}
+            min={group.age === "remote_max_age_days" ? 7 : 1}
             max={36500}
             allowDecimal={false}
             allowNegative={false}

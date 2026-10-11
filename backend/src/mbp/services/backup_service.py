@@ -5,6 +5,7 @@ from mbp.backups.dump_command import is_safe_database_name
 from mbp.backups.remote import RemoteError
 from mbp.backups.runner import BackupRunner
 from mbp.backups.store import LocalBackupStore
+from mbp.db import utcnow
 from mbp.models import BackupRun
 from mbp.repositories.backup_run_repository import BackupRunRepository, RunFilters
 from mbp.repositories.selection_repository import SelectionRepository
@@ -74,14 +75,29 @@ class BackupService:
     ) -> tuple[list[BackupRun], int]:
         return self.runs.query(filters, sort, order, page, page_size)
 
-    def delete(self, run_id: int) -> None:
-        """Delete a finished run with its local file and remote copy."""
+    def delete(self, run_id: int, *, delete_remote: bool = False) -> None:
+        """Delete a finished run's local file; its remote copy only when asked and allowed.
+
+        While a remote copy is kept, the run stays in the history (marked as deleted
+        locally) so the copy can still be found and downloaded. The record goes away
+        once neither a local file nor a remote copy is left.
+        """
         run = self.get(run_id)
         if run.is_active:
             raise ApiError(409, "run_active")
         if run.remote_status == "uploading":
             raise ApiError(409, "upload_in_progress")
-        if run.has_remote_copy:
+        now = utcnow()
+        has_local = run.has_local_file
+        remote_kept = run.has_remote_copy and not delete_remote
+        if delete_remote and run.has_remote_copy:
+            if not run.remote_deletable(now):
+                deletable_at = run.remote_deletable_at
+                raise ApiError(
+                    409,
+                    "remote_protected",
+                    detail=deletable_at.isoformat() if deletable_at else None,
+                )
             _, storage = get_remote_storage(self.db)
             if storage is None:
                 raise ApiError(409, "remote_not_configured")
@@ -89,9 +105,16 @@ class BackupService:
                 storage.delete(run.remote_key or "")
             except RemoteError as exc:
                 raise ApiError(502, "remote_delete_failed", detail=exc.code) from exc
-        if not run.file_deleted_at:
+        if remote_kept and not has_local:
+            # Only a protected (or not to be deleted) remote copy is left: nothing to do.
+            raise ApiError(409, "nothing_to_delete")
+        if has_local:
             self.store.delete(run.file_path)
-        self.runs.delete(run)
+        if remote_kept:
+            run.file_deleted_at = now
+            run.file_deleted_reason = "manual"
+        else:
+            self.runs.delete(run)
         self.db.commit()
 
     def retry_upload(self, run_id: int) -> BackupRun:
