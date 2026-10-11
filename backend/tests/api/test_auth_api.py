@@ -11,7 +11,11 @@ def login(client, username=ADMIN_USERNAME, password=ADMIN_PASSWORD):
 def test_login_success_sets_secure_cookie(client, admin):
     response = login(client)
     assert response.status_code == 200
-    assert response.json() == {"username": ADMIN_USERNAME}
+    assert response.json() == {
+        "username": ADMIN_USERNAME,
+        "two_factor_required": False,
+        "challenge": None,
+    }
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{COOKIE_NAME}=")
     assert "HttpOnly" in cookie
@@ -52,7 +56,7 @@ def test_me_requires_session(client, admin):
     login(client)
     response = client.get("/api/auth/me")
     assert response.status_code == 200
-    assert response.json() == {"username": ADMIN_USERNAME}
+    assert response.json() == {"username": ADMIN_USERNAME, "two_factor_enabled": False}
 
 
 def test_logout_ends_session(client, admin):

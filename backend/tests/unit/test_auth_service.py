@@ -40,13 +40,14 @@ def fail(service, username=ADMIN_USERNAME, password="wrong"):
 
 
 def test_successful_login_returns_token(service):
-    admin, token = service.login(ADMIN_USERNAME, ADMIN_PASSWORD)
+    result = service.login(ADMIN_USERNAME, ADMIN_PASSWORD)
+    admin, token = result.admin, result.token
     assert admin.username == ADMIN_USERNAME
     assert len(token) >= 40
 
 
 def test_username_is_case_insensitive(service):
-    admin, _ = service.login("ADMIN", ADMIN_PASSWORD)
+    admin = service.login("ADMIN", ADMIN_PASSWORD).admin
     assert admin.username == ADMIN_USERNAME
 
 
@@ -69,7 +70,7 @@ def test_five_failures_lock_for_fifteen_minutes(service, db, clock):
     fail(service, password=ADMIN_PASSWORD)
 
     clock.advance(seconds=2)
-    admin, _ = service.login(ADMIN_USERNAME, ADMIN_PASSWORD)
+    admin = service.login(ADMIN_USERNAME, ADMIN_PASSWORD).admin
     assert admin.username == ADMIN_USERNAME
 
 

@@ -21,6 +21,7 @@ export {
   Plus,
   PlugsConnected,
   Robot,
+  ShieldCheck,
   SlidersHorizontal,
   SignOut,
   Trash,

@@ -40,6 +40,59 @@ class LoginRequest(BaseModel):
 
 class Me(BaseModel):
     username: str
+    two_factor_enabled: bool = False
+
+
+class LoginResponse(BaseModel):
+    """Signed in (`username`), or `two_factor_required` with a `challenge` for step two."""
+
+    username: str
+    two_factor_required: bool = False
+    # Short-lived token for POST /auth/login/2fa; not a session.
+    challenge: str | None = None
+
+
+class SecondFactorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge: str = Field(min_length=1, max_length=2000)
+    # A 6-digit authenticator code or a recovery code.
+    code: SecretStr = Field(min_length=1, max_length=40)
+
+
+class TwoFactorStatus(BaseModel):
+    enabled: bool
+    recovery_codes_left: int
+
+
+class PasswordConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: SecretStr = Field(min_length=1, max_length=1024)
+
+
+class CodeConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: SecretStr = Field(min_length=1, max_length=40)
+
+
+class PasswordAndCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: SecretStr = Field(min_length=1, max_length=1024)
+    code: SecretStr = Field(min_length=1, max_length=40)
+
+
+class TwoFactorSetup(BaseModel):
+    # Shown once so the admin can scan or type it; never stored in plain text.
+    secret: str
+    otpauth_uri: str
+    qr_svg: str
+
+
+class RecoveryCodes(BaseModel):
+    recovery_codes: list[str]
 
 
 # --- Instances ---

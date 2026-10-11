@@ -2,7 +2,11 @@
 
 import re
 
-PUBLIC = {("GET", "/api/health"), ("POST", "/api/auth/login")}
+PUBLIC = {
+    ("GET", "/api/health"),
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/login/2fa"),
+}
 
 
 def all_routes(app) -> set[tuple[str, str]]:
