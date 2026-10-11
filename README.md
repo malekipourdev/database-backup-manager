@@ -12,6 +12,9 @@ The UI is available in Persian (right-to-left) and English.
 - **remote storage**: upload to AWS S3 or any S3-compatible service (MinIO, RustFS, Ceph,
   Wasabi, ArvanCloud, ...)
 - **retention**: automatic deletion of old backups, locally and remotely
+- **notifications and alerts**: failures, missing backups, low disk space and a daily summary,
+  sent to Bale, Telegram and a signed webhook, with configurable rules and a history
+- **Bale and Telegram bots**: manage backups from a chat with inline buttons
 
 ## Quick start
 
@@ -98,6 +101,8 @@ a trusted private network sits in front of the panel.
 | `MBP_HTTP_PORT` | `8080` | The server port the panel is published on. |
 | `MBP_BACKUP_CONCURRENCY` | `2` | Maximum number of backups running at the same time. Further ones wait in a queue and start in order. |
 | `MBP_RETENTION_INTERVAL_MINUTES` | `60` | How often the retention policy is applied to all backups, in addition to after every backup. `0` turns the periodic run off. |
+| `MBP_MONITOR_INTERVAL_MINUTES` | `10` | How often missing backups and disk space are checked for alerts. `0` turns these checks off. |
+| `MBP_BOTS_ENABLED` | `true` | Master switch for the Bale and Telegram bots, for example `false` on a standby copy of the panel. Bots are configured in the panel. |
 | `MBP_SCHEDULE_MISFIRE_GRACE_SECONDS` | `300` | A scheduled backup whose time passed while the panel was down still starts if the panel is back within this many seconds. Later ones are skipped until the next scheduled time. |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
@@ -319,6 +324,84 @@ The backup's record stays in the history: it shows when retention removed the lo
 that the remote copy was deleted. If a remote copy can't be deleted (for example, the storage is
 unreachable), the error is shown on the run and the deletion is retried on the next run.
 
+### Notifications and alerts
+
+Under **Notifications**, choose which events raise an alert and where each one goes: Bale,
+Telegram and/or a webhook.
+
+| Event | Severity | When |
+|-------|----------|------|
+| Backup failed | error | A backup ends with an error. |
+| Upload failed | error | A backup can't be uploaded to remote storage. |
+| No recent backup | error | A database marked for backup has had no successful backup for longer than the limit (default 26 hours). |
+| Low disk space | warning (error below half the limit) | Free space in the backup area falls below the limit (default 10%). |
+| Schedule did not run | warning | A schedule fires but can't start, for example because no databases are marked. |
+| Retention could not delete | warning | An old remote copy can't be deleted. |
+| Backup succeeded | info | After every successful backup. |
+| Back to normal | info | A "no recent backup" or "low disk space" alert has cleared. |
+| Daily summary | info | Every day at the time you set: successes, failures, uploads, missing backups and free space. |
+
+- **Cooldown:** the same alert about the same database is sent at most once per cooldown period
+  (default 60 minutes). Repeats are still recorded.
+- **Condition alerts:** "No recent backup" and "Low disk space" are announced once when the
+  problem starts and once when it clears, not on every check. The checks run every 10 minutes.
+- **History:** every alert is kept for 90 days, with where it was delivered and whether the
+  cooldown held it back. **Send a test alert** checks all channels at once.
+- **Webhook:** each alert is POSTed as JSON:
+
+  ```json
+  {"event": "backup_failed", "severity": "error", "subject": "backup_failed:1:shop",
+   "message": "Backup of “shop” on “prod” failed: ...", "params": {...},
+   "run_id": 42, "created_at": "2026-10-11T08:00:00+00:00", "source": "mysql-backup-panel"}
+  ```
+
+  With a signing secret, the `X-MBP-Signature` header is `sha256=` followed by the
+  HMAC-SHA256 of the request body, so the receiver can check that the alert came from the
+  panel.
+
+### Bale and Telegram bots
+
+Manage backups from a chat. Bots connect out to the messenger (long polling), so the panel still
+needs no public address, domain or open port.
+
+1. In Bale, open `@botfather` (in Telegram, `@BotFather` and `/newbot`), create a bot and copy
+   its token.
+2. Under **Bots**, turn the bot on, paste the token, use **Test token**, then **Save**. The badge
+   shows "Connected as @yourbot" once it is running.
+3. Register who may use it under **Bot admins**, in either of two ways:
+   - Enter the person's **numeric user ID**. If they send any message to the bot, it replies
+     with their ID.
+   - Use **Create link code**. The person sends the one-time code to the bot (valid for 15
+     minutes) and is registered automatically.
+
+**What the bot can do** (inline buttons, Persian or English per admin):
+
+- **Status:** servers, running backups, the last 24 hours, the last successful backup, free disk
+  space, remote storage and the next scheduled run.
+- **Servers:** details, test the connection, back up all marked databases (asks for
+  confirmation) or pick one database.
+- **Backups:** history, details, retry an upload, delete (asks for confirmation), and receive
+  the file, if you allow it.
+- **Schedules:** enable, disable, run now.
+- **Retention:** preview what would be deleted, then apply.
+- **Notifications and language:** each admin picks their alert level (everything, warnings and
+  errors, errors only, off) and their language.
+
+**Security:**
+
+- Only registered, active admins get any answer, and only in private chats; group messages are
+  ignored. Everyone else only sees their own numeric ID.
+- Server passwords and storage keys can't be entered or shown through the bot. Manage servers and
+  credentials in the panel.
+- **Sending backup files through the bot is off by default:** it copies your database to the
+  messenger's servers. If you turn it on, set a size limit; Bale and Telegram limit bot uploads
+  (about 20 MB and 50 MB).
+- Bot tokens are stored encrypted and are never shown again or written to logs. Every bot action
+  is logged with the admin's ID.
+- If Telegram is blocked on your server, set an `http://`, `https://` or `socks5://` proxy under
+  **Advanced settings**. Proxy URLs with a username and password aren't accepted, because the URL
+  is stored in plain text.
+
 ### Restoring a backup
 
 Restore into an existing, empty database with the server's own client:
@@ -347,6 +430,9 @@ under the original name.
   or written to logs. An edit form shows only that a secret is stored.
 - Database names that start with `-` or contain control characters are rejected, so a name can
   never be read as an option by the dump tool.
+- Bale/Telegram bots answer only admins registered in the panel, only in private chats (see
+  [Bale and Telegram bots](#bale-and-telegram-bots)). Bot tokens and the webhook secret are
+  stored encrypted.
 - After 5 failed sign-ins within 15 minutes, a username is locked for 15 minutes. The error message
   is the same whether the account doesn't exist, the password is wrong, or the account is locked.
 - Sessions end after 30 minutes of inactivity.

@@ -450,3 +450,207 @@ class RetentionReportOut(BaseModel):
     dry_run: bool
     deleted: list[RetentionItemOut]
     errors: list[RetentionItemOut]
+
+
+# --- Bots ---
+
+Platform = Literal["bale", "telegram"]
+NotifyLevel = Literal["info", "warning", "error", "off"]
+_URL_RE = r"^https?://[A-Za-z0-9._\[\]:-]+(/[^\s]*)?$"
+# No user:password@ part: the URL is stored and shown in plain text, credentials must not be.
+_PROXY_RE = r"^(https?|socks5h?)://[A-Za-z0-9._\[\]:-]+/?$"
+
+
+class BotSettingsIn(BaseModel):
+    """Empty or omitted `token` keeps the stored token."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    token: SecretStr | None = Field(default=None, max_length=256)
+    api_base_url: str = Field(default="", max_length=255)
+    proxy_url: str = Field(default="", max_length=255)
+    allow_file_download: bool = False
+    max_file_mb: int = Field(default=20, ge=1, le=2000)
+
+    @field_validator("api_base_url")
+    @classmethod
+    def _base(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if value and not re.match(_URL_RE, value):
+            raise ValueError("invalid_url")
+        return value
+
+    @field_validator("proxy_url")
+    @classmethod
+    def _proxy(cls, value: str) -> str:
+        value = value.strip()
+        if value and not re.match(_PROXY_RE, value):
+            raise ValueError("invalid_proxy")
+        return value
+
+
+class BotSettingsOut(BaseModel):
+    platform: Platform
+    enabled: bool
+    has_token: bool
+    api_base_url: str
+    proxy_url: str
+    allow_file_download: bool
+    max_file_mb: int
+    bot_username: str | None = None
+    running: bool = False
+    last_ok_at: datetime | None = None
+    last_error: str | None = None
+
+
+class BotTestOut(BaseModel):
+    ok: bool
+    username: str | None = None
+    error_code: str | None = None
+    error_detail: str | None = None
+
+
+class BotAdminCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    platform: Platform
+    user_id: int = Field(gt=0, lt=2**63)
+    display_name: str = Field(min_length=1, max_length=100)
+
+    _name = field_validator("display_name")(validate_name)
+
+
+class BotAdminUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    enabled: bool | None = None
+    notify_level: NotifyLevel | None = None
+    language: Literal["fa", "en"] | None = None
+
+
+class BotAdminOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    platform: Platform
+    user_id: int
+    display_name: str
+    enabled: bool
+    notify_level: NotifyLevel
+    language: Literal["fa", "en"]
+    last_seen_at: datetime | None = None
+    created_at: datetime
+
+
+class LinkCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=100)
+
+    _name = field_validator("display_name")(validate_name)
+
+
+class LinkCodeOut(BaseModel):
+    code: str
+    expires_at: datetime
+    bot_username: str | None = None
+    deep_link: str | None = None
+
+
+# --- Notifications ---
+
+EventName = Literal[
+    "backup_failed",
+    "upload_failed",
+    "stale_backup",
+    "disk_low",
+    "schedule_problem",
+    "retention_error",
+    "backup_succeeded",
+    "recovered",
+    "daily_summary",
+]
+Channel = Literal["bale", "telegram", "webhook"]
+
+
+class NotificationRule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    channels: list[Channel]
+
+
+class NotificationSettingsIn(BaseModel):
+    """Empty or omitted `webhook_secret` keeps the stored secret."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rules: dict[EventName, NotificationRule]
+    cooldown_minutes: int = Field(ge=0, le=10080)
+    stale_hours: int = Field(ge=1, le=720)
+    disk_free_percent: int = Field(ge=1, le=90)
+    daily_summary_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    timezone: str = Field(min_length=1, max_length=64)
+    webhook_enabled: bool = False
+    webhook_url: str = Field(default="", max_length=500)
+    webhook_secret: SecretStr | None = Field(default=None, max_length=256)
+    clear_webhook_secret: bool = False
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _webhook(cls, value: str) -> str:
+        value = value.strip()
+        if value and not re.match(_URL_RE, value):
+            raise ValueError("invalid_url")
+        return value
+
+
+class EventInfo(BaseModel):
+    name: EventName
+    severity: Literal["info", "warning", "error"]
+
+
+class NotificationSettingsOut(BaseModel):
+    rules: dict[str, NotificationRule]
+    cooldown_minutes: int
+    stale_hours: int
+    disk_free_percent: int
+    daily_summary_time: str
+    timezone: str
+    webhook_enabled: bool
+    webhook_url: str
+    has_webhook_secret: bool
+    events: list[EventInfo]
+
+
+class NotificationTestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    channels: list[Channel] = Field(min_length=1)
+
+
+class NotificationTestOut(BaseModel):
+    results: dict[str, str]
+
+
+class NotificationLogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    event: str
+    severity: Literal["info", "warning", "error"]
+    subject: str
+    params: dict
+    run_id: int | None = None
+    channels: dict[str, str]
+    suppressed: bool
+
+
+class NotificationLogPage(BaseModel):
+    items: list[NotificationLogItem]
+    total: int
+    page: int
+    page_size: int

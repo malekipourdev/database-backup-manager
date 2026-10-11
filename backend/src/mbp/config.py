@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     schedule_misfire_grace_seconds: int = Field(default=300, ge=1)
     # Retention also runs after every backup; this periodic sweep catches age-based expiry.
     retention_interval_minutes: int = Field(default=60, ge=0)
+    # How often stale backups and disk space are checked for alerts (0 = never).
+    monitor_interval_minutes: int = Field(default=10, ge=0)
+    # Master switch for the Bale/Telegram bots (e.g. off on a standby copy of the panel).
+    bots_enabled: bool = True
 
 
 @lru_cache

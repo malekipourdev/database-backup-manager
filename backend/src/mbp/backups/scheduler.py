@@ -10,10 +10,13 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.api.errors import ApiError
-from mbp.backups.runner import BackupRunner
+from mbp.backups.runner import BackupRunner, retention_events
 from mbp.backups.store import LocalBackupStore
 from mbp.config import Settings
 from mbp.db import utcnow
+from mbp.models import DbInstance
+from mbp.notifications.events import Event
+from mbp.repositories.notification_repository import NotificationRepository
 from mbp.repositories.schedule_repository import ScheduleRepository
 from mbp.services.backup_service import BackupService
 from mbp.services.retention_service import RetentionService
@@ -21,6 +24,10 @@ from mbp.services.retention_service import RetentionService
 logger = logging.getLogger(__name__)
 
 RETENTION_JOB_ID = "retention-sweep"
+MONITOR_JOB_ID = "alert-monitor"
+SUMMARY_JOB_ID = "daily-summary"
+# Schedule results worth an alert.
+PROBLEM_RESULTS = frozenset({"no_databases_selected", "instance_not_found", "error"})
 
 
 def _job_id(schedule_id: int) -> str:
@@ -67,11 +74,16 @@ def fire_schedule(
     session_factory: sessionmaker[Session],
     runner: BackupRunner,
     store: LocalBackupStore,
+    *,
+    force: bool = False,
 ) -> str | None:
-    """Queue the backups of one schedule and record the outcome on it."""
+    """Queue the backups of one schedule and record the outcome on it.
+
+    `force` runs a disabled schedule too (an admin's explicit "run now").
+    """
     with session_factory() as db:
         schedule = ScheduleRepository(db).get(schedule_id)
-        if schedule is None or not schedule.enabled:
+        if schedule is None or not (schedule.enabled or force):
             return None
         database = schedule.database_name if schedule.scope == "single" else None
         result, detail = "queued", None
@@ -114,11 +126,16 @@ class BackupScheduler:
         session_factory: sessionmaker[Session],
         runner: BackupRunner,
         store: LocalBackupStore,
+        *,
+        notifier=None,
+        monitor=None,
     ) -> None:
         self.settings = settings
         self.session_factory = session_factory
         self.runner = runner
         self.store = store
+        self.notifier = notifier
+        self.monitor = monitor
         self._scheduler = BackgroundScheduler(
             timezone=UTC,
             # Jobs only queue work (the runner does the dumps), so one thread is plenty.
@@ -145,6 +162,51 @@ class BackupScheduler:
                 id=RETENTION_JOB_ID,
                 replace_existing=True,
             )
+        if self.monitor is not None and self.settings.monitor_interval_minutes > 0:
+            self._scheduler.add_job(
+                self.monitor.check,
+                "interval",
+                minutes=self.settings.monitor_interval_minutes,
+                id=MONITOR_JOB_ID,
+                replace_existing=True,
+            )
+        self.sync_daily_summary()
+
+    def sync_daily_summary(self) -> None:
+        """(Re)schedule the daily summary at the time and zone saved in the panel."""
+        if self.monitor is None or not self._scheduler.running:
+            return
+        with self.session_factory() as db:
+            settings = NotificationRepository(db).get_settings()
+            hhmm, zone = settings.daily_summary_time, settings.timezone
+        try:
+            hour, minute = (int(part) for part in hhmm.split(":"))
+            trigger = CronTrigger(hour=hour, minute=minute, timezone=parse_timezone(zone))
+        except ValueError:
+            logger.error("Invalid daily summary time or time zone: %s %s", hhmm, zone)
+            return
+        self._scheduler.add_job(
+            self.monitor.send_daily_summary, trigger, id=SUMMARY_JOB_ID, replace_existing=True
+        )
+
+    def fire(self, schedule_id: int, force: bool = False) -> str | None:
+        """Run a schedule (what its cron job calls, or "run now") and alert on problems."""
+        result = fire_schedule(
+            schedule_id, self.session_factory, self.runner, self.store, force=force
+        )
+        if result in PROBLEM_RESULTS and self.notifier is not None:
+            with self.session_factory() as db:
+                schedule = ScheduleRepository(db).get(schedule_id)
+                instance = db.get(DbInstance, schedule.instance_id) if schedule else None
+                params = {
+                    "name": schedule.name if schedule else str(schedule_id),
+                    "instance": instance.name if instance else "",
+                    "result": result,
+                }
+            self.notifier.emit(
+                Event("schedule_problem", f"schedule_problem:{schedule_id}:{result}", params)
+            )
+        return result
 
     def stop(self) -> None:
         if self._scheduler.running:
@@ -189,9 +251,9 @@ class BackupScheduler:
             self.remove(schedule_id)
             return
         self._scheduler.add_job(
-            fire_schedule,
+            self.fire,
             trigger,
-            args=[schedule_id, self.session_factory, self.runner, self.store],
+            args=[schedule_id],
             id=_job_id(schedule_id),
             replace_existing=True,
         )
@@ -200,6 +262,9 @@ class BackupScheduler:
         try:
             with self.session_factory() as db:
                 report = RetentionService(db, self.store).apply()
+            if self.notifier is not None:
+                for event in retention_events(report):
+                    self.notifier.emit(event)
             if report.deleted or report.errors:
                 logger.info(
                     "Retention sweep deleted %d file(s), %d error(s)",

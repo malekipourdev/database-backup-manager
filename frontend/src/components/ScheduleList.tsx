@@ -22,6 +22,7 @@ import {
   toInput,
   useCreateSchedule,
   useDeleteSchedule,
+  useRunSchedule,
   useSchedules,
   useUpdateSchedule,
 } from "../api/schedules";
@@ -58,6 +59,7 @@ export function ScheduleList({ instanceId }: { instanceId?: number }) {
   const create = useCreateSchedule();
   const update = useUpdateSchedule();
   const remove = useDeleteSchedule();
+  const runNow = useRunSchedule();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [targetInstance, setTargetInstance] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Schedule | null>(null);
@@ -179,6 +181,26 @@ export function ScheduleList({ instanceId }: { instanceId?: number }) {
                   </Table.Td>
                   <Table.Td>
                     <Group gap={4} wrap="nowrap">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        loading={runNow.isPending && runNow.variables === schedule.id}
+                        onClick={() =>
+                          runNow.mutate(schedule.id, {
+                            onSuccess: (result) =>
+                              notifications.show({
+                                color: result.last_result === "queued" ? "green" : "orange",
+                                message: t(`schedules.result.${result.last_result}`, {
+                                  defaultValue: t("errors.internal_error"),
+                                }),
+                              }),
+                            onError: (error) =>
+                              notifications.show({ color: "red", message: errorMessage(t, error) }),
+                          })
+                        }
+                      >
+                        {t("schedules.runNow")}
+                      </Button>
                       <Button
                         size="xs"
                         variant="default"

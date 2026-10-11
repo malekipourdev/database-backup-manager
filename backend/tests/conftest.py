@@ -225,3 +225,49 @@ def wait_for_remote(client, run_id, timeout=15.0):
             return body
         time.sleep(0.05)
     raise AssertionError(f"upload of run {run_id} did not finish in {timeout}s")
+
+
+# --- Bots (fake Bot API over real HTTP) ---
+
+BOT_ADMIN_ID = 111
+STRANGER_ID = 999
+
+
+@pytest.fixture(scope="session")
+def fake_bot_server():
+    from tests.fakes.fake_bot_api import FakeBotApi
+
+    server = FakeBotApi().start()
+    yield server
+    server.stop()
+
+
+def wait_until(predicate, timeout=10.0, message="condition"):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = predicate()
+        if value:
+            return value
+        time.sleep(0.05)
+    raise AssertionError(f"timed out waiting for {message}")
+
+
+@pytest.fixture
+def bale_bot(auth_client, app, fake_bot_server):
+    """The Bale bot enabled against the fake API, with one registered admin."""
+    from tests.fakes.fake_bot_api import TOKEN
+
+    fake_bot_server.reset()
+    response = auth_client.put(
+        "/api/bots/bale",
+        json={"enabled": True, "token": TOKEN, "api_base_url": fake_bot_server.url},
+    )
+    assert response.status_code == 200, response.text
+    admin = auth_client.post(
+        "/api/bot-admins",
+        json={"platform": "bale", "user_id": BOT_ADMIN_ID, "display_name": "Ops"},
+    )
+    assert admin.status_code == 201, admin.text
+    wait_until(lambda: app.state.bot_manager.running("bale"), message="bot to start")
+    # The app's shutdown (end of the client fixture) stops the bot.
+    return fake_bot_server

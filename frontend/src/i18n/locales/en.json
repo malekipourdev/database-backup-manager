@@ -14,7 +14,9 @@
     "instances": "Instances",
     "backups": "Backups",
     "settings": "Settings",
-    "schedules": "Schedules"
+    "schedules": "Schedules",
+    "bots": "Bots",
+    "notifications": "Notifications"
   },
   "language": {
     "label": "Language",
@@ -72,7 +74,12 @@
     "endpoint_unreachable": "The storage endpoint could not be reached.",
     "upload_incomplete": "The upload did not store the complete file.",
     "object_not_found": "The remote copy no longer exists.",
-    "schedule_not_found": "This schedule no longer exists."
+    "schedule_not_found": "This schedule no longer exists.",
+    "platform_not_found": "Unknown messenger.",
+    "admin_exists": "This user is already registered for this messenger.",
+    "admin_not_found": "This bot admin no longer exists.",
+    "notifier_unavailable": "Notifications are not available right now.",
+    "scheduler_unavailable": "The scheduler is not running."
   },
   "validation": {
     "required": "This field is required.",
@@ -341,7 +348,8 @@
       "required": "This field is required.",
       "not_selectable": "System schemas cannot be backed up.",
       "invalid_database_name": "This database name is not allowed."
-    }
+    },
+    "runNow": "Run now"
   },
   "remote": {
     "title": "Remote storage (S3-compatible)",
@@ -408,5 +416,198 @@
     "uploadOff": "Off",
     "overrideRetention": "Use a retention policy for this instance",
     "inheritRetention": "Unchecked: the global retention policy applies."
+  },
+  "bots": {
+    "title": "Bots (Bale and Telegram)",
+    "hint": "Manage backups from a chat with inline buttons: status, servers, start backups, history, schedules and retention. Only the admins registered below can use a bot; anyone else only sees their own numeric ID. Bots connect out to the messenger (long polling), so the panel needs no public address.",
+    "platform": {
+      "bale": "Bale",
+      "telegram": "Telegram"
+    },
+    "howTo": {
+      "bale": "In Bale, open @botfather, create a bot and paste its token here.",
+      "telegram": "In Telegram, open @BotFather, create a bot with /newbot and paste its token here. If Telegram is blocked on the server, set a proxy under Advanced."
+    },
+    "connectedAs": "Connected as {{name}}",
+    "connected": "Connected",
+    "error": "Connection error",
+    "starting": "Starting…",
+    "off": "Off",
+    "enabled": "Enable this bot",
+    "token": "Bot token",
+    "tokenStored": "A token is stored. Leave empty to keep it.",
+    "tokenHelp": "From the messenger's BotFather.",
+    "allowFiles": "Allow downloading backup files through the bot",
+    "allowFilesHelp": "Sends database contents to the messenger's servers. Leave off unless you accept that.",
+    "maxFile": "Largest file the bot sends (MB)",
+    "advanced": "Advanced settings",
+    "proxy": "Proxy",
+    "proxyHelp": "http://, https:// or socks5:// without a username or password.",
+    "proxyPlaceholder": "socks5://127.0.0.1:1080",
+    "apiBase": "Bot API URL",
+    "apiBaseHelp": "Leave empty for the official API.",
+    "test": "Test token",
+    "testOk": "The token works: {{name}}",
+    "testFailed": "The test failed.",
+    "testErrors": {
+      "unauthorized": "The messenger rejected the token.",
+      "unreachable": "The messenger could not be reached (check the network or proxy).",
+      "timeout": "The messenger did not answer in time.",
+      "api_error": "The messenger returned an error.",
+      "bad_response": "The messenger sent an unexpected answer."
+    },
+    "validation": {
+      "required": "This field is required.",
+      "admin_exists": "Already registered.",
+      "invalid_url": "Enter a valid http(s) URL.",
+      "invalid_proxy": "Use http://, https:// or socks5://host:port without credentials.",
+      "value_error": "This value is invalid."
+    },
+    "admins": {
+      "title": "Bot admins",
+      "hint": "Each person needs their numeric user ID on that messenger. They see it by sending any message to the bot, or you can give them a one-time link code.",
+      "empty": "No admins yet.",
+      "platform": "Messenger",
+      "userId": "Numeric user ID",
+      "userIdHelp": "Shown by the bot to unregistered users.",
+      "name": "Name",
+      "add": "Add admin",
+      "added": "Admin added.",
+      "level": "Notifications",
+      "language": "Language",
+      "lastSeen": "Last used",
+      "enabled": "Active",
+      "never": "Never",
+      "deleteTitle": "Remove bot admin",
+      "deleteConfirm": "Remove “{{name}}”? They can no longer use the bot or receive alerts."
+    },
+    "levels": {
+      "info": "Everything",
+      "warning": "Warnings and errors",
+      "error": "Errors only",
+      "off": "Off"
+    },
+    "link": {
+      "button": "Create link code",
+      "title": "Link code",
+      "hint": "A one-time code, valid for 15 minutes. Whoever sends it to the bot becomes an admin with this name.",
+      "create": "Create code",
+      "instructions": "Send this code to the bot:",
+      "step1": "Open the bot in the messenger.",
+      "step1Named": "Open {{name}} in the messenger.",
+      "step2": "Send the code as a message (or /start followed by the code).",
+      "expires": "Valid until {{time}}.",
+      "done": "Done"
+    }
+  },
+  "alerts": {
+    "title": "Notifications and alerts",
+    "hint": "Choose which events raise an alert and where it goes. Every alert is kept in the history below, with where it was delivered.",
+    "never": "never",
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "rules": {
+      "title": "Alert rules",
+      "hint": "Bot admins also choose their own level (e.g. errors only) on the Bots page or in the bot.",
+      "event": "Event",
+      "severity": "Severity",
+      "enabled": "On",
+      "botNote": "Bale and Telegram alerts go to bot admins:"
+    },
+    "channels": {
+      "bale": "Bale",
+      "telegram": "Telegram",
+      "webhook": "Webhook"
+    },
+    "names": {
+      "backup_failed": "Backup failed",
+      "upload_failed": "Upload failed",
+      "stale_backup": "No recent backup",
+      "disk_low": "Low disk space",
+      "schedule_problem": "Schedule did not run",
+      "retention_error": "Retention could not delete",
+      "backup_succeeded": "Backup succeeded",
+      "recovered": "Back to normal",
+      "daily_summary": "Daily summary"
+    },
+    "descriptions": {
+      "backup_failed": "A backup ended with an error.",
+      "upload_failed": "A backup could not be uploaded to remote storage.",
+      "stale_backup": "A marked database has had no successful backup for longer than the limit below.",
+      "disk_low": "Free space in the backup area is below the limit below.",
+      "schedule_problem": "A schedule fired but could not start, e.g. no databases are marked.",
+      "retention_error": "An old remote copy could not be deleted.",
+      "backup_succeeded": "Every successful backup (can be a lot of messages).",
+      "recovered": "A stale backup or low disk space alert has cleared.",
+      "daily_summary": "A report of the last 24 hours, at the time below."
+    },
+    "thresholds": {
+      "title": "Thresholds and timing",
+      "stale": "Alert when a database has no successful backup for (hours)",
+      "staleHelp": "Set it a little above your schedule's interval, e.g. 26 for daily backups.",
+      "disk": "Alert when free disk space is below (%)",
+      "diskHelp": "Below half of this, the alert becomes an error.",
+      "cooldown": "Repeat the same alert at most every (minutes)",
+      "cooldownHelp": "Repeats within this time are recorded but not sent. 0 sends every one.",
+      "summary": "Daily summary time",
+      "summaryHelp": "In the time zone below.",
+      "timezone": "Time zone",
+      "timezoneHelp": "For the daily summary and for times in bot messages."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "hint": "Each alert is POSTed as JSON (event, severity, message, params). With a secret, the X-MBP-Signature header carries sha256=HMAC-SHA256 of the body. Works with n8n, Slack/Mattermost bridges and similar tools.",
+      "enabled": "Send alerts to the webhook",
+      "url": "URL",
+      "urlPlaceholder": "https://hooks.example.com/backup-alerts",
+      "secret": "Signing secret",
+      "secretStored": "A secret is stored. Leave empty to keep it.",
+      "secretHelp": "Optional.",
+      "clearSecret": "Remove the stored secret"
+    },
+    "validation": {
+      "required": "This field is required.",
+      "invalid_timezone": "Choose a valid time zone.",
+      "invalid_url": "Enter a valid http(s) URL.",
+      "string_pattern_mismatch": "Use HH:MM.",
+      "value_error": "This value is invalid."
+    },
+    "test": {
+      "button": "Send a test alert to all channels",
+      "results": "Test results"
+    },
+    "delivery": {
+      "sent": "sent",
+      "failed": "failed",
+      "not_configured": "not configured",
+      "no_recipients": "no admins to receive it"
+    },
+    "history": {
+      "title": "Alert history",
+      "all": "All",
+      "empty": "No alerts yet.",
+      "time": "Time",
+      "message": "Message",
+      "delivery": "Delivered to",
+      "viewBackups": "View backups",
+      "suppressed": "Repeat (not sent)",
+      "suppressedHelp": "The same alert was sent recently; see the cooldown setting."
+    },
+    "events": {
+      "backup_failed": "Backup of “{{db}}” on “{{instance}}” failed: {{reason}}",
+      "upload_failed": "Upload of the backup of “{{db}}” on “{{instance}}” failed: {{reason}}",
+      "retention_error": "Retention could not delete an old backup of “{{db}}” on “{{instance}}”: {{reason}}",
+      "backup_succeeded": "Backup of “{{db}}” on “{{instance}}” succeeded — {{size}}, {{duration}}",
+      "stale_backup": "No successful backup of “{{db}}” on “{{instance}}” in the last {{hours}} hours (last: {{last}}).",
+      "disk_low": "Low free space in the backup area: {{percent}}% ({{free}} of {{total}}).",
+      "recovered_stale": "Backups of “{{db}}” on “{{instance}}” are up to date again.",
+      "recovered_disk": "Free space in the backup area is sufficient again ({{free}}).",
+      "schedule_problem": "Schedule “{{name}}” ({{instance}}) did not run: {{result}}",
+      "daily_summary": "Daily summary: {{ok}} succeeded, {{failed}} failed.",
+      "test": "Test alert."
+    }
   }
 }

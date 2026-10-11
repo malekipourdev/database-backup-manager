@@ -10,6 +10,8 @@ const NAV = [
   { to: "/instances", label: "nav.instances" },
   { to: "/backups", label: "nav.backups" },
   { to: "/schedules", label: "nav.schedules" },
+  { to: "/notifications", label: "nav.notifications" },
+  { to: "/bots", label: "nav.bots" },
   { to: "/settings/backups", label: "nav.settings" },
 ];
 

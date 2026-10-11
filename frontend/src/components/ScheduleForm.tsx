@@ -33,7 +33,7 @@ function browserTimezone(): string {
   }
 }
 
-function timezoneOptions(current: string): string[] {
+export function timezoneOptions(current: string): string[] {
   let all: string[] = [];
   try {
     all =
