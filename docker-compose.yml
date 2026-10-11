@@ -11,6 +11,8 @@ services:
       MBP_DATABASE_URL: ${MBP_DATABASE_URL:-sqlite:////data/mbp.db}
       MBP_COOKIE_SECURE: ${MBP_COOKIE_SECURE:-true}
       MBP_BACKUP_CONCURRENCY: ${MBP_BACKUP_CONCURRENCY:-2}
+      MBP_RETENTION_INTERVAL_MINUTES: ${MBP_RETENTION_INTERVAL_MINUTES:-60}
+      MBP_SCHEDULE_MISFIRE_GRACE_SECONDS: ${MBP_SCHEDULE_MISFIRE_GRACE_SECONDS:-300}
     volumes:
       - mbp-data:/data
       # Backup files. To keep them in a host directory instead, replace with e.g.

@@ -9,6 +9,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 const NAV = [
   { to: "/instances", label: "nav.instances" },
   { to: "/backups", label: "nav.backups" },
+  { to: "/schedules", label: "nav.schedules" },
   { to: "/settings/backups", label: "nav.settings" },
 ];
 

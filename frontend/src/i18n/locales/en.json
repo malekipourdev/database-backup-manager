@@ -13,7 +13,8 @@
   "nav": {
     "instances": "Instances",
     "backups": "Backups",
-    "settings": "Settings"
+    "settings": "Settings",
+    "schedules": "Schedules"
   },
   "language": {
     "label": "Language",
@@ -58,7 +59,20 @@
     "no_databases_selected": "No databases are marked for backup on this instance.",
     "run_not_found": "This backup no longer exists.",
     "run_active": "A backup that is queued or running cannot be deleted.",
-    "file_unavailable": "The backup file is not available."
+    "file_unavailable": "The backup file is not available.",
+    "invalid_database_name": "This database name is not allowed.",
+    "already_uploaded": "This backup is already stored remotely or is being uploaded.",
+    "upload_in_progress": "This backup is being uploaded; try again when the upload has finished.",
+    "remote_not_configured": "Remote storage is not configured.",
+    "remote_delete_failed": "The remote copy could not be deleted, so the backup was kept.",
+    "remote_download_failed": "The remote copy could not be downloaded.",
+    "remote_error": "Remote storage returned an error.",
+    "bucket_not_found": "The bucket does not exist.",
+    "access_denied": "Access to the bucket was denied. Check the key's permissions.",
+    "endpoint_unreachable": "The storage endpoint could not be reached.",
+    "upload_incomplete": "The upload did not store the complete file.",
+    "object_not_found": "The remote copy no longer exists.",
+    "schedule_not_found": "This schedule no longer exists."
   },
   "validation": {
     "required": "This field is required.",
@@ -208,8 +222,13 @@
       "interrupted": "The backup was interrupted because the panel stopped or restarted. Start the backup again.",
       "instance_deleted": "The instance was deleted before the backup started. Nothing to do; the run is kept for the record.",
       "tool_missing": "The dump tool is not installed in the panel. Rebuild the backend image; it includes mysqldump and mariadb-dump.",
-      "storage_error": "The backup file could not be written to the storage area. Check the storage directory setting and the volume permissions."
-    }
+      "storage_error": "The backup file could not be written to the storage area. Check the storage directory setting and the volume permissions.",
+      "invalid_database_name": "The database name starts with “-” or contains control characters, so it cannot be passed to the dump tool safely. Rename the database or remove it from the selection."
+    },
+    "scheduled": "Scheduled",
+    "retryUpload": "Retry upload",
+    "fileRemoved": "Removed locally",
+    "removedByRetention": "Local file removed by retention on {{date}}"
   },
   "history": {
     "title": "Backup history",
@@ -258,5 +277,136 @@
       "required": "This field is required.",
       "invalid_compression": "Choose gzip, bzip2 or none."
     }
+  },
+  "remoteStatus": {
+    "uploading": "Uploading…",
+    "success": "Stored remotely",
+    "failed": "Upload failed",
+    "deleted": "Remote copy deleted"
+  },
+  "schedules": {
+    "title": "Schedules",
+    "hint": "Backups run automatically at these times. A schedule backs up all marked databases of its instance, or one database.",
+    "instanceTitle": "Schedules",
+    "add": "Add schedule",
+    "empty": "No schedules yet.",
+    "createTitle": "New schedule",
+    "editTitle": "Edit schedule",
+    "saved": "Schedule saved.",
+    "deleted": "Schedule deleted.",
+    "deleteTitle": "Delete schedule",
+    "deleteConfirm": "Delete the schedule “{{name}}”? Existing backups are kept.",
+    "neverRun": "Not run yet",
+    "namePlaceholder": "e.g. Nightly",
+    "nextRuns": "Next runs",
+    "cronHelp": "minute hour day-of-month month day-of-week",
+    "fields": {
+      "name": "Name",
+      "frequency": "Frequency",
+      "cron": "Cron expression",
+      "timezone": "Time zone",
+      "scope": "What to back up",
+      "database": "Database",
+      "enabled": "Enabled"
+    },
+    "presets": {
+      "hourly": "Hourly",
+      "daily": "Daily 02:00",
+      "weekly": "Weekly (Sat 02:00)",
+      "monthly": "Monthly (1st, 02:00)",
+      "custom": "Custom"
+    },
+    "scope": {
+      "all": "All marked databases",
+      "single": "One database"
+    },
+    "columns": {
+      "when": "When",
+      "nextRun": "Next run",
+      "lastRun": "Last run"
+    },
+    "result": {
+      "queued": "Started",
+      "partially_queued": "Partly started",
+      "already_in_progress": "Skipped (already running)",
+      "no_databases_selected": "No databases marked",
+      "instance_not_found": "Instance missing",
+      "invalid_database_name": "Invalid database name",
+      "not_selectable": "System schema",
+      "error": "Error"
+    },
+    "validation": {
+      "invalid_cron": "Enter a valid 5-field cron expression, e.g. 0 2 * * *.",
+      "invalid_timezone": "Choose a valid time zone.",
+      "required": "This field is required.",
+      "not_selectable": "System schemas cannot be backed up.",
+      "invalid_database_name": "This database name is not allowed."
+    }
+  },
+  "remote": {
+    "title": "Remote storage (S3-compatible)",
+    "hint": "Backups are uploaded after they are verified. Works with AWS S3 and S3-compatible services such as MinIO, RustFS, Ceph, Wasabi or ArvanCloud.",
+    "enabled": "Upload backups to remote storage",
+    "enabledHelp": "The default for all instances. Each instance can turn it on or off on its page.",
+    "endpoint": "Endpoint URL",
+    "endpointHelp": "Leave empty for AWS S3.",
+    "endpointPlaceholder": "https://s3.example.com",
+    "region": "Region",
+    "regionPlaceholder": "us-east-1",
+    "bucket": "Bucket",
+    "prefix": "Key prefix",
+    "prefixHelp": "Folder inside the bucket. Optional.",
+    "accessKey": "Access key ID",
+    "secretKey": "Secret access key",
+    "secretStored": "A secret is stored. Leave empty to keep it.",
+    "pathStyle": "Use path-style addressing",
+    "pathStyleHelp": "Required by most self-hosted services (MinIO, RustFS, Ceph).",
+    "test": "Test connection",
+    "testOk": "Connected. The bucket is readable and writable.",
+    "testFailed": "Connection failed",
+    "validation": {
+      "required": "This field is required.",
+      "value_error": "This value is invalid."
+    }
+  },
+  "retention": {
+    "title": "Retention",
+    "hint": "Old backups are deleted automatically, per database, after each backup and every hour. The newest backup of each database is always kept. Empty fields mean no limit.",
+    "local": "Local files",
+    "remote": "Remote copies",
+    "keepLast": "Keep the last",
+    "keepLastHelp": "Number of backups per database.",
+    "maxAge": "Delete after (days)",
+    "maxAgeHelp": "Backups older than this are deleted.",
+    "noLimit": "No limit",
+    "summaryKeep_one": "keep last {{n}}",
+    "summaryKeep_other": "keep last {{n}}",
+    "summaryAge_one": "{{n}} day",
+    "summaryAge_other": "{{n}} days",
+    "keepAll": "Keep all",
+    "preview": "Preview and apply now",
+    "previewTitle": "Apply retention now",
+    "previewHint": "These files would be deleted under the saved policy:",
+    "applyNow": "Delete these files",
+    "applied": "Retention applied: {{deleted}} deleted, {{errors}} error(s).",
+    "nothingToDelete": "Nothing to delete under the saved policy.",
+    "errorsTitle": "Could not delete",
+    "target": {
+      "local": "Local",
+      "remote": "Remote"
+    }
+  },
+  "policy": {
+    "title": "Remote upload and retention",
+    "remoteUpload": "Remote upload",
+    "upload": {
+      "inherit": "Global setting",
+      "enabled": "Always",
+      "disabled": "Never"
+    },
+    "uploadOn": "On",
+    "uploadOff": "Off",
+    "overrideRetention": "Use a retention policy for this instance",
+    "inheritRetention": "Unchecked: the global retention policy applies."
   }
 }

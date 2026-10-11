@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { type BackupSettings, useBackupSettings, useSaveBackupSettings } from "../api/backups";
 import { errorMessage } from "../api/client";
 import { BackupSettingsForm } from "../components/BackupSettingsForm";
+import { RemoteStorageForm } from "../components/RemoteStorageForm";
+import { RetentionSettings } from "../components/RetentionSettings";
 
 export function BackupSettingsPage() {
   const { t } = useTranslation();
@@ -35,6 +37,20 @@ export function BackupSettingsPage() {
           />
         </Paper>
       )}
+
+      <Paper withBorder p="lg" radius="md">
+        <Title order={4} mb="sm">
+          {t("remote.title")}
+        </Title>
+        <RemoteStorageForm />
+      </Paper>
+
+      <Paper withBorder p="lg" radius="md">
+        <Title order={4} mb="sm">
+          {t("retention.title")}
+        </Title>
+        <RetentionSettings />
+      </Paper>
     </Stack>
   );
 }

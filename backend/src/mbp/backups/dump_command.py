@@ -28,6 +28,19 @@ class ToolMissing(Exception):
     pass
 
 
+def is_safe_database_name(name: str) -> bool:
+    """True if the dump tool cannot read the name as an option (no leading "-").
+
+    The database name is the only argv element taken from user input; a value such as
+    "--plugin-dir=..." would otherwise be parsed as an option by mysqldump/mariadb-dump.
+    """
+    return (
+        0 < len(name) <= 64
+        and not name.startswith("-")
+        and not any(ord(ch) < 32 or ch == "\x7f" for ch in name)
+    )
+
+
 def tool_for(server_type: str | None, settings: Settings) -> str:
     """Absolute path of the dump tool for a server type (never resolved through PATH)."""
     path = settings.mariadb_dump_path if server_type == "mariadb" else settings.mysqldump_path
@@ -53,6 +66,8 @@ def build_args(
     server_version: str | None,
     database: str,
 ) -> list[str]:
+    if not is_safe_database_name(database):
+        raise ValueError("unsafe database name")
     # --defaults-extra-file must be the first option; the password lives only in that file.
     args = [tool, f"--defaults-extra-file={option_file}", f"--host={host}", f"--port={port}"]
     args += COMMON_OPTIONS

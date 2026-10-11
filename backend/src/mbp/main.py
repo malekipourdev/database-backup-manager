@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
-from mbp.api import auth, backup_settings, backups, health, instances
+from mbp.api import auth, backup_settings, backups, health, instances, schedules, storage
 from mbp.api.errors import register_error_handlers
 from mbp.backups.runner import BackupRunner
+from mbp.backups.scheduler import BackupScheduler
 from mbp.backups.store import get_store
 from mbp.config import get_settings
 from mbp.db import get_sessionmaker
@@ -27,9 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner.recover()
     runner.start()
     app.state.backup_runner = runner
+    scheduler = BackupScheduler(get_settings(), get_sessionmaker(), runner, get_store())
+    scheduler.start()
+    app.state.backup_scheduler = scheduler
     try:
         yield
     finally:
+        scheduler.stop()
         runner.stop()
 
 
@@ -55,6 +60,8 @@ def create_app() -> FastAPI:
     app.include_router(instances.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(backups.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(backup_settings.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(schedules.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(storage.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

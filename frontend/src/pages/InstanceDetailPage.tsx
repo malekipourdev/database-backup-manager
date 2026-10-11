@@ -26,6 +26,8 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ConnectionResult } from "../components/ConnectionResult";
 import { DatabaseSelector } from "../components/DatabaseSelector";
 import { InstanceBackupSettingsPanel, InstanceBackups } from "../components/InstanceBackups";
+import { InstanceStoragePolicyPanel } from "../components/InstanceStoragePolicyPanel";
+import { ScheduleList } from "../components/ScheduleList";
 import { formatDateTime } from "../i18n";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -153,7 +155,16 @@ export function InstanceDetailPage() {
 
       <InstanceBackups instanceId={instanceId} />
 
+      <Paper withBorder p="lg" radius="md">
+        <Title order={4} mb="sm">
+          {t("schedules.instanceTitle")}
+        </Title>
+        <ScheduleList instanceId={instanceId} />
+      </Paper>
+
       <InstanceBackupSettingsPanel instanceId={instanceId} />
+
+      <InstanceStoragePolicyPanel instanceId={instanceId} />
 
       <ConfirmDialog
         opened={confirmOpen}

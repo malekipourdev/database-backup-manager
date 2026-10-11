@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     mysqldump_path: str = "/usr/local/bin/mysqldump"
     mariadb_dump_path: str = "/usr/bin/mariadb-dump"
     backup_progress_interval_seconds: float = 2.0
+    # A schedule that fires while the panel is down still runs if it starts within this time.
+    schedule_misfire_grace_seconds: int = Field(default=300, ge=1)
+    # Retention also runs after every backup; this periodic sweep catches age-based expiry.
+    retention_interval_minutes: int = Field(default=60, ge=0)
 
 
 @lru_cache

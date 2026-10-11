@@ -32,6 +32,14 @@ class DbInstance(Base):
     backup_storage_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
     backup_name_pattern: Mapped[str | None] = mapped_column(String(255), nullable=True)
     backup_compression: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Remote upload: NULL inherits the global setting, else "enabled" | "disabled".
+    remote_upload: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # When true, the retention_* columns replace the global retention policy.
+    retention_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    retention_local_keep_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retention_local_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retention_remote_keep_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retention_remote_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False

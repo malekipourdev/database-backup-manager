@@ -1,12 +1,15 @@
 from sqlalchemy.orm import Session
 
 from mbp.api.errors import ApiError
+from mbp.backups.dump_command import is_safe_database_name
+from mbp.backups.remote import RemoteError
 from mbp.backups.runner import BackupRunner
 from mbp.backups.store import LocalBackupStore
 from mbp.models import BackupRun
 from mbp.repositories.backup_run_repository import BackupRunRepository, RunFilters
 from mbp.repositories.selection_repository import SelectionRepository
 from mbp.services.instance_service import InstanceService
+from mbp.services.remote_storage_service import get_remote_storage
 from mbp.services.selection_service import NON_SELECTABLE
 
 
@@ -18,7 +21,13 @@ class BackupService:
         self.runs = BackupRunRepository(db)
 
     def start(
-        self, instance_id: int, scope: str, database: str | None
+        self,
+        instance_id: int,
+        scope: str,
+        database: str | None,
+        *,
+        trigger: str | None = None,
+        schedule_id: int | None = None,
     ) -> tuple[list[BackupRun], list[dict]]:
         """Create queued runs and hand them to the runner; returns (created, skipped)."""
         instance = InstanceService(self.db).get(instance_id)
@@ -26,19 +35,25 @@ class BackupService:
             names = SelectionRepository(self.db).list_names(instance_id)
             if not names:
                 raise ApiError(422, "no_databases_selected")
-            trigger = "all"
+            trigger = trigger or "all"
         else:
+            if database is None or not is_safe_database_name(database):
+                raise ApiError(
+                    422,
+                    "invalid_database_name",
+                    fields={"database": "invalid_database_name"},
+                )
             if database in NON_SELECTABLE:
                 raise ApiError(
                     422, "not_selectable", detail=database, fields={"database": "not_selectable"}
                 )
             names = [database]
-            trigger = "single"
+            trigger = trigger or "single"
 
         created: list[BackupRun] = []
         skipped: list[dict] = []
         for name in names:
-            run = self.runs.create_queued(instance, name, trigger)
+            run = self.runs.create_queued(instance, name, trigger, schedule_id)
             if run is None:
                 skipped.append({"database": name, "reason": "already_in_progress"})
             else:
@@ -60,9 +75,40 @@ class BackupService:
         return self.runs.query(filters, sort, order, page, page_size)
 
     def delete(self, run_id: int) -> None:
+        """Delete a finished run with its local file and remote copy."""
         run = self.get(run_id)
         if run.is_active:
             raise ApiError(409, "run_active")
-        self.store.delete(run.file_path)
+        if run.remote_status == "uploading":
+            raise ApiError(409, "upload_in_progress")
+        if run.has_remote_copy:
+            _, storage = get_remote_storage(self.db)
+            if storage is None:
+                raise ApiError(409, "remote_not_configured")
+            try:
+                storage.delete(run.remote_key or "")
+            except RemoteError as exc:
+                raise ApiError(502, "remote_delete_failed", detail=exc.code) from exc
+        if not run.file_deleted_at:
+            self.store.delete(run.file_path)
         self.runs.delete(run)
         self.db.commit()
+
+    def retry_upload(self, run_id: int) -> BackupRun:
+        """Queue an upload of a successful run that is not (or no longer) stored remotely."""
+        run = self.get(run_id)
+        if not run.has_local_file or not self.store.exists(run.file_path):
+            raise ApiError(409, "file_unavailable")
+        if run.remote_status in ("uploading", "success"):
+            raise ApiError(409, "already_uploaded")
+        _, storage = get_remote_storage(self.db)
+        if storage is None:
+            raise ApiError(409, "remote_not_configured")
+        if self.runner is None:
+            raise RuntimeError("backup runner is required to upload")
+        # Claim it now: a second click finds it uploading, and history shows it at once.
+        run.remote_status = "uploading"
+        run.remote_error = None
+        self.db.commit()
+        self.runner.enqueue_upload(run.id)
+        return run

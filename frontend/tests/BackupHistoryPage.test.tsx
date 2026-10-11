@@ -22,6 +22,14 @@ const base = {
   error_code: null,
   error_message: null,
   status: "success",
+  schedule_id: null,
+  file_deleted_at: null,
+  file_deleted_reason: null,
+  remote_status: null,
+  remote_uploaded_at: null,
+  remote_deleted_at: null,
+  remote_error: null,
+  remote_available: false,
 };
 const items = [
   {
@@ -31,6 +39,7 @@ const items = [
     requested_at: "2026-10-11T10:00:00Z",
     file_name: "shop.sql.gz",
     file_available: true,
+    download_available: true,
   },
   {
     ...base,
@@ -39,6 +48,7 @@ const items = [
     requested_at: "2026-10-10T10:00:00Z",
     file_name: "blog.sql.gz",
     file_available: false,
+    download_available: false,
   },
 ];
 

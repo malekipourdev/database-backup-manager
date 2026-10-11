@@ -6,21 +6,14 @@ Requires the dump tools on the host: backend/scripts/install-dump-tools.sh
 
 import bz2
 import gzip
-import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
-from mbp.config import get_settings
 from tests.conftest import BACKUP_ROOT, wait_for_run
 from tests.integration.conftest import ROOT_PASSWORD
 
 pytestmark = pytest.mark.integration
-
-TOOLS = Path(__file__).resolve().parents[2] / ".tools"
-REAL_MYSQLDUMP = os.environ.get("MBP_REAL_MYSQLDUMP_PATH", str(TOOLS / "mysqldump"))
-REAL_MARIADB_DUMP = os.environ.get("MBP_REAL_MARIADB_DUMP_PATH", str(TOOLS / "mariadb-dump"))
 
 SEED = [
     "DROP DATABASE IF EXISTS seeded",
@@ -46,16 +39,6 @@ SEED = [
     "CREATE USER 'mbp_backup'@'%' IDENTIFIED BY 'Backup-Pass-1'",
     "GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON *.* TO 'mbp_backup'@'%'",
 ]
-
-
-@pytest.fixture
-def real_tools(monkeypatch):
-    for path in (REAL_MYSQLDUMP, REAL_MARIADB_DUMP):
-        if not os.access(path, os.X_OK):
-            pytest.skip(f"dump tool not found: {path} (run backend/scripts/install-dump-tools.sh)")
-    settings = get_settings()
-    monkeypatch.setattr(settings, "mysqldump_path", REAL_MYSQLDUMP)
-    monkeypatch.setattr(settings, "mariadb_dump_path", REAL_MARIADB_DUMP)
 
 
 def scalar(server, sql):

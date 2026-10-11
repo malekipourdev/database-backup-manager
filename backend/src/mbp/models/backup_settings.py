@@ -23,6 +23,11 @@ class BackupSettings(Base):
     )
     # gzip | bzip2 | none
     compression: Mapped[str] = mapped_column(String(8), nullable=False, default="gzip")
+    # Retention policy; NULL disables that rule. The newest backup is never deleted.
+    local_keep_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    local_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remote_keep_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remote_max_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False
     )
