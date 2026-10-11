@@ -625,6 +625,12 @@ EventName = Literal[
     "disk_low",
     "schedule_problem",
     "retention_error",
+    "container_down",
+    "container_restarting",
+    "container_unhealthy",
+    "container_resources",
+    "host_resources",
+    "agent_unreachable",
     "backup_succeeded",
     "recovered",
     "daily_summary",
@@ -711,3 +717,185 @@ class NotificationLogPage(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# --- Containers ---
+
+ContainerRefPattern = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+
+
+class ContainerPort(BaseModel):
+    private: int | None = None
+    public: int | None = None
+    type: str = "tcp"
+
+
+class ContainerSummary(BaseModel):
+    id: str
+    name: str
+    image: str
+    state: str
+    health: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    exit_code: int | None = None
+    oom_killed: bool = False
+    restart_count: int = 0
+    restart_policy: str = "no"
+    project: str | None = None
+    service: str | None = None
+    # Set on the panel's own containers (backend, frontend, agent): never controllable.
+    panel: str | None = None
+    ports: list[ContainerPort] = []
+    locked: bool = False
+    monitored: bool = True
+    # crashed | restarting | unhealthy
+    problem: str | None = None
+
+
+class ContainerMount(BaseModel):
+    type: str | None = None
+    source: str | None = None
+    destination: str | None = None
+    read_only: bool = False
+
+
+class ContainerNetwork(BaseModel):
+    name: str
+    ip: str | None = None
+
+
+class ContainerDetails(ContainerSummary):
+    image_id: str | None = None
+    hostname: str | None = None
+    # Variable names only; values can hold passwords and are never returned.
+    env_names: list[str] = []
+    mounts: list[ContainerMount] = []
+    networks: list[ContainerNetwork] = []
+    health_failing_streak: int | None = None
+    health_last_output: str | None = None
+    tty: bool = False
+
+
+class ContainerList(BaseModel):
+    containers: list[ContainerSummary]
+    read_only: bool
+
+
+class ContainerStats(BaseModel):
+    cpu_percent: float | None = None
+    memory_usage: int | None = None
+    memory_limit: int | None = None
+    memory_percent: float | None = None
+    net_rx: int | None = None
+    net_tx: int | None = None
+    block_read: int | None = None
+    block_write: int | None = None
+    pids: int | None = None
+
+
+class ContainerStatsMap(BaseModel):
+    stats: dict[str, ContainerStats | None]
+
+
+class ContainerStatsOne(BaseModel):
+    stats: ContainerStats | None
+
+
+class DockerInfo(BaseModel):
+    version: str | None = None
+    api_version: str | None = None
+    os: str | None = None
+    kernel: str | None = None
+    cpus: int | None = None
+    memory_total: int | None = None
+    containers: int | None = None
+    running: int | None = None
+    stopped: int | None = None
+    paused: int | None = None
+    images: int | None = None
+    name: str | None = None
+
+
+class HostInfo(BaseModel):
+    cpu_percent: float | None = None
+    load: list[float] | None = None
+    memory_total: int | None = None
+    memory_available: int | None = None
+    disk_total: int | None = None
+    disk_free: int | None = None
+
+
+class ServerInfo(BaseModel):
+    docker: DockerInfo
+    host: HostInfo
+
+
+class LogLine(BaseModel):
+    stream: Literal["stdout", "stderr"]
+    time: str | None = None
+    text: str
+
+
+class ContainerLogs(BaseModel):
+    lines: list[LogLine]
+    truncated: bool = False
+
+
+def _patterns(value: list[str]) -> list[str]:
+    cleaned = []
+    for item in value:
+        item = item.strip()
+        if item and item not in cleaned:
+            cleaned.append(item)
+    return cleaned
+
+
+class ContainerSettingsIO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    read_only: bool = False
+    hidden: list[str] = Field(default=[], max_length=100)
+    locked: list[str] = Field(default=[], max_length=100)
+    monitor_all: bool = True
+    monitored: list[str] = Field(default=[], max_length=500)
+    cpu_percent: int = Field(default=90, ge=0, le=100)
+    memory_percent: int = Field(default=90, ge=0, le=100)
+    restart_count: int = Field(default=3, ge=0, le=100)
+    restart_window_minutes: int = Field(default=10, ge=1, le=1440)
+    host_memory_percent: int = Field(default=90, ge=0, le=100)
+    host_disk_percent: int = Field(default=90, ge=0, le=100)
+    bot_logs: bool = False
+
+    @field_validator("hidden", "locked", "monitored")
+    @classmethod
+    def _clean(cls, value: list[str]) -> list[str]:
+        value = _patterns(value)
+        if any(len(item) > 128 for item in value):
+            raise ValueError("too_long")
+        return value
+
+
+class ContainerActionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    actor: str
+    source: str
+    container: str
+    action: str
+    result: str
+    detail: str | None = None
+
+
+class ContainerActionPage(BaseModel):
+    items: list[ContainerActionItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class ContainerActionResult(BaseModel):
+    container: ContainerSummary

@@ -1,6 +1,25 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.1.0 → 2.0.0
+Bump rationale: MAJOR. Principle VI no longer forbids docker.sock outright: an optional,
+isolated agent service may use it. Principle IV allows that one additional service.
+
+Modified principles:
+- I. Security First: rules for container management (the agent's limits, the panel's own
+  containers protected, audit log, read-only mode, bot actions confirmed with a TOTP code,
+  environment values never returned, bot logs off by default).
+- IV. Simple Architecture: one optional additional service, the Docker agent.
+- VI. Containerized Deployment: the backend and frontend still never mount docker.sock; only
+  the agent may, and only when an admin turns it on.
+Modified sections:
+- Project Scope (MVP): adds container monitoring and control (phase 1 of container
+  management); deployment, exec, and creating/removing containers stay out of scope.
+
+Templates: not modified. Deferred TODOs: none.
+
+Previous report (1.1.0)
+-----------------------
 Version change: 1.0.0 → 1.1.0
 Bump rationale: MINOR. Materially expanded guidance: a second admin interface (messenger
 bots) under Principle I, in-process bot polling under Principle IV, and notifications moved
@@ -78,6 +97,14 @@ automatically delete old backups via retention policies.
   signing secrets are secrets under this principle. Sending backup files through a bot copies
   data to a third party and MUST be off unless an admin turns it on.
 
+- Container management goes through the Docker agent only (see VI). The panel MUST refuse to
+  control its own containers, MUST record every start/stop/restart (who, from where, result)
+  in an audit log, and MUST offer a read-only mode and per-container hide/lock rules. The
+  agent MUST NOT return environment variable values. Controlling a container from a bot
+  MUST require a fresh TOTP code of a panel account with two-step verification on. Showing
+  container logs in a bot copies them to a third party and MUST be off unless an admin
+  turns it on.
+
 Rationale: the panel holds credentials to production databases and copies of their data; a
 single leak compromises every registered instance.
 
@@ -114,6 +141,9 @@ Rationale: the two servers have diverged in tooling and flags; assuming one brea
 - The MVP MUST NOT introduce message queues, separate worker services, caches, or other
   additional infrastructure. Any such addition requires a constitution amendment with
   justification.
+- Exception (2.0.0): the optional Docker agent, a small HTTP service built from the backend
+  image. It exists so that docker.sock is isolated in one minimal process instead of being
+  given to the backend.
 
 Rationale: a self-hosted tool must be easy to deploy, understand, and operate.
 
@@ -132,10 +162,17 @@ Rationale: operators choose their own storage; the codebase stays portable and t
 - Frontend and backend MUST each have a separate, optimized multi-stage Dockerfile (minimal
   runtime image, no build toolchain in the final stage, non-root user).
 - A single `docker-compose.yml` MUST run the stack on an isolated network.
-- Target databases MUST be reached over the network only. The Docker/Podman socket
-  (`docker.sock`) MUST NEVER be mounted or used.
+- Target databases MUST be reached over the network only. The backend and frontend MUST
+  NEVER mount or use the Docker/Podman socket (`docker.sock`).
+- Only the agent service may mount `docker.sock`, and only when an admin turns it on (compose
+  profile, off by default). The agent MUST: listen only on the internal compose network with
+  no published port; answer only requests carrying the shared secret; implement only a fixed
+  allow-list of operations (list, inspect, stats, logs, start, stop, restart); never execute
+  commands in containers, create, remove or pull anything; refuse to control the panel's own
+  containers; and run with a read-only filesystem, no capabilities and no-new-privileges.
 
-Rationale: socket access grants host root; network access is sufficient and far safer.
+Rationale: socket access grants host root; network access is sufficient for backups and far
+safer, and container management keeps that power in one small, auditable component.
 
 ### VII. Streaming for Large Databases
 
@@ -199,10 +236,14 @@ In scope:
 - Notifications and alerts (backup failures, stale backups, low disk space, daily summary)
   delivered to messenger bots and a signed webhook, with configurable rules and a history.
 - Managing backups from Bale and Telegram bots (inline buttons) for registered admins.
+- Container monitoring and control through the optional agent: list, state, usage, logs,
+  start/stop/restart from the panel and the bots, container and host alerts, audit log.
 - Bilingual (Persian/English) UI.
 
 Out of scope for MVP: restore, email notifications, non-S3 remote storage,
-multi-user roles beyond admin, and additional infrastructure services. Introducing any of these
+multi-user roles beyond admin, additional infrastructure services (beyond the agent), and,
+for containers, deployment, exec/terminal, and creating, removing or pulling containers and
+images. Introducing any of these
 requires a scope amendment to this section.
 
 ## Development Workflow & Quality Gates
@@ -228,4 +269,4 @@ requires a scope amendment to this section.
 - Compliance is verified during planning (Constitution Check) and code review. Unjustified
   violations block merge.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-11
+**Version**: 2.0.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-11

@@ -17,7 +17,8 @@
     "schedules": "Schedules",
     "bots": "Bots",
     "notifications": "Notifications",
-    "account": "Account"
+    "account": "Account",
+    "containers": "Containers"
   },
   "language": {
     "label": "Language",
@@ -100,7 +101,20 @@
     "wrong_password": "The password is wrong.",
     "two_factor_already_enabled": "Two-step verification is already on.",
     "two_factor_not_enabled": "Two-step verification is off.",
-    "two_factor_setup_missing": "Start the setup again."
+    "two_factor_setup_missing": "Start the setup again.",
+    "agent_unreachable": "The agent (container management) is not reachable. Is it installed and running?",
+    "agent_timeout": "The agent did not answer in time.",
+    "agent_unauthorized": "The agent refused the panel's token. Both must use the same MBP_ENCRYPTION_KEY.",
+    "agent_error": "The agent returned an error.",
+    "docker_unavailable": "Docker is not reachable from the agent.",
+    "docker_permission_denied": "The agent may not use docker.sock: set MBP_DOCKER_GID to the socket's group.",
+    "docker_timeout": "Docker did not answer in time.",
+    "docker_error": "Docker returned an error.",
+    "container_not_found": "This container no longer exists.",
+    "container_locked": "This container is locked: it cannot be started, stopped or restarted from the panel.",
+    "container_protected": "The panel's own containers cannot be controlled from the panel.",
+    "containers_read_only": "Read-only mode is on: containers cannot be controlled.",
+    "invalid_action": "This action is not allowed."
   },
   "validation": {
     "required": "This field is required.",
@@ -582,7 +596,13 @@
       "retention_error": "Retention could not delete",
       "backup_succeeded": "Backup succeeded",
       "recovered": "Back to normal",
-      "daily_summary": "Daily summary"
+      "daily_summary": "Daily summary",
+      "container_down": "Container went down",
+      "container_restarting": "Container restart loop",
+      "container_unhealthy": "Container unhealthy",
+      "container_resources": "High container usage",
+      "host_resources": "Server resources low",
+      "agent_unreachable": "Agent unreachable"
     },
     "descriptions": {
       "backup_failed": "A backup ended with an error.",
@@ -592,8 +612,14 @@
       "schedule_problem": "A schedule fired but could not start, e.g. no databases are marked.",
       "retention_error": "An old remote copy could not be deleted.",
       "backup_succeeded": "Every successful backup (can be a lot of messages).",
-      "recovered": "A stale backup or low disk space alert has cleared.",
-      "daily_summary": "A report of the last 24 hours, at the time below."
+      "recovered": "A condition alert has cleared: a stale backup, low disk space, or a container or server problem.",
+      "daily_summary": "A report of the last 24 hours, at the time below.",
+      "container_down": "A container exited with an error or ran out of memory (not when it was stopped on purpose).",
+      "container_restarting": "A container keeps being restarted by its restart policy.",
+      "container_unhealthy": "A container's health check is failing.",
+      "container_resources": "A container uses more CPU or RAM than the limits in Containers → Settings.",
+      "host_resources": "The server's RAM or Docker disk is above the limits in Containers → Settings.",
+      "agent_unreachable": "The panel lost contact with the agent that manages containers."
     },
     "thresholds": {
       "title": "Thresholds and timing",
@@ -658,7 +684,22 @@
       "recovered_disk": "Free space in the backup area is sufficient again ({{free}}).",
       "schedule_problem": "Schedule “{{name}}” ({{instance}}) did not run: {{result}}",
       "daily_summary": "Daily summary: {{ok}} succeeded, {{failed}} failed.",
-      "test": "Test alert."
+      "test": "Test alert.",
+      "container_down": "Container “{{name}}” went down (exit code {{code}}).",
+      "container_down_oom": "Container “{{name}}” was killed: out of memory.",
+      "container_restarting": "Container “{{name}}” restarted {{n}} times in {{minutes}} minutes.",
+      "container_unhealthy": "The health check of container “{{name}}” is failing.",
+      "container_resources": "Container “{{name}}” is using a lot: CPU {{cpu}}, RAM {{memory}}.",
+      "host_memory": "Server memory {{percent}} used ({{used}} of {{total}}).",
+      "host_disk": "Docker disk {{percent}} used ({{used}} of {{total}}).",
+      "agent_unreachable": "Lost contact with the agent: {{code}}",
+      "recovered_container_down": "Container “{{name}}” is running again.",
+      "recovered_container_restarting": "Container “{{name}}” stopped restarting.",
+      "recovered_container_unhealthy": "Container “{{name}}” is healthy again.",
+      "recovered_container_resources": "Usage of container “{{name}}” is back to normal.",
+      "recovered_host_memory": "Server memory use is back to normal ({{percent}}).",
+      "recovered_host_disk": "The Docker disk has enough space again ({{percent}} used).",
+      "recovered_agent": "Contact with the agent is back."
     }
   },
   "layout": {
@@ -714,5 +755,161 @@
     "deviceHint": "Shows the current key again, so another phone or app shows the same codes. Codes already set up keep working. Confirm with your password and a current code.",
     "deviceCheck": "Check that the new device shows the same code as your other devices.",
     "deviceDone": "Done"
+  },
+  "containers": {
+    "title": "Containers",
+    "subtitle": "The Docker containers on this server: state, usage, logs and control.",
+    "tabs": {
+      "containers": "Containers",
+      "activity": "Activity",
+      "settings": "Settings",
+      "overview": "Overview",
+      "logs": "Logs"
+    },
+    "summary": {
+      "containers": "Containers running",
+      "problems": "{{n}} with problems",
+      "allGood": "No problems",
+      "cpu": "Server CPU",
+      "cpuNote": "{{cpus}} cores · load {{load}}",
+      "memory": "Server RAM",
+      "disk": "Docker disk",
+      "of": "of {{total}} · {{percent}}"
+    },
+    "filter": {
+      "all": "All",
+      "running": "Running",
+      "problems": "Problems",
+      "stopped": "Stopped"
+    },
+    "search": "Search by name, image or project",
+    "empty": "No containers match.",
+    "standalone": "Not in a compose project",
+    "columns": {
+      "name": "Container",
+      "state": "State",
+      "uptime": "Up / exit",
+      "cpu": "CPU",
+      "memory": "RAM",
+      "restarts": "Restarts"
+    },
+    "state": {
+      "running": "Running",
+      "exited": "Stopped",
+      "created": "Created",
+      "paused": "Paused",
+      "restarting": "Restarting",
+      "dead": "Dead",
+      "removing": "Removing"
+    },
+    "problem": {
+      "crashed": "Crashed",
+      "restarting": "Restarting",
+      "unhealthy": "Unhealthy"
+    },
+    "health": {
+      "healthy": "healthy",
+      "unhealthy": "unhealthy",
+      "starting": "starting"
+    },
+    "policy": {
+      "no": "No automatic restart",
+      "always": "Always restart",
+      "unless-stopped": "Restart unless stopped",
+      "on-failure": "Restart on failure"
+    },
+    "exitCode": "exit code {{code}}",
+    "oom": "out of memory (OOM)",
+    "restarts": "{{n}} automatic restarts",
+    "locked": "Locked",
+    "lockedHint": "Locked in the settings: it cannot be controlled from the panel or the bot.",
+    "panelHint": "Part of this panel: it cannot be controlled from the panel.",
+    "readOnlyHint": "Read-only mode is on.",
+    "readOnlyBanner": "Read-only mode: containers can be watched but not started, stopped or restarted. Change it in the Settings tab.",
+    "actions": {
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart"
+    },
+    "confirm": {
+      "stopTitle": "Stop container",
+      "stop": "Stop “{{name}}”? Whatever it serves will be unavailable until it is started again.",
+      "restartTitle": "Restart container",
+      "restart": "Restart “{{name}}”? It will be briefly unavailable."
+    },
+    "done": {
+      "start": "“{{name}}” started.",
+      "stop": "“{{name}}” stopped.",
+      "restart": "“{{name}}” restarted."
+    },
+    "fields": {
+      "state": "State",
+      "image": "Image",
+      "project": "Compose project",
+      "id": "ID",
+      "startedAt": "Started",
+      "finishedAt": "Stopped",
+      "restartPolicy": "Restart policy",
+      "health": "Health check",
+      "ports": "Ports",
+      "networks": "Networks",
+      "mounts": "Volumes / mounts",
+      "env": "Environment"
+    },
+    "envHint": "Only the variable names are shown; their values can hold passwords and never leave the server.",
+    "logs": {
+      "lines": "Lines",
+      "follow": "Follow",
+      "search": "Filter lines",
+      "download": "Download",
+      "empty": "No log lines."
+    },
+    "setup": {
+      "title": "Container management is not set up",
+      "intro": "Seeing and controlling containers needs the agent service: a small container that is the only part of the panel with access to Docker (docker.sock). It is off by default.",
+      "steps": "To turn it on, run this in the panel's folder on the server:",
+      "gid": "The agent is running but may not use docker.sock. Set the socket's group and restart the agent:",
+      "security": "Access to docker.sock is equivalent to root on the server. The agent listens only on the panel's internal network, answers only the panel, cannot run commands or create containers, and never returns environment variable values."
+    },
+    "activity": {
+      "title": "Activity",
+      "hint": "Every start, stop and restart asked for from the panel or a bot, and its result.",
+      "empty": "Nothing yet.",
+      "time": "Time",
+      "container": "Container",
+      "action": "Action",
+      "by": "By",
+      "result": "Result",
+      "ok": "Done",
+      "sources": {
+        "panel": "Panel",
+        "bale": "Bale bot",
+        "telegram": "Telegram bot"
+      }
+    },
+    "settings": {
+      "access": "Access",
+      "readOnly": "Read-only mode",
+      "readOnlyHint": "Watch only: start, stop and restart are refused in the panel and the bots.",
+      "hidden": "Hidden containers",
+      "hiddenHint": "Names or patterns (e.g. vault*) of containers the panel does not show at all.",
+      "locked": "Locked containers",
+      "lockedHint": "Shown, but never started, stopped or restarted from the panel or the bots. The panel's own containers are always locked.",
+      "botLogs": "Show logs in the bots",
+      "botLogsHint": "Logs can hold sensitive data; showing them in Bale or Telegram copies them to the messenger's servers.",
+      "alerts": "Alerts",
+      "alertsHint": "What the container monitor checks every minute. Which alerts are sent where is set on the Notifications page.",
+      "monitorAll": "Watch every container",
+      "monitored": "Watched containers",
+      "cpu": "Container CPU above (%)",
+      "memory": "Container RAM above (% of its limit)",
+      "restarts": "Restarts that count as a loop",
+      "restartWindow": "…within (minutes)",
+      "hostMemory": "Server RAM above (%)",
+      "hostDisk": "Docker disk above (%)",
+      "zeroOff": "0 turns a check off. High usage must last two checks in a row.",
+      "saved": "Container settings saved."
+    },
+    "readOnlyMount": "read-only"
   }
 }

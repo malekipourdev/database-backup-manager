@@ -271,3 +271,48 @@ def bale_bot(auth_client, app, fake_bot_server):
     wait_until(lambda: app.state.bot_manager.running("bale"), message="bot to start")
     # The app's shutdown (end of the client fixture) stops the bot.
     return fake_bot_server
+
+
+# --- Containers (Docker agent over an in-memory Docker API) ---
+
+
+@pytest.fixture
+def docker(tmp_path):
+    from tests.fakes.fake_docker import FakeDocker, write_proc
+
+    fake = FakeDocker()
+    fake.proc = tmp_path / "proc"
+    write_proc(fake.proc)
+    return fake
+
+
+@pytest.fixture
+def agent_app(docker):
+    from mbp.agent.app import AgentSettings, create_agent_app
+    from mbp.agent.docker import DockerClient
+    from mbp.agent.host import HostProbe
+
+    settings = AgentSettings(encryption_key=TEST_ENCRYPTION_KEY)
+    client = DockerClient("http://docker", transport=docker.transport())
+    return create_agent_app(settings, docker=client, host=HostProbe(proc=docker.proc))
+
+
+@pytest.fixture
+def agent(agent_app):
+    from mbp.containers.agent_client import AgentClient
+    from mbp.security.agent_token import agent_token
+
+    return AgentClient(
+        "http://agent",
+        agent_token(TEST_ENCRYPTION_KEY),
+        client=TestClient(agent_app, base_url="http://agent"),
+    )
+
+
+@pytest.fixture
+def containers_client(auth_client, app, agent):
+    """Signed-in client whose backend talks to the agent over the fake Docker API."""
+    previous = app.state.agent
+    app.state.agent = agent
+    yield auth_client
+    app.state.agent = previous

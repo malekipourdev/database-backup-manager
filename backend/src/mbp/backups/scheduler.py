@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 RETENTION_JOB_ID = "retention-sweep"
 MONITOR_JOB_ID = "alert-monitor"
 SUMMARY_JOB_ID = "daily-summary"
+CONTAINER_JOB_ID = "container-monitor"
 # Schedule results worth an alert.
 PROBLEM_RESULTS = frozenset({"no_databases_selected", "instance_not_found", "error"})
 
@@ -129,6 +130,7 @@ class BackupScheduler:
         *,
         notifier=None,
         monitor=None,
+        container_monitor=None,
     ) -> None:
         self.settings = settings
         self.session_factory = session_factory
@@ -136,6 +138,7 @@ class BackupScheduler:
         self.store = store
         self.notifier = notifier
         self.monitor = monitor
+        self.container_monitor = container_monitor
         self._scheduler = BackgroundScheduler(
             timezone=UTC,
             # Jobs only queue work (the runner does the dumps), so one thread is plenty.
@@ -168,6 +171,14 @@ class BackupScheduler:
                 "interval",
                 minutes=self.settings.monitor_interval_minutes,
                 id=MONITOR_JOB_ID,
+                replace_existing=True,
+            )
+        if self.container_monitor is not None and self.settings.container_monitor_seconds > 0:
+            self._scheduler.add_job(
+                self.container_monitor.check,
+                "interval",
+                seconds=self.settings.container_monitor_seconds,
+                id=CONTAINER_JOB_ID,
                 replace_existing=True,
             )
         self.sync_daily_summary()

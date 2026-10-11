@@ -19,6 +19,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BotsPage } from "./pages/BotsPage";
+import { ContainersPage } from "./pages/ContainersPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { notifications } from "@mantine/notifications";
 import { cssVariablesResolver, theme } from "./theme/theme";
@@ -86,6 +87,7 @@ export function AppRoutes() {
           <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/bots" element={<BotsPage />} />
+          <Route path="/containers" element={<ContainersPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/settings/backups" element={<BackupSettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />

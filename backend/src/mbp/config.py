@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     retention_interval_minutes: int = Field(default=60, ge=0)
     # How often stale backups and disk space are checked for alerts (0 = never).
     monitor_interval_minutes: int = Field(default=10, ge=0)
+    # The Docker agent (compose profile "containers"); unreachable means the feature is off.
+    agent_url: str = "http://agent:8090"
+    agent_timeout_seconds: float = Field(default=40.0, gt=0)
+    # How often containers and host resources are checked for alerts (0 = never).
+    container_monitor_seconds: int = Field(default=60, ge=0)
     # Master switch for the Bale/Telegram bots (e.g. off on a standby copy of the panel).
     bots_enabled: bool = True
 

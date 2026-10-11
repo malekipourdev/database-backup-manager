@@ -8,6 +8,7 @@ from mbp.api import (
     backup_settings,
     backups,
     bots,
+    containers,
     health,
     instances,
     notifications,
@@ -20,6 +21,8 @@ from mbp.backups.scheduler import BackupScheduler
 from mbp.backups.store import get_store
 from mbp.bots.manager import BotManager
 from mbp.config import get_settings
+from mbp.containers.agent_client import AgentClient
+from mbp.containers.monitor import ContainerMonitor
 from mbp.db import get_sessionmaker
 from mbp.logging import configure_logging
 from mbp.notifications.monitor import AlertMonitor
@@ -42,16 +45,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner.recover()
     runner.start()
     app.state.backup_runner = runner
+    agent = AgentClient.from_settings(settings)
+    app.state.agent = agent
     notifier = Notifier(sessions)
     runner.notifier = notifier
     app.state.notifier = notifier
     monitor = AlertMonitor(sessions, notifier, settings.backup_root)
     scheduler = BackupScheduler(
-        settings, sessions, runner, store, notifier=notifier, monitor=monitor
+        settings,
+        sessions,
+        runner,
+        store,
+        notifier=notifier,
+        monitor=monitor,
+        container_monitor=ContainerMonitor(sessions, notifier, agent),
     )
     scheduler.start()
     app.state.backup_scheduler = scheduler
-    bot_manager = BotManager(sessions, runner, store, scheduler=scheduler)
+    bot_manager = BotManager(
+        sessions, runner, store, scheduler=scheduler, agent=lambda: app.state.agent
+    )
     # Alerts reach the bots' admins; the bots then poll for their admins' commands.
     notifier.bots = bot_manager
     app.state.bot_manager = bot_manager
@@ -64,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler.stop()
         runner.stop()
         notifier.close()
+        agent.close()
 
 
 def create_app() -> FastAPI:
@@ -92,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(storage.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(bots.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(notifications.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

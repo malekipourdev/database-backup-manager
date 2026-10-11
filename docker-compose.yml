@@ -21,9 +21,13 @@ services:
       # "./backups:/backups" and run "chown 10001:10001 ./backups" once.
       - mbp-backups:/backups
     # Lets admins reach database servers on the host machine as "host.docker.internal".
-    # Target databases are reached over the network only; docker.sock is never mounted.
+    # Target databases are reached over the network only; docker.sock is never mounted here
+    # (only the optional agent below has it).
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    labels:
+      # The panel's own containers can never be stopped or restarted from the panel.
+      mbp.role: panel
     networks:
       - mbp-net
     # No published ports: only the frontend proxy talks to the backend.
@@ -39,8 +43,45 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    labels:
+      mbp.role: panel
     networks:
       - mbp-net
+
+  # Container management (optional, off by default). The only service with docker.sock,
+  # which is equivalent to root on the host. Turn it on with COMPOSE_PROFILES=containers
+  # and MBP_DOCKER_GID (the group of the socket) in .env; see the README.
+  agent:
+    build: ./backend
+    command: ["python", "-m", "mbp.agent"]
+    profiles: ["containers"]
+    restart: unless-stopped
+    environment:
+      # The backend and the agent derive their shared token from this key.
+      MBP_ENCRYPTION_KEY: ${MBP_ENCRYPTION_KEY:?Set MBP_ENCRYPTION_KEY in .env}
+    group_add:
+      - "${MBP_DOCKER_GID:-999}"
+    volumes:
+      - ${MBP_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    labels:
+      mbp.role: agent
+    networks:
+      - mbp-net
+    # No published ports: only the backend talks to the agent, on the internal network.
 
 networks:
   mbp-net:

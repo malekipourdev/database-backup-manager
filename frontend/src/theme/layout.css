@@ -247,14 +247,17 @@
     z-index: 60;
     display: flex;
     justify-content: space-around;
+    /* More items than fit on a phone: the bar scrolls sideways. */
+    overflow-x: auto;
+    scrollbar-width: none;
     padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--color-bg) 88%, transparent);
     backdrop-filter: blur(12px);
     box-shadow: inset 0 1px 0 var(--color-neutral-800);
   }
   .cl-tab {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 0 62px;
+    min-width: 62px;
     display: flex;
     flex-direction: column;
     align-items: center;
