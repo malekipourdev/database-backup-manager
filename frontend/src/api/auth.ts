@@ -108,3 +108,14 @@ export function useRegenerateRecoveryCodes() {
     onSuccess: refresh,
   });
 }
+
+/** The active key again, to add another device that shows the same codes. */
+export function useShowTwoFactorKey() {
+  const refresh = useRefresh();
+  return useMutation({
+    mutationFn: (body: { password: string; code: string }) =>
+      apiFetch<TwoFactorSetup>("/auth/2fa/key", { method: "POST", body }),
+    // A recovery code used here is spent, so the count may change.
+    onSuccess: refresh,
+  });
+}

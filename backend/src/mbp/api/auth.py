@@ -121,3 +121,15 @@ def two_factor_recovery_codes(
         body.password.get_secret_value(), body.code.get_secret_value()
     )
     return RecoveryCodes(recovery_codes=codes)
+
+
+@router.post("/auth/2fa/key", response_model=TwoFactorSetup)
+def two_factor_key(
+    body: PasswordAndCode,
+    admin: AdminAccount = Depends(require_session),
+    db: Session = Depends(get_db),
+) -> TwoFactorSetup:
+    info = TwoFactorService(db, admin).show_key(
+        body.password.get_secret_value(), body.code.get_secret_value()
+    )
+    return TwoFactorSetup(secret=info.secret, otpauth_uri=info.otpauth_uri, qr_svg=info.qr_svg)

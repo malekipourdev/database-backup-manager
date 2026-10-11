@@ -451,6 +451,9 @@ your phone. If you lose the phone, each code lets you sign in once. To sign in w
   failed sign-ins, and the lockout rule below applies to them.
 - Each code works only once, so an intercepted code cannot be reused. Codes depend on the time, so
   keep the server's and the phone's clocks correct (a drift of ±30 seconds is tolerated).
+- The same key can be added to several phones or apps (they all show the same codes). Scan the QR
+  code on each during setup, or later use **Add another device** (password and a current code),
+  which shows the current key again without changing it.
 - **New recovery codes** replaces all the old ones. **Turn off** needs your password and a current
   code (or a recovery code).
 - The authenticator key is stored encrypted, like the other secrets. Recovery codes are stored only

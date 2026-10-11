@@ -27,6 +27,7 @@ import {
   useEnableTwoFactor,
   useMe,
   useRegenerateRecoveryCodes,
+  useShowTwoFactorKey,
   useStartTwoFactorSetup,
   useTwoFactorStatus,
 } from "../api/auth";
@@ -80,6 +81,48 @@ function RecoveryCodesView({ codes, onDone }: { codes: string[]; onDone: () => v
         <Button onClick={onDone}>{t("account.savedCodes")}</Button>
       </Group>
     </Stack>
+  );
+}
+
+/** QR code and the key as text, for the authenticator app. */
+function KeyView({ setup }: { setup: TwoFactorSetup }) {
+  const { t } = useTranslation();
+  return (
+    <Group align="flex-start" gap="lg" wrap="wrap" justify="center">
+      <img
+        src={setup.qr_svg}
+        alt={t("account.qrAlt")}
+        width={200}
+        height={200}
+        style={{ borderRadius: 12, background: "#fff" }}
+        data-testid="totp-qr"
+      />
+      <Stack gap={6} style={{ flex: "1 1 220px" }}>
+        <Text size="sm" c="var(--color-neutral-300)">
+          {t("account.manualKey")}
+        </Text>
+        <Group gap={6} wrap="nowrap">
+          <TextInput
+            readOnly
+            value={setup.secret}
+            dir="ltr"
+            styles={{ input: { fontFamily: "var(--font-mono)", letterSpacing: 1 } }}
+            style={{ flex: 1 }}
+            aria-label={t("account.manualKey")}
+          />
+          <CopyButton value={setup.secret}>
+            {({ copied, copy }) => (
+              <Button variant="default" onClick={copy}>
+                {copied ? t("backups.copied") : t("backups.copy")}
+              </Button>
+            )}
+          </CopyButton>
+        </Group>
+        <Text size="xs" c="dimmed">
+          {t("account.manualHint")}
+        </Text>
+      </Stack>
+    </Group>
   );
 }
 
@@ -149,41 +192,7 @@ function EnableFlow({ onClose }: { onClose: () => void }) {
         <List.Item>{t("account.step2")}</List.Item>
         <List.Item>{t("account.step3")}</List.Item>
       </List>
-      <Group align="flex-start" gap="lg" wrap="wrap" justify="center">
-        <img
-          src={setup.qr_svg}
-          alt={t("account.qrAlt")}
-          width={200}
-          height={200}
-          style={{ borderRadius: 12, background: "#fff" }}
-          data-testid="totp-qr"
-        />
-        <Stack gap={6} style={{ flex: "1 1 220px" }}>
-          <Text size="sm" c="var(--color-neutral-300)">
-            {t("account.manualKey")}
-          </Text>
-          <Group gap={6} wrap="nowrap">
-            <TextInput
-              readOnly
-              value={setup.secret}
-              dir="ltr"
-              styles={{ input: { fontFamily: "var(--font-mono)", letterSpacing: 1 } }}
-              style={{ flex: 1 }}
-              aria-label={t("account.manualKey")}
-            />
-            <CopyButton value={setup.secret}>
-              {({ copied, copy }) => (
-                <Button variant="default" onClick={copy}>
-                  {copied ? t("backups.copied") : t("backups.copy")}
-                </Button>
-              )}
-            </CopyButton>
-          </Group>
-          <Text size="xs" c="dimmed">
-            {t("account.manualHint")}
-          </Text>
-        </Stack>
-      </Group>
+      <KeyView setup={setup} />
       <Stack gap={6} align="center">
         <Text size="sm">{t("account.enterCode")}</Text>
         <PinInput
@@ -220,16 +229,37 @@ function EnableFlow({ onClose }: { onClose: () => void }) {
 }
 
 /** Password + code form for turning 2FA off or replacing the recovery codes. */
-function ConfirmWithCode(props: { action: "disable" | "regenerate"; onClose: () => void }) {
+function ConfirmWithCode(props: {
+  action: "disable" | "regenerate" | "device";
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const disable = useDisableTwoFactor();
   const regenerate = useRegenerateRecoveryCodes();
-  const mutation = props.action === "disable" ? disable : regenerate;
+  const showKey = useShowTwoFactorKey();
+  const mutation =
+    props.action === "disable" ? disable : props.action === "device" ? showKey : regenerate;
+  const [key, setKey] = useState<TwoFactorSetup | null>(null);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
 
   if (codes) return <RecoveryCodesView codes={codes} onDone={props.onClose} />;
+  if (key) {
+    return (
+      <Stack gap="md">
+        <List type="ordered" size="sm" spacing={4}>
+          <List.Item>{t("account.step1")}</List.Item>
+          <List.Item>{t("account.step2")}</List.Item>
+          <List.Item>{t("account.deviceCheck")}</List.Item>
+        </List>
+        <KeyView setup={key} />
+        <Group justify="flex-end">
+          <Button onClick={props.onClose}>{t("account.deviceDone")}</Button>
+        </Group>
+      </Stack>
+    );
+  }
 
   const submit = () => {
     if (props.action === "disable") {
@@ -242,6 +272,8 @@ function ConfirmWithCode(props: { action: "disable" | "regenerate"; onClose: () 
           },
         },
       );
+    } else if (props.action === "device") {
+      showKey.mutate({ password, code }, { onSuccess: setKey });
     } else {
       regenerate.mutate({ password, code }, { onSuccess: (data) => setCodes(data.recovery_codes) });
     }
@@ -255,9 +287,7 @@ function ConfirmWithCode(props: { action: "disable" | "regenerate"; onClose: () 
       }}
     >
       <Stack gap="md">
-        <Text size="sm">
-          {props.action === "disable" ? t("account.disableHint") : t("account.regenerateHint")}
-        </Text>
+        <Text size="sm">{t(`account.${props.action}Hint`)}</Text>
         <PasswordInput
           label={t("auth.password")}
           dir="ltr"
@@ -291,7 +321,11 @@ function ConfirmWithCode(props: { action: "disable" | "regenerate"; onClose: () 
             loading={mutation.isPending}
             disabled={!password || !code}
           >
-            {props.action === "disable" ? t("account.disable") : t("account.regenerate")}
+            {props.action === "disable"
+              ? t("account.disable")
+              : props.action === "device"
+                ? t("account.continue")
+                : t("account.regenerate")}
           </Button>
         </Group>
       </Stack>
@@ -303,7 +337,7 @@ export function AccountPage() {
   const { t, i18n } = useTranslation();
   const me = useMe();
   const status = useTwoFactorStatus();
-  const [dialog, setDialog] = useState<"enable" | "disable" | "regenerate" | null>(null);
+  const [dialog, setDialog] = useState<"enable" | "disable" | "regenerate" | "device" | null>(null);
   const enabled = status.data?.enabled ?? false;
   const left = status.data?.recovery_codes_left ?? 0;
 
@@ -356,6 +390,9 @@ export function AccountPage() {
               </Alert>
             )}
             <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={() => setDialog("device")}>
+                {t("account.addDevice")}
+              </Button>
               <Button variant="default" onClick={() => setDialog("regenerate")}>
                 {t("account.regenerate")}
               </Button>
@@ -375,13 +412,15 @@ export function AccountPage() {
             ? t("account.setUpTitle")
             : dialog === "disable"
               ? t("account.disableTitle")
-              : t("account.regenerateTitle")
+              : dialog === "device"
+                ? t("account.addDevice")
+                : t("account.regenerateTitle")
         }
         size="lg"
         closeOnClickOutside={false}
       >
         {dialog === "enable" && <EnableFlow onClose={() => setDialog(null)} />}
-        {(dialog === "disable" || dialog === "regenerate") && (
+        {(dialog === "disable" || dialog === "regenerate" || dialog === "device") && (
           <ConfirmWithCode action={dialog} onClose={() => setDialog(null)} />
         )}
       </Modal>

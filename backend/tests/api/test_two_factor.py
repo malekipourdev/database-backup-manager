@@ -239,6 +239,37 @@ def test_regenerate_recovery_codes(auth_client):
     assert stale.status_code == 401
 
 
+def test_show_key_for_another_device(auth_client):
+    secret, _ = enable(auth_client)
+    wrong = auth_client.post(
+        "/api/auth/2fa/key", json={"password": ADMIN_PASSWORD, "code": "000000"}
+    )
+    assert wrong.status_code == 403
+    assert wrong.json()["fields"] == {"code": "invalid_code"}
+    bad_password = auth_client.post(
+        "/api/auth/2fa/key", json={"password": "wrong", "code": code_for(secret, 1)}
+    )
+    assert bad_password.status_code == 403
+    response = auth_client.post(
+        "/api/auth/2fa/key", json={"password": ADMIN_PASSWORD, "code": code_for(secret, 1)}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    # The same key, so every device shows the same codes; the old ones keep working.
+    assert body["secret"] == secret
+    assert body["qr_svg"].startswith("data:image/svg+xml")
+    assert secret in body["otpauth_uri"]
+    status = auth_client.get("/api/auth/2fa").json()
+    assert status == {"enabled": True, "recovery_codes_left": 8}
+
+
+def test_show_key_needs_two_factor_on(auth_client):
+    response = auth_client.post(
+        "/api/auth/2fa/key", json={"password": ADMIN_PASSWORD, "code": "123456"}
+    )
+    assert response.status_code == 409
+
+
 def test_cli_turns_it_off(auth_client, capsys):
     from mbp.cli import main
 

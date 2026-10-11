@@ -709,6 +709,10 @@
     "validation": {
       "wrong_password": "The password is wrong.",
       "invalid_code": "The code is not valid."
-    }
+    },
+    "addDevice": "Add another device",
+    "deviceHint": "Shows the current key again, so another phone or app shows the same codes. Codes already set up keep working. Confirm with your password and a current code.",
+    "deviceCheck": "Check that the new device shows the same code as your other devices.",
+    "deviceDone": "Done"
   }
 }

@@ -107,4 +107,41 @@ describe("AccountPage", () => {
     expect(await screen.findByTestId("two-factor-state")).toHaveTextContent("Off");
     expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/2fa/disable"))).toBe(true);
   });
+
+  it("shows the current key again to add another device", async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith("/auth/me")) return { status: 200, body: { username: "admin" } };
+      if (url.endsWith("/auth/2fa"))
+        return { status: 200, body: { enabled: true, recovery_codes_left: 8 } };
+      if (url.endsWith("/auth/2fa/key")) {
+        const body = JSON.parse(String(init.body));
+        return body.code === "111222"
+          ? {
+              status: 200,
+              body: {
+                secret: "SAMEKEY234567ABC",
+                otpauth_uri: "otpauth://totp/x",
+                qr_svg: "data:image/svg+xml;base64,PHN2Zy8+",
+              },
+            }
+          : { status: 403, body: { code: "invalid_code", fields: { code: "invalid_code" } } };
+      }
+      return { status: 404, body: { code: "not_found" } };
+    });
+    renderWithProviders(<AccountPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add another device" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText(/Password/), "right");
+    await userEvent.type(within(dialog).getByLabelText(/Authenticator code/), "000000");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(await within(dialog).findByText("The code is not valid.")).toBeInTheDocument();
+
+    await userEvent.clear(within(dialog).getByLabelText(/Authenticator code/));
+    await userEvent.type(within(dialog).getByLabelText(/Authenticator code/), "111222");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(await within(dialog).findByTestId("totp-qr")).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue("SAMEKEY234567ABC")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/2fa/key"))).toBe(true);
+  });
 });

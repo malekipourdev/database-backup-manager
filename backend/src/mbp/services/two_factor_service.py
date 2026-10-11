@@ -90,6 +90,19 @@ class TwoFactorService:
         self.db.commit()
         logger.warning("Two-factor authentication disabled for %r", self.admin.username)
 
+    def show_key(self, password: str, code: str) -> SetupInfo:
+        """The active key again, to add another device (phone, app) that shows the same codes."""
+        self._require_password(password)
+        if not self.admin.totp_enabled or not self.admin.totp_secret_encrypted:
+            raise ApiError(409, "two_factor_not_enabled")
+        self._require_code(code)
+        self.db.commit()  # the used code (or recovery code) is now spent
+        secret = crypto.decrypt(self.admin.totp_secret_encrypted)
+        register_secret(secret)
+        logger.info("Two-factor key shown again to %r", self.admin.username)
+        uri = totp.provisioning_uri(secret, self.admin.username)
+        return SetupInfo(secret=secret, otpauth_uri=uri, qr_svg=totp.qr_svg_data_uri(uri))
+
     def regenerate_recovery_codes(self, password: str, code: str) -> list[str]:
         self._require_password(password)
         if not self.admin.totp_enabled:
