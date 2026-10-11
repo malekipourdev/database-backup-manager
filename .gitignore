@@ -1,0 +1,31 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+backend/dist/
+
+# Node
+node_modules/
+frontend/dist/
+coverage/
+*.log
+
+# Data
+*.db
+*.db-journal
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+.idea/

@@ -1,0 +1,131 @@
+{
+  "common": {
+    "appName": "MySQL Backup Panel",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "notAvailable": "—"
+  },
+  "nav": {
+    "instances": "Instances"
+  },
+  "language": {
+    "label": "Language",
+    "fa": "فارسی",
+    "en": "English"
+  },
+  "auth": {
+    "title": "Sign in",
+    "subtitle": "Sign in with your admin account to manage database backups.",
+    "username": "Username",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "sessionExpired": "Your session has ended. Please sign in again."
+  },
+  "errors": {
+    "not_authenticated": "You are not signed in.",
+    "csrf_failed": "The request was blocked for security reasons. Reload the page and try again.",
+    "validation_error": "Some fields are invalid. Check the form and try again.",
+    "internal_error": "Something went wrong on the server. Try again later.",
+    "network_error": "Could not reach the panel server. Check your connection.",
+    "instance_not_found": "This instance no longer exists.",
+    "name_taken": "This name is already used by another instance.",
+    "not_selectable": "System schema “{{name}}” cannot be included in backups.",
+    "unknown_database": "Database “{{name}}” does not exist on the server.",
+    "invalid_credentials": "Invalid username or password.",
+    "host_not_found": "Host not found.",
+    "connection_refused": "Connection refused.",
+    "timeout": "Connection timed out.",
+    "auth_rejected": "The server rejected the username or password.",
+    "server_error": "The server returned an error."
+  },
+  "validation": {
+    "required": "This field is required.",
+    "tooLong": "Must be at most {{max}} characters.",
+    "hostInvalid": "Enter a host name or IP address only (no protocol, path or spaces).",
+    "portRange": "Port must be a number between 1 and 65535.",
+    "invalid": "This value is invalid."
+  },
+  "instances": {
+    "title": "Database instances",
+    "add": "Add instance",
+    "empty": "No instances yet",
+    "emptyHint": "Add a MySQL or MariaDB server to start managing its backups.",
+    "columns": {
+      "name": "Name",
+      "address": "Address",
+      "username": "Username",
+      "server": "Server",
+      "lastTest": "Last connection test"
+    },
+    "fields": {
+      "name": "Name",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "notes": "Notes"
+    },
+    "hostHint": "Inside the panel's container, “localhost” is the panel itself. For a server on the host machine use host.docker.internal; for a server in another container on a shared network use its container name.",
+    "passwordStored": "A password is stored. Leave empty to keep it.",
+    "notesCount": "{{count}} / {{max}}",
+    "createTitle": "Add instance",
+    "editTitle": "Edit “{{name}}”",
+    "created": "Instance added.",
+    "updated": "Instance saved.",
+    "deleted": "Instance deleted.",
+    "deleteTitle": "Delete instance",
+    "deleteConfirm": "Delete “{{name}}”? Its database selection will also be removed. This cannot be undone.",
+    "notTested": "Not tested yet",
+    "testOk": "Succeeded",
+    "testFailed": "Failed",
+    "details": "Details",
+    "noNotes": "No notes"
+  },
+  "connection": {
+    "title": "Connection",
+    "test": "Test connection",
+    "successTitle": "Connection succeeded",
+    "successBody": "Connected to {{type}} {{version}}.",
+    "failureTitle": "Connection failed",
+    "testedAt": "Tested {{time}}",
+    "passwordNeeded": "Enter the password to test changed connection settings.",
+    "serverType": {
+      "mysql": "MySQL",
+      "mariadb": "MariaDB"
+    },
+    "explain": {
+      "host_not_found": "The host name could not be resolved. Check the spelling, or use host.docker.internal or a container name if the panel runs in a container.",
+      "connection_refused": "The host was reached but nothing accepted the connection on this port. Check the port and that the server is running and listening on the network.",
+      "timeout": "The server did not answer within 10 seconds. Check the address, firewalls, and that the panel can reach this network.",
+      "auth_rejected": "The server rejected the credentials. Check the username and password, and that this user may connect from the panel's address.",
+      "server_error": "The server reported an error. See the details below."
+    }
+  },
+  "databases": {
+    "title": "Databases to back up",
+    "showSystem": "Show system schemas",
+    "systemBadge": "system",
+    "missingBadge": "missing on server",
+    "missingHint": "This database is selected but no longer exists on the server. Uncheck it to remove it from the selection.",
+    "filter": "Filter by name",
+    "selectedCount": "{{formattedCount}} selected",
+    "save": "Save selection",
+    "reset": "Reset",
+    "saved": "Selection saved.",
+    "unreachable": "Could not load databases from the server. The saved selection is shown below.",
+    "privilegesNote": "Only databases visible to this instance's user are listed.",
+    "empty": "No databases found.",
+    "noMatches": "No databases match the filter."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The page you are looking for does not exist.",
+    "home": "Go to instances"
+  }
+}

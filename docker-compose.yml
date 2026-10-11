@@ -1,0 +1,39 @@
+name: mysql-backup-panel
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MBP_ENCRYPTION_KEY: ${MBP_ENCRYPTION_KEY:?Set MBP_ENCRYPTION_KEY in .env}
+      MBP_ADMIN_USERNAME: ${MBP_ADMIN_USERNAME:-admin}
+      MBP_ADMIN_PASSWORD: ${MBP_ADMIN_PASSWORD:-}
+      MBP_DATABASE_URL: ${MBP_DATABASE_URL:-sqlite:////data/mbp.db}
+      MBP_COOKIE_SECURE: ${MBP_COOKIE_SECURE:-true}
+    volumes:
+      - mbp-data:/data
+    # Lets admins reach database servers on the host machine as "host.docker.internal".
+    # Target databases are reached over the network only; docker.sock is never mounted.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mbp-net
+    # No published ports: only the frontend proxy talks to the backend.
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${MBP_HTTP_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - mbp-net
+
+networks:
+  mbp-net:
+    name: mbp-net
+
+volumes:
+  mbp-data:

@@ -19,7 +19,7 @@ Details: [research.md](./research.md).
 
 **Language/Version**: Python 3.12 (backend); TypeScript 5.x on Node.js 22 (frontend build)
 
-**Primary Dependencies**: Backend — FastAPI, Pydantic v2, SQLAlchemy 2.0 (sync), Alembic,
+**Primary Dependencies**: Backend — FastAPI, Pydantic v2, SQLAlchemy 2.0 (sync), Alembic, psycopg 3 (PostgreSQL driver),
 PyMySQL, cryptography (Fernet), argon2-cffi, uvicorn. Frontend — React 18, Vite, React Router,
 TanStack Query, react-i18next, Mantine v7, zod.
 

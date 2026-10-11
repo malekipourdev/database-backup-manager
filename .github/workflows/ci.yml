@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+      - name: Integration tests (MySQL 8.4 + MariaDB 11.8 containers)
+        run: uv run pytest -m integration
+
+  migrations:
+    # Constitution Principle V: the internal DB must work on PostgreSQL and MySQL by URL only.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: postgres
+            url: postgresql+psycopg://mbp:mbp@localhost:5432/mbp
+          - name: mysql
+            url: mysql+pymysql://mbp:mbp@127.0.0.1:3306/mbp
+    name: migrations (${{ matrix.name }})
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mbp
+          POSTGRES_PASSWORD: mbp
+          POSTGRES_DB: mbp
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U mbp" --health-interval 5s --health-retries 10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_USER: mbp
+          MYSQL_PASSWORD: mbp
+          MYSQL_DATABASE: mbp
+        ports: ["3306:3306"]
+        options: --health-cmd "mysqladmin ping -h 127.0.0.1" --health-interval 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      MBP_DATABASE_URL: ${{ matrix.url }}
+      MBP_ENCRYPTION_KEY: ZmFrZS1rZXktZm9yLWNpLW9ubHktMDAwMDAwMDAwMDA=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run alembic check
+      - run: uv run alembic downgrade base
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t mbp-backend ./backend
+      - run: docker build -t mbp-frontend ./frontend
