@@ -89,9 +89,7 @@ def downgrade() -> None:
         batch.drop_column("backup_compression")
         batch.drop_column("backup_name_pattern")
         batch.drop_column("backup_storage_dir")
-    op.drop_index(op.f("ix_backup_runs_requested_at"), table_name="backup_runs")
-    op.drop_index(op.f("ix_backup_runs_status"), table_name="backup_runs")
-    op.drop_index(op.f("ix_backup_runs_database_name"), table_name="backup_runs")
-    op.drop_index(op.f("ix_backup_runs_instance_id"), table_name="backup_runs")
+    # Dropping the table drops its indexes too. MySQL refuses to drop ix_backup_runs_instance_id
+    # on its own while the instance_id foreign key still uses it.
     op.drop_table("backup_runs")
     op.drop_table("backup_settings")
