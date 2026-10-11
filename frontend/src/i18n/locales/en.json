@@ -16,7 +16,8 @@
     "settings": "Settings",
     "schedules": "Schedules",
     "bots": "Bots",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "account": "Account"
   },
   "language": {
     "label": "Language",
@@ -34,7 +35,15 @@
     "password": "Password",
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "sessionExpired": "Your session has ended. Please sign in again."
+    "sessionExpired": "Your session has ended. Please sign in again.",
+    "twoFactorTitle": "Two-step verification",
+    "twoFactorHint": "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator).",
+    "recoveryHint": "Enter one of your recovery codes. Each code works once.",
+    "code": "Authenticator code",
+    "recoveryCode": "Recovery code",
+    "verify": "Verify",
+    "useRecovery": "Use a recovery code",
+    "useAuthenticator": "Use the authenticator app"
   },
   "errors": {
     "not_authenticated": "You are not signed in.",
@@ -85,7 +94,13 @@
     "notifier_unavailable": "Notifications are not available right now.",
     "scheduler_unavailable": "The scheduler is not running.",
     "remote_protected": "The remote copy is protected: the panel can delete it only 7 days after upload.",
-    "nothing_to_delete": "Nothing can be deleted yet: only a protected remote copy is left."
+    "nothing_to_delete": "Nothing can be deleted yet: only a protected remote copy is left.",
+    "invalid_code": "The code is not valid. Check your phone's time and try a new code.",
+    "challenge_expired": "The sign-in took too long. Enter your password again.",
+    "wrong_password": "The password is wrong.",
+    "two_factor_already_enabled": "Two-step verification is already on.",
+    "two_factor_not_enabled": "Two-step verification is off.",
+    "two_factor_setup_missing": "Start the setup again."
   },
   "validation": {
     "required": "This field is required.",
@@ -655,5 +670,49 @@
     "accessNetwork": "Network access",
     "loginLocal": "Access only through an SSH tunnel",
     "loginNetwork": "Opened over the network"
+  },
+  "account": {
+    "title": "Account security",
+    "subtitle": "Signed in as {{name}}",
+    "twoFactor": "Two-step verification (Google Authenticator)",
+    "twoFactorHint": "After your password, sign-in also asks for a 6-digit code from an authenticator app on your phone. A stolen password alone is then not enough.",
+    "on": "On",
+    "off": "Off",
+    "setUp": "Turn on",
+    "setUpTitle": "Turn on two-step verification",
+    "passwordFirst": "Confirm your password to start.",
+    "continue": "Continue",
+    "step1": "Install Google Authenticator (or Microsoft Authenticator, Aegis, 2FAS…) on your phone.",
+    "step2": "In the app, add an account and scan this QR code.",
+    "step3": "Enter the 6-digit code the app shows.",
+    "qrAlt": "QR code for the authenticator app",
+    "manualKey": "Or enter this key by hand",
+    "manualHint": "Time-based, 6 digits, 30 seconds.",
+    "enterCode": "Code from the app",
+    "enable": "Turn on",
+    "enabled": "Two-step verification is on.",
+    "codesTitle": "Save your recovery codes",
+    "codesHint": "If you lose your phone, each of these codes lets you sign in once. They are shown only now; store them somewhere safe, away from your phone.",
+    "copyCodes": "Copy codes",
+    "downloadCodes": "Download .txt",
+    "savedCodes": "I saved them",
+    "codesLeft": "Unused recovery codes: {{n}}",
+    "codesLow": "Few recovery codes are left. Create new ones.",
+    "regenerate": "New recovery codes",
+    "regenerateTitle": "New recovery codes",
+    "regenerateHint": "The old recovery codes stop working. Confirm with your password and a current code.",
+    "disable": "Turn off",
+    "disableTitle": "Turn off two-step verification",
+    "disableHint": "Sign-in will need only your password again. Confirm with your password and a current code (or a recovery code).",
+    "disabled": "Two-step verification is off.",
+    "codeOrRecovery": "Authenticator code or recovery code",
+    "validation": {
+      "wrong_password": "The password is wrong.",
+      "invalid_code": "The code is not valid."
+    },
+    "addDevice": "Add another device",
+    "deviceHint": "Shows the current key again, so another phone or app shows the same codes. Codes already set up keep working. Confirm with your password and a current code.",
+    "deviceCheck": "Check that the new device shows the same code as your other devices.",
+    "deviceDone": "Done"
   }
 }

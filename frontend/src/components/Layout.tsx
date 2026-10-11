@@ -17,6 +17,7 @@ import {
   GearSix,
   HardDrives,
   Robot,
+  ShieldCheck,
   SignOut,
 } from "./Icons";
 
@@ -29,6 +30,7 @@ const NAV: { to: string; label: string; icon: Icon }[] = [
   { to: "/notifications", label: "nav.notifications", icon: Bell },
   { to: "/bots", label: "nav.bots", icon: Robot },
   { to: "/settings/backups", label: "nav.settings", icon: GearSix },
+  { to: "/account", label: "nav.account", icon: ShieldCheck },
 ];
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -163,10 +165,22 @@ export function Layout() {
               <LanguageSeg short />
             </span>
             {username && (
-              <span className="cl-user cl-desktop-only">
+              <Link
+                to="/account"
+                className="cl-user cl-desktop-only"
+                style={{ color: "inherit", textDecoration: "none" }}
+                title={t("nav.account")}
+              >
                 <span className="cl-avatar">{username.slice(0, 1)}</span>
                 <span dir="ltr">{username}</span>
-              </span>
+                {me.data?.two_factor_enabled && (
+                  <ShieldCheck
+                    size={14}
+                    color="var(--color-success)"
+                    aria-label={t("account.on")}
+                  />
+                )}
+              </Link>
             )}
             <Button
               variant="subtle"

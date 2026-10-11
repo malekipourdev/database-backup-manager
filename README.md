@@ -435,10 +435,45 @@ MariaDB stores trigger definitions exactly as written. A trigger that was create
 prefix (`CREATE TRIGGER olddb.t …`) is recreated in that original schema. In that case, restore
 under the original name.
 
+## Two-step verification (Google Authenticator)
+
+Sign-in can also ask for a 6-digit code from an authenticator app on your phone (Google
+Authenticator, Microsoft Authenticator, Aegis, 2FAS, or any other TOTP app). It is off by default.
+
+**Turn it on:** open **Account** (in the menu, or click your name at the top) → **Turn on**,
+confirm your password, scan the QR code with the app (or type the key by hand), and enter the code
+the app shows. The panel then shows 8 **recovery codes** once. Save them somewhere safe, away from
+your phone. If you lose the phone, each code lets you sign in once. To sign in with one, choose
+**Use a recovery code** on the second sign-in step.
+
+- After turning it on, the admin's other sessions are signed out.
+- The second step must be finished within 5 minutes of entering the password. Wrong codes count as
+  failed sign-ins, and the lockout rule below applies to them.
+- Each code works only once, so an intercepted code cannot be reused. Codes depend on the time, so
+  keep the server's and the phone's clocks correct (a drift of ±30 seconds is tolerated).
+- The same key can be added to several phones or apps (they all show the same codes). Scan the QR
+  code on each during setup, or later use **Add another device** (password and a current code),
+  which shows the current key again without changing it.
+- **New recovery codes** replaces all the old ones. **Turn off** needs your password and a current
+  code (or a recovery code).
+- The authenticator key is stored encrypted, like the other secrets. Recovery codes are stored only
+  as hashes.
+
+**Lost both the phone and the recovery codes?** Anyone with shell access to the server can turn
+two-step verification off for an admin:
+
+```bash
+docker compose exec backend python -m mbp.cli disable-2fa admin
+```
+
+Then sign in with the password and set it up again.
+
 ## Security notes
 
-- Every page and API endpoint requires the admin to be signed in, except the login page and
-  `/api/health`.
+- Every page and API endpoint requires the admin to be signed in, except the login page (and its
+  two-step verification step) and `/api/health`.
+- Optional two-step verification with an authenticator app (see
+  [Two-step verification](#two-step-verification-google-authenticator)).
 - Stored database passwords and the S3 secret key are encrypted and are never returned by the API
   or written to logs. An edit form shows only that a secret is stored.
 - Database names that start with `-` or contain control characters are rejected, so a name can

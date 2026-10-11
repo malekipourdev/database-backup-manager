@@ -33,5 +33,6 @@ def encrypt(plain: str) -> str:
     return _fernet().encrypt(plain.encode("utf-8")).decode("ascii")
 
 
-def decrypt(token: str) -> str:
-    return _fernet().decrypt(token.encode("ascii")).decode("utf-8")
+def decrypt(token: str, ttl: int | None = None) -> str:
+    """Decrypt a token; with `ttl`, tokens older than that many seconds are rejected."""
+    return _fernet().decrypt(token.encode("ascii"), ttl=ttl).decode("utf-8")
