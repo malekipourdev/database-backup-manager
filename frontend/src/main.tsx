@@ -1,8 +1,14 @@
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
 import "@fontsource/vazirmatn/400.css";
+import "@fontsource/vazirmatn/500.css";
 import "@fontsource/vazirmatn/600.css";
 import "@fontsource/vazirmatn/700.css";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
+import "./theme/tokens.css";
+import "./theme/layout.css";
 import "./i18n";
 
 import { StrictMode } from "react";

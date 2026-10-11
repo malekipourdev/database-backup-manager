@@ -17,7 +17,8 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { ME_KEY, login, useMe } from "../api/auth";
 import { errorMessage } from "../api/client";
-import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { Lock } from "../components/Icons";
+import { Brand, LanguageSeg, accessInfo } from "../components/Layout";
 
 interface LocationState {
   from?: string;
@@ -51,47 +52,61 @@ export function LoginPage() {
 
   if (me.data) return <Navigate to={from} replace />;
 
+  const access = accessInfo();
   return (
-    <Center mih="100vh" p="md">
-      <Stack w="100%" maw={380} gap="md">
-        <Group justify="flex-end">
-          <LanguageSwitcher />
-        </Group>
-        <Paper withBorder shadow="sm" p="xl" radius="md">
-          <form onSubmit={form.onSubmit((values) => signIn.mutate(values))} noValidate>
-            <Stack gap="md">
-              <div>
-                <Title order={3}>{t("common.appName")}</Title>
-                <Text size="sm" c="dimmed" mt={4}>
-                  {t("auth.subtitle")}
-                </Text>
-              </div>
-              {signIn.isError && (
-                <Alert color="red" role="alert">
-                  {errorMessage(t, signIn.error)}
-                </Alert>
-              )}
-              <TextInput
-                label={t("auth.username")}
-                autoComplete="username"
-                dir="ltr"
-                required
-                {...form.getInputProps("username")}
-              />
-              <PasswordInput
-                label={t("auth.password")}
-                autoComplete="current-password"
-                dir="ltr"
-                required
-                {...form.getInputProps("password")}
-              />
-              <Button type="submit" loading={signIn.isPending} fullWidth>
-                {t("auth.signIn")}
-              </Button>
-            </Stack>
-          </form>
-        </Paper>
-      </Stack>
-    </Center>
+    <div className="cl-app" data-glow>
+      <Center mih="100vh" w="100%" p="md">
+        <Stack w="100%" maw={400} gap="md">
+          <Group justify="space-between" wrap="nowrap">
+            <Group gap={10} wrap="nowrap">
+              <Brand compact />
+              <Text fw={500}>{t("common.appName")}</Text>
+            </Group>
+            <LanguageSeg />
+          </Group>
+          <Paper withBorder p={28}>
+            <form onSubmit={form.onSubmit((values) => signIn.mutate(values))} noValidate>
+              <Stack gap="md">
+                <div>
+                  <Title order={3} fz={22}>
+                    {t("auth.title")}
+                  </Title>
+                  <Text size="sm" mt={6} c="var(--color-neutral-300)">
+                    {t("auth.subtitle")}
+                  </Text>
+                </div>
+                {signIn.isError && (
+                  <Alert color="red" variant="light" role="alert">
+                    {errorMessage(t, signIn.error)}
+                  </Alert>
+                )}
+                <TextInput
+                  label={t("auth.username")}
+                  autoComplete="username"
+                  dir="ltr"
+                  required
+                  {...form.getInputProps("username")}
+                />
+                <PasswordInput
+                  label={t("auth.password")}
+                  autoComplete="current-password"
+                  dir="ltr"
+                  required
+                  {...form.getInputProps("password")}
+                />
+                <Button type="submit" loading={signIn.isPending} fullWidth size="md" mt={4}>
+                  {t("auth.signIn")}
+                </Button>
+              </Stack>
+            </form>
+          </Paper>
+          <Group gap={6} justify="center" c="var(--color-neutral-500)" fz={12}>
+            <Lock size={13} />
+            <span>{access.local ? t("layout.loginLocal") : t("layout.loginNetwork")}</span>
+            <code dir="ltr">{access.host}</code>
+          </Group>
+        </Stack>
+      </Center>
+    </div>
   );
 }

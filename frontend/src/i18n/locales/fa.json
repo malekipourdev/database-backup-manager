@@ -21,7 +21,11 @@
   "language": {
     "label": "زبان",
     "fa": "فارسی",
-    "en": "English"
+    "en": "English",
+    "short": {
+      "fa": "فا",
+      "en": "EN"
+    }
   },
   "auth": {
     "title": "ورود",
@@ -122,7 +126,20 @@
     "testOk": "موفق",
     "testFailed": "ناموفق",
     "details": "جزئیات",
-    "noNotes": "یادداشتی وجود ندارد"
+    "noNotes": "یادداشتی وجود ندارد",
+    "subtitle": "سرورهای MySQL و MariaDB متصل به پنل",
+    "stats": {
+      "servers": "سرورها",
+      "serversNote": "{{ok}} متصل · {{bad}} ناموفق",
+      "today": "پشتیبان‌های امروز",
+      "todayNote": "{{failed}} ناموفق · {{running}} در حال اجرا",
+      "remote": "فضای راه دور",
+      "remoteOff": "خاموش",
+      "remoteHint": "در تنظیمات راه‌اندازی کنید",
+      "aws": "AWS S3",
+      "uploadOn": "بارگذاری روشن",
+      "uploadOff": "بارگذاری خاموش"
+    }
   },
   "connection": {
     "title": "اتصال",
@@ -253,7 +270,8 @@
     "deleted": "پشتیبان حذف شد.",
     "total": "{{formattedCount}} پشتیبان",
     "deletedInstance": "{{name}} (حذف‌شده)",
-    "sortBy": "مرتب‌سازی بر اساس {{column}}"
+    "sortBy": "مرتب‌سازی بر اساس {{column}}",
+    "subtitle": "همه‌ی اجراهای پشتیبان‌گیری، با وضعیت، حجم و checksum"
   },
   "settings": {
     "title": "تنظیمات پشتیبان‌گیری",
@@ -283,6 +301,11 @@
       "too_long": "حداکثر ۲۵۵ نویسه مجاز است.",
       "required": "پر کردن این فیلد الزامی است.",
       "invalid_compression": "gzip، bzip2 یا none را انتخاب کنید."
+    },
+    "tabs": {
+      "backups": "تنظیمات پشتیبان‌گیری",
+      "remote": "فضای راه دور",
+      "retention": "سیاست نگهداری"
     }
   },
   "remoteStatus": {
@@ -609,5 +632,15 @@
       "daily_summary": "گزارش روزانه: {{ok}} موفق، {{failed}} ناموفق.",
       "test": "هشدار آزمایشی."
     }
+  },
+  "layout": {
+    "brand": "پنل پشتیبان‌گیری",
+    "brandSub": "MySQL · MariaDB",
+    "console": "کنسول",
+    "navigation": "منوی اصلی",
+    "accessLocal": "دسترسی محلی (تونل SSH)",
+    "accessNetwork": "دسترسی از شبکه",
+    "loginLocal": "دسترسی فقط از طریق تونل SSH",
+    "loginNetwork": "باز شده از طریق شبکه"
   }
 }

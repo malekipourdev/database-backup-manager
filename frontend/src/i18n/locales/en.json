@@ -21,7 +21,11 @@
   "language": {
     "label": "Language",
     "fa": "فارسی",
-    "en": "English"
+    "en": "English",
+    "short": {
+      "fa": "فا",
+      "en": "EN"
+    }
   },
   "auth": {
     "title": "Sign in",
@@ -122,7 +126,20 @@
     "testOk": "Succeeded",
     "testFailed": "Failed",
     "details": "Details",
-    "noNotes": "No notes"
+    "noNotes": "No notes",
+    "subtitle": "MySQL and MariaDB servers connected to the panel",
+    "stats": {
+      "servers": "Servers",
+      "serversNote": "{{ok}} connected · {{bad}} failed",
+      "today": "Backups today",
+      "todayNote": "{{failed}} failed · {{running}} running",
+      "remote": "Remote storage",
+      "remoteOff": "Off",
+      "remoteHint": "Set it up under Settings",
+      "aws": "AWS S3",
+      "uploadOn": "upload on",
+      "uploadOff": "upload off"
+    }
   },
   "connection": {
     "title": "Connection",
@@ -253,7 +270,8 @@
     "deleted": "Backup deleted.",
     "total": "{{formattedCount}} backups",
     "deletedInstance": "{{name}} (deleted)",
-    "sortBy": "Sort by {{column}}"
+    "sortBy": "Sort by {{column}}",
+    "subtitle": "Every backup run, with its status, size and checksum"
   },
   "settings": {
     "title": "Backup settings",
@@ -283,6 +301,11 @@
       "too_long": "Must be at most 255 characters.",
       "required": "This field is required.",
       "invalid_compression": "Choose gzip, bzip2 or none."
+    },
+    "tabs": {
+      "backups": "Backup settings",
+      "remote": "Remote storage",
+      "retention": "Retention"
     }
   },
   "remoteStatus": {
@@ -609,5 +632,15 @@
       "daily_summary": "Daily summary: {{ok}} succeeded, {{failed}} failed.",
       "test": "Test alert."
     }
+  },
+  "layout": {
+    "brand": "Backup Panel",
+    "brandSub": "MySQL · MariaDB",
+    "console": "Console",
+    "navigation": "Main navigation",
+    "accessLocal": "Local access (SSH tunnel)",
+    "accessNetwork": "Network access",
+    "loginLocal": "Access only through an SSH tunnel",
+    "loginNetwork": "Opened over the network"
   }
 }

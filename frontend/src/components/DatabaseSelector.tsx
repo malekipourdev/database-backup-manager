@@ -112,11 +112,21 @@ export function DatabaseSelectorView({ list, saving, onSave, onRetry }: Database
           {list.databases.length === 0 ? t("databases.empty") : t("databases.noMatches")}
         </Text>
       ) : (
-        <Stack gap={6}>
+        <div className="cl-db-grid">
           {pageItems.map((db) => (
-            <Group key={db.name} gap="xs" wrap="nowrap">
+            <Group
+              key={db.name}
+              gap="xs"
+              wrap="nowrap"
+              className="cl-db-tile"
+              data-checked={draft.has(db.name) || undefined}
+            >
               <Checkbox
-                label={<span dir="ltr">{db.name}</span>}
+                label={
+                  <span dir="ltr" className="mono">
+                    {db.name}
+                  </span>
+                }
                 checked={draft.has(db.name)}
                 disabled={!db.selectable}
                 onChange={(e) => toggle(db.name, e.currentTarget.checked)}
@@ -135,7 +145,7 @@ export function DatabaseSelectorView({ list, saving, onSave, onRetry }: Database
               )}
             </Group>
           ))}
-        </Stack>
+        </div>
       )}
 
       {pageCount > 1 && <Pagination total={pageCount} value={currentPage} onChange={setPage} />}

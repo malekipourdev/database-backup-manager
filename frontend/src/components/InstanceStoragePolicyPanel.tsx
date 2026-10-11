@@ -98,7 +98,7 @@ export function InstanceStoragePolicyPanel({ instanceId }: { instanceId: number 
   const eff = data.effective_retention;
 
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("policy.title")}</Title>
         {!editing && (

@@ -1,0 +1,284 @@
+/*
+ * "Cloud" theme: the design tokens of the panel's design system (dark, violet accent).
+ * Values come from the design; Mantine's variables are mapped onto them below.
+ */
+:root {
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
+  --color-section-glow: #353b80;
+  --color-success: oklch(0.78 0.13 160);
+  --color-danger: oklch(0.7 0.15 25);
+  --color-warning: oklch(0.8 0.13 80);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --font-mono: ui-monospace, Menlo, monospace;
+  /* Rules fade to transparent at both ends (48px ramps). */
+  --rule: linear-gradient(
+    to left,
+    transparent,
+    var(--color-divider) 48px,
+    var(--color-divider) calc(100% - 48px),
+    transparent
+  );
+  --rule-soft: linear-gradient(
+    to left,
+    transparent,
+    color-mix(in srgb, var(--color-text) 8%, transparent) 48px,
+    color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px),
+    transparent
+  );
+  color-scheme: dark;
+}
+
+/* Mantine variables mapped onto the tokens. */
+:root[data-mantine-color-scheme="dark"] {
+  --mantine-color-body: var(--color-bg);
+  --mantine-color-text: var(--color-text);
+  --mantine-color-dimmed: var(--color-neutral-500);
+  --mantine-color-default: var(--color-surface);
+  --mantine-color-default-hover: color-mix(in srgb, var(--color-text) 7%, var(--color-surface));
+  --mantine-color-default-color: var(--color-text);
+  --mantine-color-default-border: var(--color-divider);
+  --mantine-color-placeholder: var(--color-neutral-600);
+  --mantine-color-anchor: var(--color-accent-300);
+  --mantine-color-error: var(--color-danger);
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+a:hover {
+  color: var(--color-accent-200);
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+/* --- Components (Mantine static classes) --- */
+
+.mantine-Paper-root {
+  background: var(--color-surface);
+}
+.mantine-Paper-root[data-with-border] {
+  border: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.mantine-Title-root {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.mantine-Title-root[data-order="2"] {
+  font-size: 24px;
+}
+.mantine-Title-root[data-order="4"] {
+  font-size: 17px;
+}
+
+/* Buttons: outlined accent ("primary"), divider outline ("secondary"), text ("ghost"). */
+.mantine-Button-root {
+  font-weight: 500;
+}
+
+/* Tags */
+.mantine-Badge-root {
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  font-size: 11px;
+  height: auto;
+  padding: 3px 10px;
+}
+
+/* Inputs */
+.mantine-Input-input {
+  background: var(--color-surface);
+  border-color: var(--color-divider);
+  caret-color: var(--color-accent);
+}
+.mantine-Input-input:hover:not(:focus):not([data-disabled]) {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--color-accent);
+}
+.mantine-InputWrapper-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  margin-bottom: 5px;
+}
+.mantine-InputWrapper-description {
+  color: var(--color-neutral-500);
+}
+
+/* Segmented control = "seg": divider outline, selected option gets an accent ring. */
+.mantine-SegmentedControl-root {
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 0;
+}
+.mantine-SegmentedControl-indicator {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+  border-radius: 0;
+}
+.mantine-SegmentedControl-label {
+  color: var(--color-text);
+  font-weight: 400;
+}
+.mantine-SegmentedControl-label[data-active] {
+  color: var(--color-accent);
+}
+.mantine-SegmentedControl-control:not(:first-of-type) {
+  border-inline-start: 1px solid var(--color-divider);
+}
+.mantine-SegmentedControl-control::before {
+  display: none;
+}
+
+/* Tables: no borders; rows painted with fading rules. */
+.mantine-Table-table {
+  --table-border-color: transparent;
+}
+.mantine-Table-thead .mantine-Table-tr {
+  background: var(--rule) no-repeat bottom / 100% 1px;
+}
+.mantine-Table-tbody .mantine-Table-tr {
+  background: var(--rule-soft) no-repeat bottom / 100% 1px;
+}
+.mantine-Table-tbody .mantine-Table-tr:hover {
+  background:
+    linear-gradient(
+        color-mix(in srgb, var(--color-text) 4%, transparent),
+        color-mix(in srgb, var(--color-text) 4%, transparent)
+      )
+      no-repeat 0 0 / 100% 100%,
+    var(--rule-soft) no-repeat bottom / 100% 1px;
+}
+.mantine-Table-th {
+  font-size: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.mantine-Table-td,
+.mantine-Table-th {
+  border: 0 !important;
+}
+
+.mantine-Modal-content,
+.mantine-Modal-header {
+  background: var(--color-surface);
+}
+.mantine-Modal-content {
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+}
+.mantine-Modal-title {
+  font-weight: 500;
+  font-size: 17px;
+}
+
+.mantine-Alert-root {
+  border-radius: var(--radius-md);
+}
+
+.mantine-Code-root {
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface));
+  color: var(--color-text);
+}
+
+.mantine-Notification-root {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.mantine-Tooltip-tooltip {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-100);
+}
+
+.mantine-Menu-dropdown,
+.mantine-Popover-dropdown,
+.mantine-Combobox-dropdown,
+.mantine-Select-dropdown {
+  background: var(--color-surface);
+  border-color: var(--color-divider);
+}
+
+.mantine-Tabs-list::before {
+  display: none;
+}
+
+/* A fading horizontal rule. */
+.hr {
+  height: 1px;
+  border: 0;
+  background: var(--rule);
+}
+
+/* Tabs as outlined pills (settings sections). */
+.mantine-Tabs-list {
+  gap: 8px;
+}
+.mantine-Tabs-tab[data-variant="pills"] {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: transparent;
+  padding: 7px 12px;
+  font-size: 14px;
+}
+.mantine-Tabs-tab[data-variant="pills"]:hover:not([data-active]) {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.mantine-Tabs-tab[data-variant="pills"][data-active] {
+  color: var(--color-accent-200);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+}
+
+/* Segmented controls hug their content, like the design's ".seg". */
+.mantine-SegmentedControl-root {
+  align-self: flex-start;
+}

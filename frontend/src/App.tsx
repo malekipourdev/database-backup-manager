@@ -1,11 +1,4 @@
-import {
-  Center,
-  DirectionProvider,
-  Loader,
-  MantineProvider,
-  createTheme,
-  useDirection,
-} from "@mantine/core";
+import { Center, DirectionProvider, Loader, MantineProvider, useDirection } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -27,12 +20,7 @@ import { SchedulesPage } from "./pages/SchedulesPage";
 import { BotsPage } from "./pages/BotsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { notifications } from "@mantine/notifications";
-
-const theme = createTheme({
-  fontFamily: "Vazirmatn, system-ui, -apple-system, 'Segoe UI', sans-serif",
-  headings: { fontFamily: "Vazirmatn, system-ui, -apple-system, 'Segoe UI', sans-serif" },
-  primaryColor: "indigo",
-});
+import { cssVariablesResolver, theme } from "./theme/theme";
 
 export function createQueryClient(): QueryClient {
   // Any request that finds the session gone sends the admin back to the login page.
@@ -109,7 +97,11 @@ export function App() {
   const [queryClient] = useState(createQueryClient);
   return (
     <DirectionProvider initialDirection={directionOf(i18n.language)} detectDirection={false}>
-      <MantineProvider theme={theme}>
+      <MantineProvider
+        theme={theme}
+        cssVariablesResolver={cssVariablesResolver}
+        forceColorScheme="dark"
+      >
         <DirectionSync />
         <Notifications position="top-center" />
         <QueryClientProvider client={queryClient}>

@@ -46,6 +46,7 @@ import {
   useUpdateBotAdmin,
 } from "../api/bots";
 import { ApiError, errorMessage } from "../api/client";
+import { PageHeader } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDateTime } from "../i18n";
 
@@ -113,7 +114,7 @@ function BotCard({ bot }: { bot: BotSettings }) {
   };
 
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t(`bots.platform.${bot.platform}`)}</Title>
         <BotStatus bot={bot} />
@@ -359,7 +360,7 @@ function AdminsTable() {
     );
 
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("bots.admins.title")}</Title>
         <Button size="xs" variant="light" onClick={() => setLinking(true)}>
@@ -480,10 +481,7 @@ export function BotsPage() {
   const bots = useBots();
   return (
     <Stack gap="md">
-      <Title order={2}>{t("bots.title")}</Title>
-      <Text c="dimmed" size="sm">
-        {t("bots.hint")}
-      </Text>
+      <PageHeader title={t("bots.title")} subtitle={t("bots.hint")} />
       {bots.isPending && <Loader />}
       {bots.isError && <Alert color="red">{errorMessage(t, bots.error)}</Alert>}
       {bots.data && (

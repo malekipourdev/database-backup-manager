@@ -1,25 +1,115 @@
-import { AppShell, Button, Group, Title, UnstyledButton } from "@mantine/core";
+import { Button, SegmentedControl, UnstyledButton } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { ME_KEY, logout } from "../api/auth";
-import { LanguageSwitcher } from "./LanguageSwitcher";
+import { ME_KEY, logout, useMe } from "../api/auth";
+import { LANGUAGES } from "../i18n";
+import {
+  Archive,
+  Bell,
+  CaretLeft,
+  CaretRight,
+  Cloud,
+  CloudCheck,
+  ClockCountdown,
+  GearSix,
+  HardDrives,
+  Robot,
+  SignOut,
+} from "./Icons";
 
-const NAV = [
-  { to: "/instances", label: "nav.instances" },
-  { to: "/backups", label: "nav.backups" },
-  { to: "/schedules", label: "nav.schedules" },
-  { to: "/notifications", label: "nav.notifications" },
-  { to: "/bots", label: "nav.bots" },
-  { to: "/settings/backups", label: "nav.settings" },
+type Icon = PhosphorIcon;
+
+const NAV: { to: string; label: string; icon: Icon }[] = [
+  { to: "/instances", label: "nav.instances", icon: HardDrives },
+  { to: "/backups", label: "nav.backups", icon: Archive },
+  { to: "/schedules", label: "nav.schedules", icon: ClockCountdown },
+  { to: "/notifications", label: "nav.notifications", icon: Bell },
+  { to: "/bots", label: "nav.bots", icon: Robot },
+  { to: "/settings/backups", label: "nav.settings", icon: GearSix },
 ];
 
-export function Layout() {
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/** Where the panel is being opened from: locally (e.g. through an SSH tunnel) or not. */
+export function accessInfo(): { local: boolean; host: string } {
+  const { hostname, host } = window.location;
+  return { local: LOCAL_HOSTS.has(hostname), host };
+}
+
+function AccessCard() {
   const { t } = useTranslation();
+  const { local, host } = accessInfo();
+  return (
+    <div className="cl-access">
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="cl-dot" data-tone={local ? "ok" : "warn"} />
+        {local ? t("layout.accessLocal") : t("layout.accessNetwork")}
+      </div>
+      <code dir="ltr" style={{ textAlign: "start" }}>
+        {host}
+      </code>
+    </div>
+  );
+}
+
+export function Brand({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <Link to="/instances" className="cl-brand">
+      <span className="cl-logo">
+        <CloudCheck size={19} />
+      </span>
+      {!compact && (
+        <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span className="cl-brand-title">{t("layout.brand")}</span>
+          <span className="cl-brand-sub" dir="ltr" style={{ textAlign: "start" }}>
+            {t("layout.brandSub")}
+          </span>
+        </span>
+      )}
+    </Link>
+  );
+}
+
+export function LanguageSeg({ short = false }: { short?: boolean }) {
+  const { t, i18n } = useTranslation();
+  if (short) {
+    const next = i18n.language === "fa" ? "en" : "fa";
+    return (
+      <UnstyledButton
+        aria-label={t("language.label")}
+        onClick={() => void i18n.changeLanguage(next)}
+        c="var(--color-accent)"
+        fz={13}
+        px={6}
+      >
+        {t(`language.short.${next}`)}
+      </UnstyledButton>
+    );
+  }
+  return (
+    <SegmentedControl
+      size="sm"
+      aria-label={t("language.label")}
+      value={i18n.language}
+      onChange={(lang) => void i18n.changeLanguage(lang)}
+      data={LANGUAGES.map((lang) => ({ value: lang, label: t(`language.${lang}`) }))}
+    />
+  );
+}
+
+export function Layout() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
+  const me = useMe();
+  const rtl = i18n.dir(i18n.language) === "rtl";
+  const current = NAV.find((item) => pathname.startsWith(item.to));
+  const Caret = rtl ? CaretLeft : CaretRight;
 
   const signOut = useMutation({
     mutationFn: logout,
@@ -29,47 +119,89 @@ export function Layout() {
       navigate("/login", { replace: true });
     },
   });
+  const username = me.data?.username ?? "";
 
   return (
-    <AppShell header={{ height: 60 }} padding="md">
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="lg" wrap="nowrap">
-            <UnstyledButton component={Link} to="/instances" visibleFrom="md">
-              <Title order={4}>{t("common.appName")}</Title>
-            </UnstyledButton>
-            <Group gap={4} wrap="nowrap">
-              {NAV.map((item) => (
-                <Button
-                  key={item.to}
-                  component={Link}
-                  to={item.to}
-                  variant={pathname.startsWith(item.to) ? "light" : "subtle"}
-                  size="xs"
-                >
-                  {t(item.label)}
-                </Button>
-              ))}
-            </Group>
-          </Group>
-          <Group gap="sm" wrap="nowrap">
-            <LanguageSwitcher />
+    <div className="cl-app" data-glow>
+      <aside className="cl-sidebar" aria-label={t("layout.navigation")}>
+        <Brand />
+        <nav className="cl-nav">
+          {NAV.map(({ to, label, icon: ItemIcon }) => (
+            <Link
+              key={to}
+              to={to}
+              className="cl-nav-item"
+              data-active={pathname.startsWith(to) || undefined}
+              aria-current={pathname.startsWith(to) ? "page" : undefined}
+            >
+              <ItemIcon size={18} />
+              <span>{t(label)}</span>
+            </Link>
+          ))}
+        </nav>
+        <AccessCard />
+      </aside>
+
+      <div className="cl-main">
+        <header className="cl-header">
+          <div className="cl-crumbs">
+            <span className="cl-mobile-only">
+              <Brand compact />
+            </span>
+            <span className="cl-desktop-only" style={{ display: "contents" }}>
+              <Cloud size={15} />
+              <span>{t("layout.console")}</span>
+              <Caret size={11} />
+            </span>
+            <span data-current>{current ? t(current.label) : t("notFound.title")}</span>
+          </div>
+          <div className="cl-header-actions">
+            <span className="cl-desktop-only">
+              <LanguageSeg />
+            </span>
+            <span className="cl-mobile-only">
+              <LanguageSeg short />
+            </span>
+            {username && (
+              <span className="cl-user cl-desktop-only">
+                <span className="cl-avatar">{username.slice(0, 1)}</span>
+                <span dir="ltr">{username}</span>
+              </span>
+            )}
             <Button
               variant="subtle"
-              size="xs"
+              size="compact-sm"
+              leftSection={<SignOut size={16} />}
               loading={signOut.isPending}
               onClick={() => signOut.mutate()}
+              aria-label={t("auth.signOut")}
             >
-              {t("auth.signOut")}
+              <span className="cl-desktop-only">{t("auth.signOut")}</span>
             </Button>
-          </Group>
-        </Group>
-      </AppShell.Header>
-      <AppShell.Main>
-        <div style={{ maxWidth: 1100, marginInline: "auto" }}>
-          <Outlet />
-        </div>
-      </AppShell.Main>
-    </AppShell>
+          </div>
+        </header>
+        <main className="cl-content">
+          <div className="cl-content-inner">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      <nav className="cl-tabbar" aria-label={t("layout.navigation")}>
+        {NAV.map(({ to, label, icon: ItemIcon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="cl-tab"
+            data-active={pathname.startsWith(to) || undefined}
+          >
+            <span className="cl-tab-icon">
+              <ItemIcon size={19} />
+            </span>
+            {t(label)}
+          </Link>
+        ))}
+      </nav>
+    </div>
   );
 }
