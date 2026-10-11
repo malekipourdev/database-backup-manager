@@ -29,6 +29,7 @@ import { errorMessage } from "../api/client";
 import { formatBytes, formatDuration } from "../format";
 import { formatDateTime } from "../i18n";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DownloadSimple } from "./Icons";
 import { RemoteStatusBadge, RunStatusBadge } from "./RunStatusBadge";
 
 export interface SortState {
@@ -252,7 +253,9 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
                       {({ copied, copy }) => (
                         <Tooltip label={copied ? t("backups.copied") : t("backups.copy")}>
                           <UnstyledButton onClick={copy}>
-                            <Code dir="ltr">{run.checksum_sha256!.slice(0, 12)}…</Code>
+                            <Code dir="ltr" fz={11}>
+                              {run.checksum_sha256!.slice(0, 12)}…
+                            </Code>
                           </UnstyledButton>
                         </Tooltip>
                       )}
@@ -270,7 +273,8 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
                           href={downloadUrl(run.id)}
                           download
                           size="xs"
-                          variant="light"
+                          variant="subtle"
+                          leftSection={<DownloadSimple size={14} />}
                         >
                           {t("backups.download")}
                         </Button>

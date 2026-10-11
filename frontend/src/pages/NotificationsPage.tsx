@@ -39,6 +39,7 @@ import {
   useTestNotification,
 } from "../api/notifications";
 import { renderAlert } from "../alerts";
+import { PageHeader } from "../components/PageHeader";
 import { timezoneOptions } from "../components/ScheduleForm";
 import { formatDateTime } from "../i18n";
 
@@ -89,7 +90,7 @@ function SettingsForm({ settings }: { settings: NotificationSettings }) {
 
   return (
     <Stack gap="md">
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="xs">
           {t("alerts.rules.title")}
         </Title>
@@ -161,7 +162,7 @@ function SettingsForm({ settings }: { settings: NotificationSettings }) {
         </Text>
       </Paper>
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="sm">
           {t("alerts.thresholds.title")}
         </Title>
@@ -215,7 +216,7 @@ function SettingsForm({ settings }: { settings: NotificationSettings }) {
         </SimpleGrid>
       </Paper>
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="xs">
           {t("alerts.webhook.title")}
         </Title>
@@ -308,7 +309,7 @@ function AlertHistory() {
   useEffect(() => setPage(1), [severity]);
   const data = log.data;
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm" wrap="wrap">
         <Title order={4}>{t("alerts.history.title")}</Title>
         <SegmentedControl
@@ -415,10 +416,7 @@ export function NotificationsPage() {
   const settings = useNotificationSettings();
   return (
     <Stack gap="md">
-      <Title order={2}>{t("alerts.title")}</Title>
-      <Text c="dimmed" size="sm">
-        {t("alerts.hint")}
-      </Text>
+      <PageHeader title={t("alerts.title")} subtitle={t("alerts.hint")} />
       {settings.isPending && <Loader />}
       {settings.isError && <Alert color="red">{errorMessage(t, settings.error)}</Alert>}
       {settings.data && <SettingsForm settings={settings.data} />}

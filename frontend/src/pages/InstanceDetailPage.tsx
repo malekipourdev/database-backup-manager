@@ -1,6 +1,6 @@
 import {
   Alert,
-  Anchor,
+  Badge,
   Button,
   Group,
   Loader,
@@ -22,6 +22,8 @@ import {
   useInstance,
   useTestInstance,
 } from "../api/instances";
+import { PencilSimple, PlugsConnected, Trash } from "../components/Icons";
+import { PageHeader } from "../components/PageHeader";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ConnectionResult } from "../components/ConnectionResult";
 import { DatabaseSelector } from "../components/DatabaseSelector";
@@ -69,35 +71,49 @@ export function InstanceDetailPage() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" wrap="wrap">
-        <Stack gap={0}>
-          <Anchor component={Link} to="/instances" size="sm">
-            {t("nav.instances")}
-          </Anchor>
-          <Title order={2}>{data.name}</Title>
-        </Stack>
-        <Group gap="xs">
-          <Button variant="default" component={Link} to={`/instances/${instanceId}/edit`}>
-            {t("common.edit")}
-          </Button>
-          <Button color="red" variant="light" onClick={() => setConfirmOpen(true)}>
-            {t("common.delete")}
-          </Button>
-        </Group>
-      </Group>
+      <PageHeader
+        title={data.name}
+        back={{ to: "/instances", label: t("nav.instances") }}
+        badge={
+          data.last_test_at ? (
+            <Badge color={data.last_test_ok ? "green" : "red"} variant="light">
+              {data.last_test_ok ? t("instances.testOk") : t("instances.testFailed")}
+            </Badge>
+          ) : undefined
+        }
+        actions={
+          <>
+            <Button
+              variant="default"
+              component={Link}
+              to={`/instances/${instanceId}/edit`}
+              leftSection={<PencilSimple size={15} />}
+            >
+              {t("common.edit")}
+            </Button>
+            <Button
+              color="red"
+              onClick={() => setConfirmOpen(true)}
+              leftSection={<Trash size={15} />}
+            >
+              {t("common.delete")}
+            </Button>
+          </>
+        }
+      />
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="sm">
           {t("instances.details")}
         </Title>
         <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
           <Field label={t("instances.columns.address")}>
-            <span dir="ltr">
+            <code dir="ltr">
               {data.host}:{data.port}
-            </span>
+            </code>
           </Field>
           <Field label={t("instances.fields.username")}>
-            <span dir="ltr">{data.username}</span>
+            <code dir="ltr">{data.username}</code>
           </Field>
           <Field label={t("instances.columns.server")}>
             {data.server_type ? (
@@ -126,11 +142,11 @@ export function InstanceDetailPage() {
         </Text>
       </Paper>
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Group justify="space-between" mb="sm">
           <Title order={4}>{t("connection.title")}</Title>
           <Button
-            variant="light"
+            leftSection={<PlugsConnected size={16} />}
             loading={test.isPending}
             onClick={() =>
               test.mutate(undefined, {
@@ -146,7 +162,7 @@ export function InstanceDetailPage() {
         {testResult && <ConnectionResult result={testResult} />}
       </Paper>
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="sm">
           {t("databases.title")}
         </Title>
@@ -155,7 +171,7 @@ export function InstanceDetailPage() {
 
       <InstanceBackups instanceId={instanceId} />
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <Title order={4} mb="sm">
           {t("schedules.instanceTitle")}
         </Title>

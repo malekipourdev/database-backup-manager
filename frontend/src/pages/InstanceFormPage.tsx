@@ -1,6 +1,5 @@
 import {
   Alert,
-  Anchor,
   Button,
   Group,
   Loader,
@@ -11,7 +10,6 @@ import {
   Text,
   TextInput,
   Textarea,
-  Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -32,6 +30,7 @@ import {
   useTestInstance,
   useUpdateInstance,
 } from "../api/instances";
+import { PageHeader } from "../components/PageHeader";
 import { ConnectionResult } from "../components/ConnectionResult";
 
 const NOTES_MAX = 2000;
@@ -215,16 +214,17 @@ export function InstanceFormPage() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={2}>
-          {isEdit ? t("instances.editTitle", { name: loaded?.name }) : t("instances.createTitle")}
-        </Title>
-        <Anchor component={Link} to={isEdit ? `/instances/${instanceId}` : "/instances"}>
-          {t("common.back")}
-        </Anchor>
-      </Group>
+      <PageHeader
+        title={
+          isEdit ? t("instances.editTitle", { name: loaded?.name }) : t("instances.createTitle")
+        }
+        back={{
+          to: isEdit ? `/instances/${instanceId}` : "/instances",
+          label: isEdit ? (loaded?.name ?? t("common.back")) : t("nav.instances"),
+        }}
+      />
 
-      <Paper withBorder p="lg" radius="md">
+      <Paper withBorder p="lg">
         <form onSubmit={form.onSubmit(onSubmit)} noValidate>
           <Stack gap="md">
             {saveError && !(saveError instanceof ApiError && saveError.code === "name_taken") && (

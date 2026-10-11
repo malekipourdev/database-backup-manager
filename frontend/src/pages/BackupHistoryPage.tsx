@@ -10,7 +10,6 @@ import {
   Stack,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -18,6 +17,7 @@ import { useSearchParams } from "react-router-dom";
 import { type RunQuery, type RunStatus, type SortColumn, useRunHistory } from "../api/backups";
 import { errorMessage } from "../api/client";
 import { useInstances } from "../api/instances";
+import { PageHeader } from "../components/PageHeader";
 import { RunTable, type SortState } from "../components/RunTable";
 import { formatNumber } from "../i18n";
 
@@ -82,9 +82,9 @@ export function BackupHistoryPage() {
 
   return (
     <Stack gap="md">
-      <Title order={2}>{t("history.title")}</Title>
+      <PageHeader title={t("history.title")} subtitle={t("history.subtitle")} />
 
-      <Paper withBorder p="md" radius="md">
+      <Paper withBorder p="md">
         <Group align="flex-end" wrap="wrap" gap="sm">
           <Select
             label={t("history.instance")}
@@ -132,7 +132,7 @@ export function BackupHistoryPage() {
       {history.isPending && <Loader />}
       {history.isError && <Alert color="red">{errorMessage(t, history.error)}</Alert>}
       {history.data && (
-        <Paper withBorder radius="md">
+        <Paper withBorder>
           {history.data.items.length === 0 ? (
             <Text c="dimmed" p="lg" ta="center">
               {t("history.empty")}

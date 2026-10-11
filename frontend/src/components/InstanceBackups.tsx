@@ -34,7 +34,7 @@ export function InstanceBackups({ instanceId }: { instanceId: number }) {
   const active = new Set(items.filter(isActive).map((r) => r.database_name));
 
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("backups.title")}</Title>
         <Anchor component={Link} to={`/backups?instance_id=${instanceId}`} size="sm">
@@ -74,7 +74,7 @@ export function InstanceBackupSettingsPanel({ instanceId }: { instanceId: number
   };
 
   return (
-    <Paper withBorder p="lg" radius="md">
+    <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("settings.instanceTitle")}</Title>
         <Button size="xs" variant="default" onClick={() => setEditing((v) => !v)}>
