@@ -77,6 +77,18 @@ export function useDeleteSchedule() {
   });
 }
 
+export function useRunSchedule() {
+  const invalidate = useInvalidate();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<Schedule>(`/schedules/${id}/run`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["backups"] });
+    },
+  });
+}
+
 export function previewSchedule(cron: string, timezone: string): Promise<{ next_runs: string[] }> {
   return apiFetch<{ next_runs: string[] }>("/schedules/preview", {
     method: "POST",

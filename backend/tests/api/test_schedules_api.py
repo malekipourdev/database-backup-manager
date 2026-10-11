@@ -195,3 +195,14 @@ def test_scheduler_job_fires_on_time(auth_client, app, probe_ok):
         time.sleep(0.05)
     assert items and items[0]["trigger"] == "schedule"
     assert wait_for_run(auth_client, items[0]["id"])["status"] == "success"
+
+
+def test_run_now_endpoint(auth_client, probe_ok):
+    instance_id = create_instance(auth_client, select=("ok_shop",))
+    schedule = create_schedule(auth_client, instance_id, enabled=False)
+    body = auth_client.post(f"/api/schedules/{schedule['id']}/run").json()
+    assert body["last_result"] == "queued"
+    run = auth_client.get("/api/backups/runs").json()["items"][0]
+    assert run["trigger"] == "schedule"
+    wait_for_run(auth_client, run["id"])
+    assert auth_client.post("/api/schedules/999/run").status_code == 404

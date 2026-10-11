@@ -1,6 +1,25 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.0.0 → 1.1.0
+Bump rationale: MINOR. Materially expanded guidance: a second admin interface (messenger
+bots) under Principle I, in-process bot polling under Principle IV, and notifications moved
+from "out of scope" into the MVP scope.
+
+Modified principles:
+- I. Security First: rules for the Bale/Telegram bot interface (registered admins only,
+  private chats only, confirmation for destructive actions, no secrets through chat, bot
+  tokens and webhook secrets encrypted at rest).
+- IV. Simple Architecture: bot long polling and alert delivery run as threads inside the
+  backend; no inbound webhook endpoint or extra service.
+Modified sections:
+- Project Scope (MVP): adds messenger bots and notifications/alerts; removes notifications
+  from "out of scope".
+
+Templates: not modified. Deferred TODOs: none.
+
+Previous report (1.0.0)
+-----------------------
 Version change: (unversioned template) → 1.0.0
 Bump rationale: Initial ratification; all placeholders replaced with project-specific content.
 
@@ -51,6 +70,13 @@ automatically delete old backups via retention policies.
 - Secrets MUST NOT appear in logs, error messages, backup run records, process listings
   (e.g. passwords passed on a dump tool's command line), or API responses. APIs MAY indicate that
   a secret is set but MUST NOT return its value.
+- Messenger bots (Bale, Telegram) are a second admin interface and MUST answer only users
+  registered as bot admins in the panel (by numeric user ID or a one-time, expiring link code
+  stored only as a hash), and only in private chats. Anyone else MAY learn their own user ID and
+  nothing else. Destructive actions MUST ask for confirmation. Secrets (database passwords,
+  storage keys, tokens) MUST NOT be entered or shown through a bot. Bot tokens and webhook
+  signing secrets are secrets under this principle. Sending backup files through a bot copies
+  data to a third party and MUST be off unless an admin turns it on.
 
 Rationale: the panel holds credentials to production databases and copies of their data; a
 single leak compromises every registered instance.
@@ -83,7 +109,8 @@ Rationale: the two servers have diverged in tooling and flags; assuming one brea
 ### IV. Simple Architecture
 
 - The system consists of a React SPA frontend and a FastAPI backend. Scheduling runs inside the
-  backend process using APScheduler.
+  backend process using APScheduler. Messenger bots use outbound long polling and alerts are
+  delivered by threads inside the same process; no inbound webhook endpoint is exposed.
 - The MVP MUST NOT introduce message queues, separate worker services, caches, or other
   additional infrastructure. Any such addition requires a constitution amendment with
   justification.
@@ -169,9 +196,12 @@ In scope:
 - Downloading backup files.
 - Uploading backups to S3-compatible storage.
 - Retention policies that automatically delete old backups (local and remote).
+- Notifications and alerts (backup failures, stale backups, low disk space, daily summary)
+  delivered to messenger bots and a signed webhook, with configurable rules and a history.
+- Managing backups from Bale and Telegram bots (inline buttons) for registered admins.
 - Bilingual (Persian/English) UI.
 
-Out of scope for MVP: restore, notifications (email/chat/webhooks), non-S3 remote storage,
+Out of scope for MVP: restore, email notifications, non-S3 remote storage,
 multi-user roles beyond admin, and additional infrastructure services. Introducing any of these
 requires a scope amendment to this section.
 
@@ -198,4 +228,4 @@ requires a scope amendment to this section.
 - Compliance is verified during planning (Constitution Check) and code review. Unjustified
   violations block merge.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-11
+**Version**: 1.1.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-11

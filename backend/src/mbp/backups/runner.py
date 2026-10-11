@@ -19,6 +19,7 @@ from mbp.backups.verify import verify
 from mbp.config import Settings
 from mbp.db import utcnow
 from mbp.models import DbInstance
+from mbp.notifications.events import Event
 from mbp.repositories.backup_run_repository import BackupRunRepository
 from mbp.repositories.remote_storage_repository import RemoteStorageRepository
 from mbp.services import mysql_probe
@@ -56,6 +57,12 @@ class BackupRunner:
         self._stopping = False
         # Test hook: called with the temp file path between writing and verification.
         self.before_verify: Callable[[Path], None] | None = None
+        # Alerts (set by the app); None in tools and tests that do not need them.
+        self.notifier = None
+
+    def _emit(self, event: Event) -> None:
+        if self.notifier is not None:
+            self.notifier.emit(event)
 
     # --- lifecycle ---
 
@@ -131,9 +138,23 @@ class BackupRunner:
         with self.session_factory() as db:
             repo = BackupRunRepository(db)
             run = repo.get(run_id)
-            if run is not None and run.is_active:
-                repo.finish_failed(run, code, message)
-                db.commit()
+            if run is None or not run.is_active:
+                return
+            repo.finish_failed(run, code, message)
+            db.commit()
+            event = Event(
+                "backup_failed",
+                f"backup_failed:{run.instance_id}:{run.database_name}",
+                {
+                    "instance": run.instance_name,
+                    "db": run.database_name,
+                    "code": code,
+                    "reason": f"{code}: {message}" if message else code,
+                },
+                run_id=run_id,
+            )
+        if code != "interrupted":
+            self._emit(event)
 
     def _report_progress(self, run_id: int, processed: int) -> None:
         try:
@@ -273,6 +294,23 @@ class BackupRunner:
         # (remote_status/remote_error) or logged, never turned into a failed backup.
         if upload:
             self._upload_safely(run_id)
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is not None:
+                self._emit(
+                    Event(
+                        "backup_succeeded",
+                        f"backup_succeeded:{run_id}",
+                        {
+                            "instance": run.instance_name,
+                            "db": run.database_name,
+                            "size": run.file_size,
+                            "duration_ms": run.duration_ms,
+                            "remote": run.remote_status == "success",
+                        },
+                        run_id=run_id,
+                    )
+                )
         try:
             self.apply_retention_for(run_id)
         except Exception:
@@ -288,27 +326,37 @@ class BackupRunner:
     def _record_upload_failure(self, run_id: int, message: str) -> None:
         with self.session_factory() as db:
             run = BackupRunRepository(db).get(run_id)
-            if run is not None and run.remote_status == "uploading":
-                run.remote_status = "failed"
-                run.remote_error = message[:1000]
-                db.commit()
+            if run is None or run.remote_status != "uploading":
+                return
+            run.remote_status = "failed"
+            run.remote_error = message[:1000]
+            db.commit()
+            event = Event(
+                "upload_failed",
+                f"upload_failed:{run.instance_id}:{run.database_name}",
+                {"instance": run.instance_name, "db": run.database_name, "reason": message[:500]},
+                run_id=run_id,
+            )
+        self._emit(event)
 
     def upload(self, run_id: int) -> bool:
         """Upload a run claimed for upload (remote_status "uploading"); True if stored."""
+        problem = None
         with self.session_factory() as db:
             run = BackupRunRepository(db).get(run_id)
             if run is None or run.remote_status != "uploading":
                 return False
-            if not run.has_local_file:
-                run.remote_status = "failed"
-                run.remote_error = "The local backup file no longer exists."
-                db.commit()
-                return False
             row, storage = get_remote_storage(db)
-            if storage is None:
-                run.remote_status = "failed"
-                run.remote_error = "Remote storage is not configured."
-                db.commit()
+            if not run.has_local_file:
+                problem = "The local backup file no longer exists."
+            elif storage is None:
+                problem = "Remote storage is not configured."
+        if problem is not None or storage is None:
+            self._record_upload_failure(run_id, problem or "Remote storage is not configured.")
+            return False
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is None:
                 return False
             key = join_key(row.prefix, run.file_path or "")
             relative = run.file_path or ""
@@ -349,9 +397,29 @@ class BackupRunner:
             run = BackupRunRepository(db).get(run_id)
             if run is None or run.instance_id is None:
                 return
-            RetentionService(db, self.store).apply(
+            report = RetentionService(db, self.store).apply(
                 instance_id=run.instance_id, database=run.database_name
             )
+        for event in retention_events(report):
+            self._emit(event)
+
+
+def retention_events(report) -> list[Event]:
+    """Alerts for the deletions retention could not do."""
+    return [
+        Event(
+            "retention_error",
+            f"retention_error:{item.run_id}:{item.target}",
+            {
+                "instance": item.instance_name,
+                "db": item.database_name,
+                "target": item.target,
+                "reason": item.error_code or "",
+            },
+            run_id=item.run_id,
+        )
+        for item in report.errors
+    ]
 
 
 def wait_until_idle(runner: BackupRunner, timeout: float = 10.0) -> None:

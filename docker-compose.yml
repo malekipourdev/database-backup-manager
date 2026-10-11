@@ -13,6 +13,8 @@ services:
       MBP_BACKUP_CONCURRENCY: ${MBP_BACKUP_CONCURRENCY:-2}
       MBP_RETENTION_INTERVAL_MINUTES: ${MBP_RETENTION_INTERVAL_MINUTES:-60}
       MBP_SCHEDULE_MISFIRE_GRACE_SECONDS: ${MBP_SCHEDULE_MISFIRE_GRACE_SECONDS:-300}
+      MBP_MONITOR_INTERVAL_MINUTES: ${MBP_MONITOR_INTERVAL_MINUTES:-10}
+      MBP_BOTS_ENABLED: ${MBP_BOTS_ENABLED:-true}
     volumes:
       - mbp-data:/data
       # Backup files. To keep them in a host directory instead, replace with e.g.

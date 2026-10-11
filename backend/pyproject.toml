@@ -17,6 +17,7 @@ dependencies = [
     "apscheduler>=3.10,<4",
     "boto3>=1.34",
     "tzdata>=2024.1",
+    "httpx[socks]>=0.27",
 ]
 
 [dependency-groups]
@@ -52,6 +53,8 @@ select = ["E", "F", "I", "B", "UP", "S", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106", "S107", "S108", "S311", "S603", "S607", "S608"]
 "migrations/**" = ["E501"]
+# Translation strings are kept on one line each.
+"src/mbp/bots/texts.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]

@@ -98,3 +98,20 @@ def delete_schedule(
     ScheduleService(db).delete(schedule_id)
     _sync(scheduler, schedule_id)
     return Response(status_code=204)
+
+
+@router.post("/schedules/{schedule_id}/run", response_model=ScheduleOut)
+def run_schedule_now(
+    schedule_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    scheduler: BackupScheduler | None = Depends(get_scheduler),
+) -> ScheduleOut:
+    """Run a schedule now, even if it is disabled; the result is shown as its last run."""
+    ScheduleService(db).get(schedule_id)
+    db.commit()
+    if scheduler is None:
+        raise ApiError(503, "scheduler_unavailable")
+    scheduler.fire(schedule_id, force=True)
+    db.expire_all()
+    return schedule_out(db, ScheduleService(db).get(schedule_id))
