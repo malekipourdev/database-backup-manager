@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from mbp.api.schemas import (
@@ -58,8 +58,12 @@ def update_instance(
 
 
 @router.delete("/instances/{instance_id}", status_code=204)
-def delete_instance(instance_id: int, db: Session = Depends(get_db)) -> Response:
+def delete_instance(instance_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
     InstanceService(db).delete(instance_id)
+    # The instance's schedules were deleted with it (ON DELETE CASCADE).
+    scheduler = getattr(request.app.state, "backup_scheduler", None)
+    if scheduler is not None and scheduler.running:
+        scheduler.sync_all()
     return Response(status_code=204)
 
 

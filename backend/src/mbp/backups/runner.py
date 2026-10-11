@@ -1,5 +1,6 @@
 """In-process backup execution: a bounded thread pool running one dump per worker."""
 
+import contextlib
 import logging
 import threading
 import time
@@ -12,19 +13,24 @@ from sqlalchemy.orm import Session, sessionmaker
 from mbp.backups import dump_command, errors, naming
 from mbp.backups.dump_command import ToolMissing
 from mbp.backups.pipeline import DumpProcess
+from mbp.backups.remote import RemoteError, join_key
 from mbp.backups.store import LocalBackupStore, StorageError
 from mbp.backups.verify import verify
 from mbp.config import Settings
 from mbp.db import utcnow
 from mbp.models import DbInstance
 from mbp.repositories.backup_run_repository import BackupRunRepository
+from mbp.repositories.remote_storage_repository import RemoteStorageRepository
 from mbp.services import mysql_probe
 from mbp.services.backup_settings_service import effective_for
 from mbp.services.instance_service import conn_params
+from mbp.services.remote_storage_service import get_remote_storage, upload_enabled_for
+from mbp.services.retention_service import RetentionService
 
 logger = logging.getLogger(__name__)
 
 INTERRUPTED_MESSAGE = "Interrupted by panel restart or shutdown."
+UPLOAD_INTERRUPTED_MESSAGE = "Upload interrupted by panel restart or shutdown."
 
 
 class _Failure(Exception):
@@ -60,6 +66,9 @@ class BackupRunner:
             stale = repo.list_active()
             for run in stale:
                 repo.finish_failed(run, "interrupted", INTERRUPTED_MESSAGE)
+            for run in repo.list_interrupted_uploads():
+                run.remote_status = "failed"
+                run.remote_error = UPLOAD_INTERRUPTED_MESSAGE
             db.commit()
         removed = self.store.cleanup_partials()
         if stale or removed:
@@ -92,6 +101,12 @@ class BackupRunner:
         if self._executor is None:
             raise RuntimeError("backup runner is not started")
         self._executor.submit(self._execute_safely, run_id)
+
+    def enqueue_upload(self, run_id: int) -> None:
+        """Queue the upload of a run already claimed with remote_status "uploading"."""
+        if self._executor is None:
+            raise RuntimeError("backup runner is not started")
+        self._executor.submit(self._upload_safely, run_id)
 
     def active_pids(self) -> dict[int, int]:
         """run_id -> pid of running dump processes (used by tests and diagnostics)."""
@@ -153,6 +168,8 @@ class BackupRunner:
 
         temp: Path | None = None
         try:
+            if not dump_command.is_safe_database_name(database):
+                raise _Failure("invalid_database_name", "The database name is not allowed.")
             probe = mysql_probe.test_connection(params)
             if not probe.ok:
                 raise _Failure(probe.error_code or "server_error", probe.error_detail)
@@ -225,8 +242,14 @@ class BackupRunner:
                     checksum=result.sha256,
                     bytes_processed=result.bytes_processed,
                 )
+                instance = db.get(DbInstance, run.instance_id) if run.instance_id else None
+                # Claimed in the same commit, so the run never looks finished-but-not-uploaded.
+                will_upload = upload_enabled_for(RemoteStorageRepository(db).get(), instance)
+                if will_upload:
+                    run.remote_status = "uploading"
                 db.commit()
             logger.info("Backup run %s succeeded (%s bytes)", run_id, result.size)
+            self._after_success(run_id, will_upload)
         except _Failure as failure:
             self.store.discard(temp)
             self._record_failure(run_id, failure.code, failure.message)
@@ -242,6 +265,93 @@ class BackupRunner:
         finally:
             # Covers unexpected exceptions too (handled by _execute_safely).
             self.store.discard(temp)
+
+    # --- after a successful backup: remote upload, then retention ---
+
+    def _after_success(self, run_id: int, upload: bool) -> None:
+        # The backup itself already succeeded; failures here are recorded on the run
+        # (remote_status/remote_error) or logged, never turned into a failed backup.
+        if upload:
+            self._upload_safely(run_id)
+        try:
+            self.apply_retention_for(run_id)
+        except Exception:
+            logger.exception("Unexpected error applying retention after run %s", run_id)
+
+    def _upload_safely(self, run_id: int) -> None:
+        try:
+            self.upload(run_id)
+        except Exception:
+            logger.exception("Unexpected error uploading backup run %s", run_id)
+            self._record_upload_failure(run_id, "Unexpected internal error.")
+
+    def _record_upload_failure(self, run_id: int, message: str) -> None:
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is not None and run.remote_status == "uploading":
+                run.remote_status = "failed"
+                run.remote_error = message[:1000]
+                db.commit()
+
+    def upload(self, run_id: int) -> bool:
+        """Upload a run claimed for upload (remote_status "uploading"); True if stored."""
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is None or run.remote_status != "uploading":
+                return False
+            if not run.has_local_file:
+                run.remote_status = "failed"
+                run.remote_error = "The local backup file no longer exists."
+                db.commit()
+                return False
+            row, storage = get_remote_storage(db)
+            if storage is None:
+                run.remote_status = "failed"
+                run.remote_error = "Remote storage is not configured."
+                db.commit()
+                return False
+            key = join_key(row.prefix, run.file_path or "")
+            relative = run.file_path or ""
+            checksum = run.checksum_sha256 or ""
+            run.remote_key = key
+            run.remote_error = None
+            db.commit()
+
+        try:
+            local = self.store.path_for_download(relative)
+            storage.upload(local, key, checksum)
+        except RemoteError as exc:
+            detail = f"{exc.code}: {exc.message}" if exc.message else exc.code
+            self._record_upload_failure(run_id, detail)
+            logger.warning("Upload of backup run %s failed: %s", run_id, exc.code)
+            return False
+        except (StorageError, FileNotFoundError):
+            self._record_upload_failure(run_id, "The local backup file no longer exists.")
+            return False
+
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is None:
+                # Deleted while uploading: do not leave an orphaned object behind.
+                with contextlib.suppress(RemoteError):
+                    storage.delete(key)
+                return False
+            run.remote_status = "success"
+            run.remote_uploaded_at = utcnow()
+            run.remote_deleted_at = None
+            run.remote_error = None
+            db.commit()
+        logger.info("Backup run %s uploaded to remote storage", run_id)
+        return True
+
+    def apply_retention_for(self, run_id: int) -> None:
+        with self.session_factory() as db:
+            run = BackupRunRepository(db).get(run_id)
+            if run is None or run.instance_id is None:
+                return
+            RetentionService(db, self.store).apply(
+                instance_id=run.instance_id, database=run.database_name
+            )
 
 
 def wait_until_idle(runner: BackupRunner, timeout: float = 10.0) -> None:

@@ -23,12 +23,13 @@ import {
   isActive,
   isLatestSuccess,
   useDeleteRun,
+  useRetryUpload,
 } from "../api/backups";
 import { errorMessage } from "../api/client";
 import { formatBytes, formatDuration } from "../format";
 import { formatDateTime } from "../i18n";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { RunStatusBadge } from "./RunStatusBadge";
+import { RemoteStatusBadge, RunStatusBadge } from "./RunStatusBadge";
 
 export interface SortState {
   sort: SortColumn;
@@ -48,6 +49,11 @@ function StatusCell({ run }: { run: BackupRun }) {
   return (
     <Stack gap={4}>
       <RunStatusBadge status={run.status} />
+      {run.trigger === "schedule" && (
+        <Text size="xs" c="dimmed">
+          {t("backups.scheduled")}
+        </Text>
+      )}
       {run.status === "running" && (
         <Text size="xs" c="dimmed">
           {t("backups.progress", {
@@ -78,6 +84,57 @@ function StatusCell({ run }: { run: BackupRun }) {
             )}
           </Collapse>
         </>
+      )}
+      <RemoteCell run={run} />
+      {run.file_deleted_reason === "retention" && run.file_deleted_at && (
+        <Text size="xs" c="dimmed">
+          {t("backups.removedByRetention", {
+            date: formatDateTime(run.file_deleted_at, i18n.language),
+          })}
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+function RemoteCell({ run }: { run: BackupRun }) {
+  const { t } = useTranslation();
+  const retry = useRetryUpload();
+  const [open, setOpen] = useState(false);
+  if (!run.remote_status) return null;
+  return (
+    <Stack gap={2}>
+      <RemoteStatusBadge status={run.remote_status} />
+      {run.remote_status === "failed" && (
+        <Group gap={6} wrap="nowrap">
+          {run.file_available && (
+            <Anchor
+              component="button"
+              size="xs"
+              disabled={retry.isPending}
+              onClick={() =>
+                retry.mutate(run.id, {
+                  onError: (error) =>
+                    notifications.show({ color: "red", message: errorMessage(t, error) }),
+                })
+              }
+            >
+              {t("backups.retryUpload")}
+            </Anchor>
+          )}
+          {run.remote_error && (
+            <Anchor component="button" size="xs" onClick={() => setOpen((v) => !v)}>
+              {t("backups.details")}
+            </Anchor>
+          )}
+        </Group>
+      )}
+      {run.remote_error && (
+        <Collapse in={open}>
+          <Code block dir="ltr" style={{ whiteSpace: "pre-wrap", maxWidth: 420 }}>
+            {run.remote_error}
+          </Code>
+        </Collapse>
       )}
     </Stack>
   );
@@ -207,7 +264,7 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
                     {run.status === "success" &&
-                      (run.file_available ? (
+                      (run.download_available ? (
                         <Button
                           component="a"
                           href={downloadUrl(run.id)}
@@ -219,7 +276,9 @@ export function RunTable({ runs, showInstance = false, sort, onSort }: RunTableP
                         </Button>
                       ) : (
                         <Button size="xs" variant="light" disabled>
-                          {t("backups.fileMissing")}
+                          {run.file_deleted_at
+                            ? t("backups.fileRemoved")
+                            : t("backups.fileMissing")}
                         </Button>
                       ))}
                     {!isActive(run) && (

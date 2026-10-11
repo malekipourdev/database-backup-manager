@@ -1,9 +1,10 @@
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, Query, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from mbp.api.errors import ApiError
@@ -15,12 +16,14 @@ from mbp.api.schemas import (
     StartBackupResponse,
     StartSingleRequest,
 )
+from mbp.backups.remote import RemoteError
 from mbp.backups.runner import BackupRunner
 from mbp.backups.store import LocalBackupStore, StorageError, get_store
 from mbp.db import get_db, utcnow
 from mbp.models import BackupRun
 from mbp.repositories.backup_run_repository import RunFilters
 from mbp.services.backup_service import BackupService
+from mbp.services.remote_storage_service import get_remote_storage
 
 router = APIRouter(tags=["backups"])
 
@@ -39,6 +42,7 @@ def run_out(run: BackupRun, store: LocalBackupStore) -> BackupRunOut:
     elapsed = None
     if run.status == "running" and run.started_at is not None:
         elapsed = int((utcnow() - run.started_at).total_seconds() * 1000)
+    file_available = run.has_local_file and store.exists(run.file_path)
     return BackupRunOut(
         id=run.id,
         instance_id=run.instance_id,
@@ -56,11 +60,20 @@ def run_out(run: BackupRun, store: LocalBackupStore) -> BackupRunOut:
         compression=run.compression,
         checksum_sha256=run.checksum_sha256,
         file_name=PurePosixPath(run.file_path).name if run.file_path else None,
-        file_available=run.status == "success" and store.exists(run.file_path),
+        file_available=file_available,
         server_type=run.server_type,
         server_version=run.server_version,
         error_code=run.error_code,
         error_message=run.error_message,
+        schedule_id=run.schedule_id,
+        file_deleted_at=run.file_deleted_at,
+        file_deleted_reason=run.file_deleted_reason,
+        remote_status=run.remote_status,
+        remote_uploaded_at=run.remote_uploaded_at,
+        remote_deleted_at=run.remote_deleted_at,
+        remote_error=run.remote_error,
+        remote_available=run.has_remote_copy,
+        download_available=file_available or run.has_remote_copy,
     )
 
 
@@ -123,20 +136,60 @@ def delete_run(run_id: int, db: Session = Depends(get_db)) -> Response:
     return Response(status_code=204)
 
 
-@router.get("/backups/runs/{run_id}/download")
-def download_run(run_id: int, db: Session = Depends(get_db)) -> FileResponse:
+@router.post("/backups/runs/{run_id}/upload", status_code=202, response_model=BackupRunOut)
+def upload_run(
+    run_id: int,
+    db: Session = Depends(get_db),
+    runner: BackupRunner = Depends(get_runner),
+) -> BackupRunOut:
+    store = get_store()
+    run = BackupService(db, runner, store).retry_upload(run_id)
+    return run_out(run, store)
+
+
+def _attachment(filename: str) -> str:
+    # RFC 6266/5987: an ASCII fallback plus the exact UTF-8 name.
+    fallback = filename.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    return f"attachment; filename=\"{fallback}\"; filename*=utf-8''{quote(filename)}"
+
+
+@router.get("/backups/runs/{run_id}/download", response_model=None)
+def download_run(run_id: int, db: Session = Depends(get_db)) -> FileResponse | StreamingResponse:
     store = get_store()
     run = BackupService(db, None, store).get(run_id)
     if run.status != "success" or not run.file_path:
         raise ApiError(409, "file_unavailable")
+    media_type = MEDIA_TYPES.get(run.compression or "none", "application/octet-stream")
+    if run.has_local_file:
+        try:
+            path = store.path_for_download(run.file_path)
+        except (StorageError, FileNotFoundError):
+            path = None
+        if path is not None:
+            # FileResponse streams in chunks (constant memory) and supports Range requests.
+            return FileResponse(
+                path,
+                media_type=media_type,
+                filename=path.name,
+                content_disposition_type="attachment",
+            )
+    if not run.has_remote_copy:
+        raise ApiError(409, "file_unavailable")
+    # The local file is gone (e.g. removed by retention): stream the remote copy instead.
+    _, storage = get_remote_storage(db)
+    if storage is None:
+        raise ApiError(409, "remote_not_configured")
+    key = run.remote_key or ""
     try:
-        path = store.path_for_download(run.file_path)
-    except (StorageError, FileNotFoundError) as exc:
-        raise ApiError(409, "file_unavailable") from exc
-    # FileResponse streams in chunks (constant memory) and supports Range requests.
-    return FileResponse(
-        path,
-        media_type=MEDIA_TYPES.get(run.compression or "none", "application/octet-stream"),
-        filename=path.name,
-        content_disposition_type="attachment",
+        size = storage.size(key)
+        chunks = storage.open_stream(key)
+    except RemoteError as exc:
+        raise ApiError(502, "remote_download_failed", detail=exc.code) from exc
+    return StreamingResponse(
+        chunks,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": _attachment(PurePosixPath(run.file_path).name),
+            "Content-Length": str(size),
+        },
     )

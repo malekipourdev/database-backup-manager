@@ -158,3 +158,70 @@ def wait_for_run(client, run_id, timeout=15.0):
             return body
         time.sleep(0.05)
     raise AssertionError(f"run {run_id} did not finish in {timeout}s")
+
+
+# --- Remote storage (S3 API served by moto on localhost) ---
+
+S3_BUCKET = "mbp-test"
+S3_ACCESS_KEY = "AKIA-TEST-ACCESS"
+S3_SECRET_KEY = "S3-Secret-Key-123"
+
+
+@pytest.fixture(scope="session")
+def s3_server():
+    import socket
+
+    from moto.server import ThreadedMotoServer
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=port, verbose=False)
+    server.start()
+    yield f"http://127.0.0.1:{port}"
+    server.stop()
+
+
+@pytest.fixture
+def s3(s3_server):
+    """An empty bucket on the local S3 server; returns a boto3 client for assertions."""
+    import boto3
+    import httpx
+
+    httpx.post(f"{s3_server}/moto-api/reset")
+    client = boto3.client(
+        "s3",
+        endpoint_url=s3_server,
+        region_name="us-east-1",
+        aws_access_key_id=S3_ACCESS_KEY,
+        aws_secret_access_key=S3_SECRET_KEY,
+    )
+    client.create_bucket(Bucket=S3_BUCKET)
+    client.endpoint = s3_server
+    return client
+
+
+def remote_payload(endpoint, **overrides):
+    payload = {
+        "enabled": True,
+        "endpoint_url": endpoint,
+        "region": "us-east-1",
+        "bucket": S3_BUCKET,
+        "prefix": "panel",
+        "access_key_id": S3_ACCESS_KEY,
+        "secret_access_key": S3_SECRET_KEY,
+        "force_path_style": True,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def wait_for_remote(client, run_id, timeout=15.0):
+    """Poll a run until its upload has finished (or never started)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        body = client.get(f"/api/backups/runs/{run_id}").json()
+        if body["status"] in ("success", "failed") and body["remote_status"] != "uploading":
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"upload of run {run_id} did not finish in {timeout}s")

@@ -23,6 +23,7 @@ import { InstanceFormPage } from "./pages/InstanceFormPage";
 import { InstancesPage } from "./pages/InstancesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { SchedulesPage } from "./pages/SchedulesPage";
 import { notifications } from "@mantine/notifications";
 
 const theme = createTheme({
@@ -91,6 +92,7 @@ export function AppRoutes() {
           <Route path="/instances/:id" element={<InstanceDetailPage />} />
           <Route path="/instances/:id/edit" element={<InstanceFormPage />} />
           <Route path="/backups" element={<BackupHistoryPage />} />
+          <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/settings/backups" element={<BackupSettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

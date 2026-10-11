@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,7 +37,11 @@ class BackupRunRepository:
         self.db = db
 
     def create_queued(
-        self, instance: DbInstance, database_name: str, trigger: str
+        self,
+        instance: DbInstance,
+        database_name: str,
+        trigger: str,
+        schedule_id: int | None = None,
     ) -> BackupRun | None:
         """Create and commit a queued run; None if this database already has an active run."""
         run = BackupRun(
@@ -45,6 +49,7 @@ class BackupRunRepository:
             instance_name=instance.name,
             database_name=database_name,
             trigger=trigger,
+            schedule_id=schedule_id,
             status="queued",
             active_key=active_key(instance.id, database_name),
             requested_at=utcnow(),
@@ -119,6 +124,28 @@ class BackupRunRepository:
 
     def delete(self, run: BackupRun) -> None:
         self.db.delete(run)
+
+    def list_retention_candidates(
+        self, instance_id: int | None = None, database: str | None = None
+    ) -> list[BackupRun]:
+        """Successful runs that still have a local file or a remote copy, newest first."""
+        stmt = select(BackupRun).where(
+            BackupRun.status == "success",
+            or_(
+                and_(BackupRun.file_path.is_not(None), BackupRun.file_deleted_at.is_(None)),
+                BackupRun.remote_status == "success",
+            ),
+        )
+        if instance_id is not None:
+            stmt = stmt.where(BackupRun.instance_id == instance_id)
+        if database is not None:
+            stmt = stmt.where(BackupRun.database_name == database)
+        stmt = stmt.order_by(BackupRun.finished_at.desc(), BackupRun.id.desc())
+        return list(self.db.scalars(stmt))
+
+    def list_interrupted_uploads(self) -> list[BackupRun]:
+        stmt = select(BackupRun).where(BackupRun.remote_status == "uploading")
+        return list(self.db.scalars(stmt))
 
     def _filtered(self, stmt: Select, filters: RunFilters) -> Select:
         if filters.instance_id is not None:

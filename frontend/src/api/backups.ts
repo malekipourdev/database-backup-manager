@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { apiFetch } from "./client";
 
 export type RunStatus = "queued" | "running" | "success" | "failed";
+export type RemoteStatus = "uploading" | "success" | "failed" | "deleted";
 export type Compression = "gzip" | "bzip2" | "none";
 export type SortColumn =
   "requested_at" | "duration_ms" | "file_size" | "instance_name" | "database_name" | "status";
@@ -12,7 +13,8 @@ export interface BackupRun {
   instance_id: number | null;
   instance_name: string;
   database_name: string;
-  trigger: "all" | "single";
+  trigger: "all" | "single" | "schedule";
+  schedule_id: number | null;
   status: RunStatus;
   requested_at: string;
   started_at: string | null;
@@ -29,6 +31,15 @@ export interface BackupRun {
   server_version: string | null;
   error_code: string | null;
   error_message: string | null;
+  file_deleted_at: string | null;
+  file_deleted_reason: "retention" | null;
+  remote_status: RemoteStatus | null;
+  remote_uploaded_at: string | null;
+  remote_deleted_at: string | null;
+  remote_error: string | null;
+  remote_available: boolean;
+  /** Downloadable from local storage, or else streamed from the remote copy. */
+  download_available: boolean;
 }
 
 export interface SkippedDatabase {
@@ -92,8 +103,13 @@ export function isActive(run: BackupRun): boolean {
   return run.status === "queued" || run.status === "running";
 }
 
+/** Still changing: a backup in progress, or an upload to remote storage. */
+export function isChanging(run: BackupRun): boolean {
+  return isActive(run) || run.remote_status === "uploading";
+}
+
 export function pollInterval(runs: BackupRun[] | undefined): number | false {
-  return runs?.some(isActive) ? POLL_MS : false;
+  return runs?.some(isChanging) ? POLL_MS : false;
 }
 
 export function runQueryString(query: RunQuery): string {
@@ -151,6 +167,15 @@ export function useDeleteRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (runId: number) => apiFetch<void>(`/backups/runs/${runId}`, { method: "DELETE" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: backupKeys.all }),
+  });
+}
+
+export function useRetryUpload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number) =>
+      apiFetch<BackupRun>(`/backups/runs/${runId}/upload`, { method: "POST" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: backupKeys.all }),
   });
 }

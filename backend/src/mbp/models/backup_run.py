@@ -19,8 +19,12 @@ class BackupRun(Base):
         ForeignKey("db_instances.id", ondelete="SET NULL"), nullable=True, index=True
     )
     instance_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # The schedule that queued this run (trigger "schedule"); NULL once it is deleted.
+    schedule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("backup_schedules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     database_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    # all | single
+    # all | single | schedule
     trigger: Mapped[str] = mapped_column(String(8), nullable=False)
     # queued | running | success | failed
     status: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
@@ -44,10 +48,30 @@ class BackupRun(Base):
     error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Sanitized, at most 1,000 characters, never contains secrets.
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set when the local file was removed by retention; the run record is kept.
+    file_deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # retention
+    file_deleted_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # NULL (not uploaded) | uploading | success | failed | deleted
+    remote_status: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    # Object key in the remote bucket.
+    remote_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    remote_uploaded_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    remote_deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Sanitized, never contains secrets.
+    remote_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     @property
     def is_active(self) -> bool:
         return self.status in ACTIVE_STATUSES
+
+    @property
+    def has_local_file(self) -> bool:
+        return self.status == "success" and bool(self.file_path) and self.file_deleted_at is None
+
+    @property
+    def has_remote_copy(self) -> bool:
+        return self.remote_status == "success" and bool(self.remote_key)
 
     def __repr__(self) -> str:
         return f"BackupRun(id={self.id!r}, database={self.database_name!r}, status={self.status!r})"

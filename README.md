@@ -8,8 +8,10 @@ The UI is available in Persian (right-to-left) and English.
 - admin sign-in
 - registering MySQL and MariaDB servers, testing connections and choosing databases
 - **manual backups**: compressed, verified, with history, download and delete
-
-Scheduling, S3 upload and retention policies are not built yet.
+- **scheduled backups**: cron schedules per server, with time zones
+- **remote storage**: upload to AWS S3 or any S3-compatible service (MinIO, RustFS, Ceph,
+  Wasabi, ArvanCloud, ...)
+- **retention**: automatic deletion of old backups, locally and remotely
 
 ## Quick start
 
@@ -95,6 +97,8 @@ a trusted private network sits in front of the panel.
 | `MBP_BIND_ADDRESS` | `127.0.0.1` | The server address the panel is published on. With the default, the panel is reachable only from the server itself. |
 | `MBP_HTTP_PORT` | `8080` | The server port the panel is published on. |
 | `MBP_BACKUP_CONCURRENCY` | `2` | Maximum number of backups running at the same time. Further ones wait in a queue and start in order. |
+| `MBP_RETENTION_INTERVAL_MINUTES` | `60` | How often the retention policy is applied to all backups, in addition to after every backup. `0` turns the periodic run off. |
+| `MBP_SCHEDULE_MISFIRE_GRACE_SECONDS` | `300` | A scheduled backup whose time passed while the panel was down still starts if the panel is back within this many seconds. Later ones are skipped until the next scheduled time. |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
 ## Connecting to your database servers
@@ -254,6 +258,67 @@ Change these under **Settings**. Each instance can override any of them on its o
 
 Changing settings affects new backups only.
 
+### Scheduled backups
+
+Add schedules on a server's page or under **Schedules**. Each schedule has:
+
+- a **cron expression** with five fields: `minute hour day-of-month month day-of-week`. There
+  are presets for hourly, daily, weekly and monthly backups. For example, `30 1 * * *` runs
+  every day at 01:30, and `0 */6 * * *` runs every six hours.
+- a **time zone**, such as `UTC` or `Asia/Tehran`. The form shows the next five run times.
+- what to back up: **all databases marked for backup**, or **one database**.
+
+Scheduled backups go through the same queue as manual ones and appear in the history marked
+"Scheduled". If a backup of a database is still running when its schedule fires again, that
+database is skipped. Each schedule shows the result of its last run, for example "No databases
+marked".
+
+The scheduler runs inside the backend process, so the backend must stay a single process.
+
+### Remote storage (S3)
+
+Under **Settings → Remote storage**, enter the endpoint, bucket, key prefix and access keys,
+then use **Test connection**. The test checks that the panel can write to and delete from the
+bucket.
+
+- Leave **Endpoint URL** empty for AWS S3. For other services, enter their URL, for example
+  `https://s3.ir-thr-at1.arvanstorage.ir` or `http://minio:9000`.
+- **Path-style addressing** is needed by most self-hosted services (MinIO, RustFS, Ceph).
+- The secret key is stored encrypted, like database passwords, and is never shown again.
+
+When **Upload backups to remote storage** is on, every verified backup is uploaded after it is
+created. A server can override this on its page: **Always**, **Never**, or the global setting.
+Large files are uploaded in 64 MiB parts, so memory use stays small. The panel then checks the
+size of the stored object. The object key is `<prefix>/<file path>`, and the file's SHA-256 is
+stored in its `sha256` metadata.
+
+A failed upload doesn't fail the backup: the local file is kept, the run shows "Upload failed"
+with the reason, and **Retry upload** tries again. If the local file has been removed (for
+example by retention), **Download** streams the remote copy instead. Deleting a backup deletes
+its remote copy too.
+
+To use an access key with minimal permissions, allow `s3:PutObject`, `s3:GetObject`,
+`s3:DeleteObject` and `s3:ListBucket` on the bucket.
+
+### Retention
+
+Under **Settings → Retention**, set separate rules for local files and remote copies:
+
+- **Keep the last N** backups of each database.
+- **Delete after N days**.
+
+Leave a field empty to turn that rule off. When both rules are set, a backup is deleted if it
+breaks either one. **The newest backup of each database is never deleted**, even if it is older
+than the age limit. Only successful backups are affected.
+
+Retention runs after every backup (for that database) and every hour for all backups. A server
+can have its own policy on its page. **Preview and apply now** lists what would be deleted under
+the saved policy before deleting anything.
+
+The backup's record stays in the history: it shows when retention removed the local file, or
+that the remote copy was deleted. If a remote copy can't be deleted (for example, the storage is
+unreachable), the error is shown on the run and the deletion is retried on the next run.
+
 ### Restoring a backup
 
 Restore into an existing, empty database with the server's own client:
@@ -265,6 +330,10 @@ gunzip -c shop_2026-10-11_140804.sql.gz | mariadb -h HOST -u root -p shop  # Mar
 
 For bzip2 files use `bunzip2 -c`, and for uncompressed `.sql` files use `cat`.
 
+To restore a backup that only exists in remote storage, download it from the **Backups** page
+(the panel streams it from the bucket), or fetch it with any S3 client, for example
+`aws s3 cp s3://BUCKET/PREFIX/prod/shop_2026-10-11_140804.sql.gz .`.
+
 The dump has no `CREATE DATABASE`/`USE`, so you can restore it under another name. One exception:
 MariaDB stores trigger definitions exactly as written. A trigger that was created with a schema
 prefix (`CREATE TRIGGER olddb.t …`) is recreated in that original schema. In that case, restore
@@ -274,8 +343,10 @@ under the original name.
 
 - Every page and API endpoint requires the admin to be signed in, except the login page and
   `/api/health`.
-- Stored database passwords are encrypted and are never returned by the API or written to logs.
-  An edit form shows only that a password is stored.
+- Stored database passwords and the S3 secret key are encrypted and are never returned by the API
+  or written to logs. An edit form shows only that a secret is stored.
+- Database names that start with `-` or contain control characters are rejected, so a name can
+  never be read as an option by the dump tool.
 - After 5 failed sign-ins within 15 minutes, a username is locked for 15 minutes. The error message
   is the same whether the account doesn't exist, the password is wrong, or the account is locked.
 - Sessions end after 30 minutes of inactivity.
@@ -306,7 +377,7 @@ cd backend
 uv run ruff check . && uv run ruff format --check .
 uv run pytest                  # unit and API tests (SQLite)
 ./scripts/install-dump-tools.sh   # copies mysqldump/mariadb-dump from the official images
-uv run pytest -m integration   # real MySQL 8.4 and MariaDB 11.8 containers, backup + restore
+uv run pytest -m integration   # real MySQL 8.4, MariaDB 11.8 and S3 (RustFS) containers
 
 cd frontend
 npm run lint && npm run format:check && npm test && npm run build
