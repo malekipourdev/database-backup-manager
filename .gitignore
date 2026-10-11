@@ -32,3 +32,6 @@ Thumbs.db
 
 # Dump tools copied for integration tests
 backend/.tools/
+
+# TypeScript incremental build state
+*.tsbuildinfo
