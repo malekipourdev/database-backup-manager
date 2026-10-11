@@ -9,33 +9,77 @@ uploading and pruning backups are not built yet.
 
 ## Quick start
 
-Requirements: Docker with Compose v2 (Podman with `podman compose` also works, see below).
+Requirements: a Linux server with Docker and Compose v2 (Podman with `podman compose` also
+works, see [Podman](#podman)), plus `openssl`.
 
-1. Create a `.env` file from the example:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Generate an encryption key and put it in `MBP_ENCRYPTION_KEY`:
+1. Create `.env` with a generated encryption key and admin password. Run this on the server,
+   in the project directory:
 
    ```bash
-   docker run --rm python:3.12-slim sh -c \
-     "pip -q install cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+   KEY=$(openssl rand -base64 32 | tr '+/' '-_')
+   PASS=$(openssl rand -base64 18 | tr -d '/+=')
+
+   cat > .env <<EOF
+   MBP_ENCRYPTION_KEY=$KEY
+   MBP_ADMIN_USERNAME=admin
+   MBP_ADMIN_PASSWORD=$PASS
+   MBP_DATABASE_URL=sqlite:////data/mbp.db
+   MBP_BIND_ADDRESS=127.0.0.1
+   MBP_HTTP_PORT=8080
+   MBP_COOKIE_SECURE=true
+   EOF
+
+   chmod 600 .env
+   echo "Admin password: $PASS"
    ```
 
-   This key encrypts the stored database passwords. Back it up: if you lose it, the stored
-   passwords can't be decrypted and you'll have to re-enter them.
+   Write down the printed password. **Back up `MBP_ENCRYPTION_KEY` somewhere safe.** It
+   encrypts the stored database passwords; if you lose it, you'll have to re-enter every
+   password.
 
-3. Set `MBP_ADMIN_USERNAME` and `MBP_ADMIN_PASSWORD`.
-
-4. Start the panel:
+2. Start the panel:
 
    ```bash
    docker compose up -d --build
    ```
 
-5. Open <http://localhost:8080> and sign in.
+3. Check that the panel listens on the loopback interface only:
+
+   ```bash
+   ss -tlnp | grep 8080   # expect 127.0.0.1:8080, not 0.0.0.0:8080
+   ```
+
+4. Open the panel through an SSH tunnel (see the next section) and sign in.
+
+5. After your first successful sign-in, you can delete the `MBP_ADMIN_PASSWORD` line from `.env`.
+   It is only used to create the admin on first start.
+
+## Accessing the panel over an SSH tunnel
+
+By default the panel is published on `127.0.0.1:8080` on the server. It isn't reachable from
+the network, so you don't need a domain, TLS certificate or open firewall port.
+
+Only one port needs forwarding: the panel's HTTP port (`MBP_HTTP_PORT`, default `8080`). The
+backend has no published port; the frontend forwards `/api` requests to it inside the Compose
+network. Database servers don't need forwarding either, because the panel connects to them from
+the server.
+
+On your own computer, run:
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@SERVER_IP
+```
+
+Then open <http://localhost:8080>. If port 8080 is already taken on your computer, pick another
+local port, for example `-L 18080:127.0.0.1:8080` and <http://localhost:18080>.
+
+`MBP_COOKIE_SECURE=true` works here even without HTTPS, because browsers treat
+`http://localhost` as a secure origin.
+
+**Why not just block the port with a firewall?** Docker writes its own iptables rules for
+published ports, and these bypass firewalls such as ufw. A port published on `0.0.0.0` is
+exposed even when ufw denies it. Keep `MBP_BIND_ADDRESS=127.0.0.1` unless a TLS reverse proxy or
+a trusted private network sits in front of the panel.
 
 ## Configuration
 
@@ -44,29 +88,101 @@ Requirements: Docker with Compose v2 (Podman with `podman compose` also works, s
 | `MBP_ENCRYPTION_KEY` | (required) | Fernet key(s) used to encrypt stored passwords. Separate several keys with commas to rotate: the first one encrypts, all of them decrypt. The backend refuses to start without a valid key. |
 | `MBP_ADMIN_USERNAME` / `MBP_ADMIN_PASSWORD` | `admin` / (none) | The initial admin account. These are **only read on first start**, when no admin exists yet. Changing them later has no effect. |
 | `MBP_DATABASE_URL` | `sqlite:////data/mbp.db` | The panel's own database. Change only this URL to use PostgreSQL (`postgresql+psycopg://user:pass@host/db`) or MySQL (`mysql+pymysql://user:pass@host/db`). |
-| `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. Browsers accept it on `http://localhost`. If you open the panel over plain HTTP from another machine, set this to `false`, or sign-in will silently fail. |
-| `MBP_HTTP_PORT` | `8080` | The host port the panel is published on. |
-
-The frontend container is the only one with a published port. It serves the web app and forwards
-`/api` requests to the backend over a private Compose network.
+| `MBP_BIND_ADDRESS` | `127.0.0.1` | The server address the panel is published on. With the default, the panel is reachable only from the server itself. |
+| `MBP_HTTP_PORT` | `8080` | The server port the panel is published on. |
+| `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
 ## Connecting to your database servers
 
 The panel reaches database servers **over the network only**. It never uses the Docker socket.
+Don't enter `localhost` or `127.0.0.1` as the host: inside the panel's container, they refer to
+the panel itself.
 
-| Where the server runs | Host to enter |
-|-----------------------|---------------|
-| Directly on the Docker host | `host.docker.internal`. The server must listen on an address the containers can reach, not only `127.0.0.1`. |
-| In another container | Attach that container to the `mbp-net` network (`docker network connect mbp-net <container>`) and enter its container name. Alternatively, publish its port and use `host.docker.internal`. |
-| On another machine | Its hostname or IP address. |
+### A server running in a Docker container
 
-Don't enter `localhost`: inside the panel's container, `localhost` is the panel itself.
+Put the panel and the database container on the same Docker network, then enter the
+**container name** as the host and the **container's internal port** (normally `3306`) as the
+port. Don't use the port it publishes on the host.
 
-Give the panel's database user at least permission to connect and to see the databases it should
-back up. Only databases visible to that user are listed.
+1. Start the panel first (this creates the `mbp-net` network), then attach the database
+   container to it:
 
-**Podman:** `host-gateway` requires Podman 4.7 or later. On older versions, use the host's IP
-address instead of `host.docker.internal`.
+   ```bash
+   docker network connect mbp-net <database-container-name>
+   ```
+
+   This doesn't restart the database or change its existing networks and published ports.
+
+2. In the panel, enter:
+
+   | Field | Value |
+   |-------|-------|
+   | Host | the container name, e.g. `mysql_db` |
+   | Port | `3306` (the internal port) |
+
+**Example.** For a container listed by `docker ps` as
+`127.0.0.1:34507->3306/tcp   mysql_db`, enter host `mysql_db` and port `3306`, not `34507`.
+Its published port `127.0.0.1:34507` is bound to the server's loopback interface, which the panel
+container can't reach, not even through `host.docker.internal`.
+
+**Keep the connection after the database container is recreated.** `docker network connect` is
+lost when the database container is recreated, for example by `docker compose down && up` in its
+own project. Either run the command again afterwards, or make it permanent in the database
+project's `docker-compose.yml`:
+
+```yaml
+services:
+  mysql_db:
+    networks:
+      - default
+      - mbp-net
+
+networks:
+  mbp-net:
+    external: true
+```
+
+To see which networks a container is attached to:
+
+```bash
+docker inspect <container> --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+```
+
+### A server installed directly on the host
+
+Enter `host.docker.internal` as the host and the server's port. The server must listen on an
+address the containers can reach. A server that listens only on `127.0.0.1` isn't reachable;
+check `bind-address` in the MySQL/MariaDB configuration.
+
+### A server on another machine
+
+Enter its hostname or IP address and port. That machine's firewall must allow connections from
+this server.
+
+### A dedicated database user for the panel
+
+Avoid using `root`. Create a dedicated user with the privileges needed for backups:
+
+```bash
+docker exec -it <database-container-name> mysql -uroot -p
+```
+
+```sql
+CREATE USER 'mbp_backup'@'%' IDENTIFIED BY 'a-strong-password';
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS ON *.* TO 'mbp_backup'@'%';
+FLUSH PRIVILEGES;
+```
+
+For MariaDB, use `mariadb` instead of `mysql` in the `docker exec` command.
+
+The panel lists only the databases this user can see. If a database is missing from the list,
+check the user's privileges.
+
+### Podman
+
+`host-gateway` (used for `host.docker.internal`) requires Podman 4.7 or later. On older
+versions, use the host's IP address instead. Connecting containers with
+`podman network connect` works the same way as with Docker.
 
 ## Security notes
 
@@ -77,6 +193,8 @@ address instead of `host.docker.internal`.
 - After 5 failed sign-ins within 15 minutes, a username is locked for 15 minutes. The error message
   is the same whether the account doesn't exist, the password is wrong, or the account is locked.
 - Sessions end after 30 minutes of inactivity.
+- By default the panel is reachable only from the server itself (see
+  [Accessing the panel over an SSH tunnel](#accessing-the-panel-over-an-ssh-tunnel)).
 
 ## Development
 

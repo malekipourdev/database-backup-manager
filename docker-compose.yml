@@ -23,8 +23,11 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    # Bound to the loopback interface by default, so the panel is reachable only from the
+    # server itself (e.g. through an SSH tunnel). Docker bypasses host firewalls such as ufw,
+    # so a 0.0.0.0 binding would expose the panel to the network.
     ports:
-      - "${MBP_HTTP_PORT:-8080}:8080"
+      - "${MBP_BIND_ADDRESS:-127.0.0.1}:${MBP_HTTP_PORT:-8080}:8080"
     depends_on:
       backend:
         condition: service_healthy
