@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
-from mbp.api import auth, health, instances
+from mbp.api import auth, backup_settings, backups, health, instances
 from mbp.api.errors import register_error_handlers
+from mbp.backups.runner import BackupRunner
+from mbp.backups.store import get_store
 from mbp.config import get_settings
 from mbp.db import get_sessionmaker
 from mbp.logging import configure_logging
@@ -19,7 +21,16 @@ API_PREFIX = "/api"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     with get_sessionmaker()() as db:
         bootstrap_admin(db, get_settings())
-    yield
+    # Runs left queued/running by a previous process are failed and their temp files removed
+    # before new work is accepted (single backend process: the queue lives in memory).
+    runner = BackupRunner(get_settings(), get_sessionmaker(), get_store())
+    runner.recover()
+    runner.start()
+    app.state.backup_runner = runner
+    try:
+        yield
+    finally:
+        runner.stop()
 
 
 def create_app() -> FastAPI:
@@ -42,6 +53,8 @@ def create_app() -> FastAPI:
     protected = [Depends(require_session), Depends(require_csrf)]
     app.include_router(auth.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(instances.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(backups.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(backup_settings.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

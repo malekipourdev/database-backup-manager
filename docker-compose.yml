@@ -10,8 +10,12 @@ services:
       MBP_ADMIN_PASSWORD: ${MBP_ADMIN_PASSWORD:-}
       MBP_DATABASE_URL: ${MBP_DATABASE_URL:-sqlite:////data/mbp.db}
       MBP_COOKIE_SECURE: ${MBP_COOKIE_SECURE:-true}
+      MBP_BACKUP_CONCURRENCY: ${MBP_BACKUP_CONCURRENCY:-2}
     volumes:
       - mbp-data:/data
+      # Backup files. To keep them in a host directory instead, replace with e.g.
+      # "./backups:/backups" and run "chown 10001:10001 ./backups" once.
+      - mbp-backups:/backups
     # Lets admins reach database servers on the host machine as "host.docker.internal".
     # Target databases are reached over the network only; docker.sock is never mounted.
     extra_hosts:
@@ -40,3 +44,4 @@ networks:
 
 volumes:
   mbp-data:
+  mbp-backups:

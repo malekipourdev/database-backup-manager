@@ -28,6 +28,10 @@ class DbInstance(Base):
     last_test_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Backup setting overrides; NULL means "inherit the global value".
+    backup_storage_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    backup_name_pattern: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    backup_compression: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False

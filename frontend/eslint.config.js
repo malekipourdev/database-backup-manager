@@ -31,7 +31,17 @@ export default tseslint.config(
           "jsx-attributes": {
             include: ["label", "placeholder", "title", "alt", "aria-label", "description", "body"],
           },
-          callees: { exclude: ["t", "i18n(ext)?", "getInputProps", "setFieldError"] },
+          callees: {
+            exclude: [
+              "t",
+              "i18n(ext)?",
+              "getInputProps",
+              "setFieldError",
+              "header",
+              "overrideToggle",
+              "disabled",
+            ],
+          },
         },
       ],
     },

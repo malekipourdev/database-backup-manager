@@ -1,0 +1,306 @@
+openapi: 3.1.0
+info:
+  title: MySQL Backup Panel API — Manual Backups
+  version: 0.2.0
+  description: |
+    Extends the feature 001 API (same conventions). Every endpoint requires the `mbp_session`
+    cookie (401 `not_authenticated`); state-changing requests require `X-Requested-With: mbp`
+    (403 `csrf_failed`). Errors use the feature 001 `Error` schema. No response contains a
+    password or an absolute filesystem path.
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: mbp_session }
+
+  schemas:
+    Error:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
+        detail: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+
+    Compression:
+      type: string
+      enum: [gzip, bzip2, none]
+
+    BackupSettings:
+      type: object
+      required: [storage_dir, name_pattern, compression]
+      properties:
+        storage_dir:
+          type: string
+          maxLength: 255
+          description: Relative to the backup storage root; "" = root. No "..", no leading "/".
+        name_pattern:
+          type: string
+          maxLength: 255
+          description: |
+            Placeholders {instance} {database} {date} {time} {datetime} {server_type};
+            "/" creates subdirectories. Must contain {database} and one date/time placeholder.
+        compression: { $ref: "#/components/schemas/Compression" }
+
+    InstanceBackupOverrides:
+      description: null = inherit the global value.
+      type: object
+      properties:
+        storage_dir: { type: [string, "null"], maxLength: 255 }
+        name_pattern: { type: [string, "null"], maxLength: 255 }
+        compression:
+          oneOf:
+            - { $ref: "#/components/schemas/Compression" }
+            - { type: "null" }
+
+    InstanceBackupSettings:
+      type: object
+      required: [overrides, effective]
+      properties:
+        overrides: { $ref: "#/components/schemas/InstanceBackupOverrides" }
+        effective: { $ref: "#/components/schemas/BackupSettings" }
+
+    PatternPreviewRequest:
+      type: object
+      required: [name_pattern, compression]
+      properties:
+        storage_dir: { type: string, maxLength: 255, default: "" }
+        name_pattern: { type: string, maxLength: 255 }
+        compression: { $ref: "#/components/schemas/Compression" }
+        instance_name: { type: string, default: "prod" }
+        database_name: { type: string, default: "shop" }
+
+    PatternPreview:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+          description: Relative path the next backup would get, e.g. "prod/shop_2026-10-11_130820.sql.gz".
+
+    RunStatus:
+      type: string
+      enum: [queued, running, success, failed]
+
+    BackupRun:
+      type: object
+      required:
+        [id, instance_id, instance_name, database_name, trigger, status, requested_at,
+         bytes_processed, file_available]
+      properties:
+        id: { type: integer }
+        instance_id: { type: [integer, "null"], description: null if the instance was deleted }
+        instance_name: { type: string }
+        database_name: { type: string }
+        trigger: { type: string, enum: [all, single] }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        requested_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        duration_ms: { type: [integer, "null"] }
+        elapsed_ms: { type: [integer, "null"], description: For running runs. }
+        bytes_processed: { type: integer, description: Uncompressed bytes dumped so far. }
+        file_size: { type: [integer, "null"] }
+        compression: { oneOf: [{ $ref: "#/components/schemas/Compression" }, { type: "null" }] }
+        checksum_sha256: { type: [string, "null"] }
+        file_name: { type: [string, "null"], description: Base name only. }
+        file_available: { type: boolean }
+        server_type: { type: [string, "null"], enum: [mysql, mariadb, null] }
+        server_version: { type: [string, "null"] }
+        error_code:
+          type: [string, "null"]
+          enum:
+            [host_not_found, connection_refused, timeout, auth_rejected, server_error,
+             missing_privileges, database_not_found, connection_lost, dump_failed, disk_full,
+             verification_failed, interrupted, instance_deleted, tool_missing, storage_error,
+             null]
+        error_message: { type: [string, "null"] }
+
+    StartBackupRequest:
+      oneOf:
+        - type: object
+          required: [scope]
+          properties:
+            scope: { const: all }
+        - type: object
+          required: [scope, database]
+          properties:
+            scope: { const: single }
+            database: { type: string, minLength: 1, maxLength: 64 }
+
+    StartBackupResponse:
+      type: object
+      required: [created, skipped]
+      properties:
+        created:
+          type: array
+          items: { $ref: "#/components/schemas/BackupRun" }
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [database, reason]
+            properties:
+              database: { type: string }
+              reason: { type: string, enum: [already_in_progress] }
+
+    RunPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BackupRun" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+  responses:
+    NotFound:
+      description: "`instance_not_found` or `run_not_found`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ValidationError:
+      description: "`validation_error` with `fields` (e.g. {name_pattern: missing_database})"
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+security:
+  - session: []
+
+paths:
+  /backup-settings:
+    get:
+      summary: Global backup settings
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/BackupSettings" } } }
+    put:
+      summary: Replace global backup settings
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BackupSettings" } } }
+      responses:
+        "200":
+          description: Saved
+          content: { application/json: { schema: { $ref: "#/components/schemas/BackupSettings" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /backup-settings/preview:
+    post:
+      summary: Render the path a pattern would produce (no state change)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PatternPreviewRequest" } } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/PatternPreview" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /instances/{id}/backup-settings:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: Instance overrides and effective settings
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/InstanceBackupSettings" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Replace instance overrides (null = inherit)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InstanceBackupOverrides" } } }
+      responses:
+        "200":
+          description: Saved
+          content: { application/json: { schema: { $ref: "#/components/schemas/InstanceBackupSettings" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /instances/{id}/backups:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Start backups now (returns immediately)
+      description: |
+        `all` creates one run per database currently marked for backup (422 `no_databases_selected`
+        if none). `single` accepts any database on the server except information_schema,
+        performance_schema and sys (422 `not_selectable`); existence is checked when the run starts
+        (`database_not_found`). Databases with a queued/running run are returned in `skipped`.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StartBackupRequest" } } }
+      responses:
+        "202":
+          description: Accepted
+          content: { application/json: { schema: { $ref: "#/components/schemas/StartBackupResponse" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /backups/runs:
+    get:
+      summary: Backup history (paged, filterable, sortable)
+      parameters:
+        - { name: instance_id, in: query, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string }, description: Exact match }
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: from, in: query, schema: { type: string, format: date-time }, description: requested_at >= from }
+        - { name: to, in: query, schema: { type: string, format: date-time }, description: requested_at < to }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [requested_at, duration_ms, file_size, instance_name, database_name, status]
+            default: requested_at
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/RunPage" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /backups/runs/{run_id}:
+    parameters:
+      - { name: run_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One run (used for polling)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/BackupRun" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a finished run and its file
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`run_active` — queued or running runs cannot be deleted"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /backups/runs/{run_id}/download:
+    parameters:
+      - { name: run_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: Stream the backup file
+      description: |
+        Constant-memory streamed response with `Content-Disposition: attachment` and the stored
+        file name. Supports `Range`. Intended for a plain browser link (cookie session).
+      responses:
+        "200":
+          description: File content
+          content:
+            application/gzip: { schema: { type: string, format: binary } }
+            application/x-bzip2: { schema: { type: string, format: binary } }
+            application/sql: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`file_unavailable` — run not successful or file missing on disk"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

@@ -16,6 +16,8 @@ import { ME_KEY, useMe } from "./api/auth";
 import { isApiError } from "./api/client";
 import { Layout } from "./components/Layout";
 import i18n, { directionOf } from "./i18n";
+import { BackupHistoryPage } from "./pages/BackupHistoryPage";
+import { BackupSettingsPage } from "./pages/BackupSettingsPage";
 import { InstanceDetailPage } from "./pages/InstanceDetailPage";
 import { InstanceFormPage } from "./pages/InstanceFormPage";
 import { InstancesPage } from "./pages/InstancesPage";
@@ -88,6 +90,8 @@ export function AppRoutes() {
           <Route path="/instances/new" element={<InstanceFormPage />} />
           <Route path="/instances/:id" element={<InstanceDetailPage />} />
           <Route path="/instances/:id/edit" element={<InstanceFormPage />} />
+          <Route path="/backups" element={<BackupHistoryPage />} />
+          <Route path="/settings/backups" element={<BackupSettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

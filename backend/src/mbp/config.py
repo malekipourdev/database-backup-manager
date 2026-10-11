@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     session_idle_minutes: int = 30
     connect_timeout_seconds: int = 10
+    backup_root: str = "/backups"
+    backup_concurrency: int = Field(default=2, ge=1)
+    mysqldump_path: str = "/usr/local/bin/mysqldump"
+    mariadb_dump_path: str = "/usr/bin/mariadb-dump"
+    backup_progress_interval_seconds: float = 2.0
 
 
 @lru_cache

@@ -46,7 +46,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "S", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S107", "S311"]
+"tests/**" = ["S101", "S105", "S106", "S107", "S108", "S311", "S603", "S607", "S608"]
 "migrations/**" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]

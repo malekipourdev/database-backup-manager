@@ -1,5 +1,7 @@
 import os
+import shutil
 import tempfile
+import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -14,6 +16,12 @@ os.environ["MBP_DATABASE_URL"] = f"sqlite:///{_TMP / 'test.db'}"
 os.environ["MBP_ADMIN_USERNAME"] = ADMIN_USERNAME
 os.environ["MBP_ADMIN_PASSWORD"] = ADMIN_PASSWORD
 os.environ["MBP_COOKIE_SECURE"] = "false"
+BACKUP_ROOT = _TMP / "backups"
+FAKE_DUMP = Path(__file__).resolve().parent / "fakes" / "fake_dump.py"
+os.environ["MBP_BACKUP_ROOT"] = str(BACKUP_ROOT)
+os.environ["MBP_MYSQLDUMP_PATH"] = str(FAKE_DUMP)
+os.environ["MBP_MARIADB_DUMP_PATH"] = str(FAKE_DUMP)
+os.environ["MBP_BACKUP_PROGRESS_INTERVAL_SECONDS"] = "0.2"
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -92,3 +100,61 @@ def auth_client(client, admin, db):
     db.commit()
     client.cookies.set(COOKIE_NAME, token)
     return client
+
+
+# --- Backups ---
+
+
+@pytest.fixture(autouse=True)
+def backup_root():
+    """Fresh, empty backup storage area for every test."""
+    BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
+    yield BACKUP_ROOT
+    shutil.rmtree(BACKUP_ROOT, ignore_errors=True)
+
+
+@pytest.fixture
+def probe_ok(monkeypatch):
+    """Pre-flight connection test succeeds and reports a MySQL 8.4 server."""
+    from mbp.services import mysql_probe
+
+    def fake(params, timeout=None):
+        return mysql_probe.ProbeResult(
+            ok=True, tested_at=mysql_probe.utcnow(), server_type="mysql", server_version="8.4.3"
+        )
+
+    monkeypatch.setattr(mysql_probe, "test_connection", fake)
+
+
+INSTANCE_PAYLOAD = {
+    "name": "prod",
+    "host": "db.internal",
+    "port": 3306,
+    "username": "backup",
+    "password": "Inst-Secret-77",
+}
+
+
+def create_instance(client, name="prod", select=()):
+    """Create an instance via the API and store a database selection directly."""
+    from mbp.models import DbSelection
+
+    response = client.post("/api/instances", json={**INSTANCE_PAYLOAD, "name": name})
+    assert response.status_code == 201, response.text
+    instance_id = response.json()["id"]
+    if select:
+        with get_sessionmaker()() as session:
+            session.add_all(DbSelection(instance_id=instance_id, database_name=n) for n in select)
+            session.commit()
+    return instance_id
+
+
+def wait_for_run(client, run_id, timeout=15.0):
+    """Poll a run until it is finished; returns its JSON."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        body = client.get(f"/api/backups/runs/{run_id}").json()
+        if body["status"] in ("success", "failed"):
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"run {run_id} did not finish in {timeout}s")

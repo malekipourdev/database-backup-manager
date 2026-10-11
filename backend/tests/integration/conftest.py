@@ -14,6 +14,7 @@ class Server:
     image: str
     host: str
     port: int
+    container_id: str
 
     def admin_connection(self) -> pymysql.connections.Connection:
         return pymysql.connect(
@@ -44,4 +45,5 @@ def server(request):
             image=IMAGES[kind],
             host=container.get_container_host_ip(),
             port=int(container.get_exposed_port(3306)),
+            container_id=container.get_wrapped_container().id,
         )

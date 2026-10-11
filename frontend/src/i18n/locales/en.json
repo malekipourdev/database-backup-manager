@@ -11,7 +11,9 @@
     "notAvailable": "—"
   },
   "nav": {
-    "instances": "Instances"
+    "instances": "Instances",
+    "backups": "Backups",
+    "settings": "Settings"
   },
   "language": {
     "label": "Language",
@@ -42,7 +44,21 @@
     "connection_refused": "Connection refused.",
     "timeout": "Connection timed out.",
     "auth_rejected": "The server rejected the username or password.",
-    "server_error": "The server returned an error."
+    "server_error": "The server returned an error.",
+    "missing_privileges": "The database user lacks a privilege needed for the backup.",
+    "database_not_found": "The database does not exist on the server.",
+    "connection_lost": "The connection to the server was lost during the backup.",
+    "dump_failed": "The dump tool reported an error.",
+    "disk_full": "Not enough disk space for the backup.",
+    "verification_failed": "The backup file failed verification and was deleted.",
+    "interrupted": "The backup was interrupted because the panel stopped or restarted.",
+    "instance_deleted": "The instance was deleted before the backup started.",
+    "tool_missing": "The dump tool is not installed in the panel.",
+    "storage_error": "The backup file could not be written to the storage area.",
+    "no_databases_selected": "No databases are marked for backup on this instance.",
+    "run_not_found": "This backup no longer exists.",
+    "run_active": "A backup that is queued or running cannot be deleted.",
+    "file_unavailable": "The backup file is not available."
   },
   "validation": {
     "required": "This field is required.",
@@ -127,5 +143,120 @@
     "title": "Page not found",
     "body": "The page you are looking for does not exist.",
     "home": "Go to instances"
+  },
+  "units": {
+    "B": "{{n}} B",
+    "KB": "{{n}} KB",
+    "MB": "{{n}} MB",
+    "GB": "{{n}} GB",
+    "TB": "{{n}} TB"
+  },
+  "duration": {
+    "h": "{{n}}h",
+    "m": "{{n}}m",
+    "s": "{{n}}s",
+    "sub": "< 1s"
+  },
+  "runStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "success": "Success",
+    "failed": "Failed"
+  },
+  "backups": {
+    "title": "Backups",
+    "backUpAll": "Back up all marked databases",
+    "backUpOne": "Back up",
+    "pickDatabase": "Back up a single database",
+    "nothingMarked": "Mark databases for backup in the list below to enable this.",
+    "started": "{{formattedCount}} backup(s) started.",
+    "skipped": "“{{database}}” skipped: a backup of it is already in progress.",
+    "recent": "Recent backups",
+    "noRuns": "No backups yet.",
+    "viewAll": "View all backups",
+    "columns": {
+      "instance": "Instance",
+      "database": "Database",
+      "status": "Status",
+      "requested": "Requested",
+      "duration": "Duration",
+      "size": "Size",
+      "compression": "Compression",
+      "checksum": "SHA-256",
+      "actions": "Actions"
+    },
+    "progress": "{{size}} dumped · {{elapsed}}",
+    "waiting": "Waiting for a free slot",
+    "copy": "Copy",
+    "copied": "Copied",
+    "download": "Download",
+    "delete": "Delete",
+    "fileMissing": "File missing",
+    "details": "Details",
+    "compression": {
+      "gzip": "gzip",
+      "bzip2": "bzip2",
+      "none": "none"
+    },
+    "explain": {
+      "missing_privileges": "The database user lacks a privilege needed for the backup. Grant SELECT, SHOW VIEW, TRIGGER, EVENT and LOCK TABLES to this user (see README).",
+      "database_not_found": "The database does not exist on the server. It may have been dropped or renamed. Uncheck it in the database list.",
+      "connection_lost": "The connection to the server was lost during the backup. Check that the server is running and reachable, then try again.",
+      "dump_failed": "The dump tool reported an error. See the details below for the server's message.",
+      "disk_full": "Not enough disk space for the backup. Free up space in the backup storage area or delete old backups.",
+      "verification_failed": "The backup file failed verification and was deleted. The dump was incomplete or the file is damaged. Try again; if it repeats, check the details.",
+      "interrupted": "The backup was interrupted because the panel stopped or restarted. Start the backup again.",
+      "instance_deleted": "The instance was deleted before the backup started. Nothing to do; the run is kept for the record.",
+      "tool_missing": "The dump tool is not installed in the panel. Rebuild the backend image; it includes mysqldump and mariadb-dump.",
+      "storage_error": "The backup file could not be written to the storage area. Check the storage directory setting and the volume permissions."
+    }
+  },
+  "history": {
+    "title": "Backup history",
+    "instance": "Instance",
+    "database": "Database name",
+    "status": "Status",
+    "from": "From",
+    "to": "To",
+    "clear": "Clear filters",
+    "anyInstance": "All instances",
+    "empty": "No backups match these filters.",
+    "deleteTitle": "Delete backup",
+    "deleteConfirm": "Delete the backup of “{{database}}” from {{date}}? Its file and record are removed. This cannot be undone.",
+    "deleteConfirmLatest": "This is the latest successful backup of “{{database}}”. Delete it anyway? Its file and record are removed. This cannot be undone.",
+    "deleted": "Backup deleted.",
+    "total": "{{formattedCount}} backups",
+    "deletedInstance": "{{name}} (deleted)",
+    "sortBy": "Sort by {{column}}"
+  },
+  "settings": {
+    "title": "Backup settings",
+    "globalHint": "Defaults for all instances. Each instance can override them on its page.",
+    "instanceTitle": "Backup settings for this instance",
+    "instanceHint": "Unchecked fields use the global setting.",
+    "storageDir": "Storage directory",
+    "storageDirHelp": "Relative to the backup volume. Leave empty for its root.",
+    "namePattern": "File name pattern",
+    "namePatternHelp": "Use / for subfolders. The extension is added automatically. Times are in UTC.",
+    "compression": "Compression",
+    "preview": "Example file",
+    "override": "Override",
+    "inherit": "Global: {{value}}",
+    "root": "(root)",
+    "saved": "Settings saved.",
+    "edit": "Edit",
+    "effective": "Effective settings",
+    "validation": {
+      "missing_database": "The pattern must contain {database}.",
+      "missing_datetime": "The pattern must contain {date}, {time} or {datetime}.",
+      "unknown_placeholder": "Unknown placeholder. Allowed: {instance} {database} {date} {time} {datetime} {server_type}.",
+      "absolute_path": "Use a relative path inside the backup storage area.",
+      "parent_segment": "\"..\" and \".\" are not allowed.",
+      "empty_segment": "Empty path parts (\"//\" or a trailing \"/\") are not allowed.",
+      "invalid_character": "Contains characters that are not allowed.",
+      "too_long": "Must be at most 255 characters.",
+      "required": "This field is required.",
+      "invalid_compression": "Choose gzip, bzip2 or none."
+    }
   }
 }

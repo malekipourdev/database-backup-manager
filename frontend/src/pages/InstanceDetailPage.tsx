@@ -25,6 +25,7 @@ import {
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ConnectionResult } from "../components/ConnectionResult";
 import { DatabaseSelector } from "../components/DatabaseSelector";
+import { InstanceBackupSettingsPanel, InstanceBackups } from "../components/InstanceBackups";
 import { formatDateTime } from "../i18n";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -149,6 +150,10 @@ export function InstanceDetailPage() {
         </Title>
         <DatabaseSelector instanceId={instanceId} />
       </Paper>
+
+      <InstanceBackups instanceId={instanceId} />
+
+      <InstanceBackupSettingsPanel instanceId={instanceId} />
 
       <ConfirmDialog
         opened={confirmOpen}

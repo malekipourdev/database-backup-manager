@@ -3,9 +3,13 @@
 A self-hosted web panel for managing backups of MySQL and MariaDB databases.
 The UI is available in Persian (right-to-left) and English.
 
-**Current status:** admin sign-in and database instance management. You can register MySQL and
-MariaDB servers, test connections and choose which databases to back up. Running, scheduling,
-uploading and pruning backups are not built yet.
+**Current status:**
+
+- admin sign-in
+- registering MySQL and MariaDB servers, testing connections and choosing databases
+- **manual backups**: compressed, verified, with history, download and delete
+
+Scheduling, S3 upload and retention policies are not built yet.
 
 ## Quick start
 
@@ -90,6 +94,7 @@ a trusted private network sits in front of the panel.
 | `MBP_DATABASE_URL` | `sqlite:////data/mbp.db` | The panel's own database. Change only this URL to use PostgreSQL (`postgresql+psycopg://user:pass@host/db`) or MySQL (`mysql+pymysql://user:pass@host/db`). |
 | `MBP_BIND_ADDRESS` | `127.0.0.1` | The server address the panel is published on. With the default, the panel is reachable only from the server itself. |
 | `MBP_HTTP_PORT` | `8080` | The server port the panel is published on. |
+| `MBP_BACKUP_CONCURRENCY` | `2` | Maximum number of backups running at the same time. Further ones wait in a queue and start in order. |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
 ## Connecting to your database servers
@@ -169,9 +174,12 @@ docker exec -it <database-container-name> mysql -uroot -p
 
 ```sql
 CREATE USER 'mbp_backup'@'%' IDENTIFIED BY 'a-strong-password';
-GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, PROCESS ON *.* TO 'mbp_backup'@'%';
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON *.* TO 'mbp_backup'@'%';
 FLUSH PRIVILEGES;
 ```
+
+`PROCESS` is not needed: the panel dumps with `--no-tablespaces`. These grants are tested
+against MySQL 8.0/8.4 and MariaDB 11.8.
 
 For MariaDB, use `mariadb` instead of `mysql` in the `docker exec` command.
 
@@ -183,6 +191,84 @@ check the user's privileges.
 `host-gateway` (used for `host.docker.internal`) requires Podman 4.7 or later. On older
 versions, use the host's IP address instead. Connecting containers with
 `podman network connect` works the same way as with Docker.
+
+## Backups
+
+On an instance's page you can:
+
+- back up **all databases marked for backup**, or
+- back up **one database**, which doesn't need to be marked.
+
+Each database gets its own file. You can follow progress on the instance page and on the
+**Backups** page, which lists every run. On that page you can filter by instance, database, status
+and date, sort the results, download files and delete backups.
+
+### How a backup is made
+
+1. The panel connects to the server and detects whether it is MySQL or MariaDB.
+2. It runs the matching dump tool:
+   - Oracle `mysqldump` 8.4 for MySQL
+   - `mariadb-dump` for MariaDB
+   - The options are `--single-transaction --quick --routines --triggers --events --hex-blob --no-tablespaces`, plus `--set-gtid-purged=OFF` for MySQL.
+   - The password is passed only through a temporary file readable by the panel alone. It never
+     appears on a command line or in the environment.
+3. The output is compressed as it streams (gzip, bzip2 or none) into a hidden temporary file. The
+   panel never holds the dump in memory, so large databases work.
+4. The file is **verified**: SHA-256 checksum, full decompression, and the dump's
+   `-- Dump completed` marker.
+5. Only then does it get its final name. Failed or interrupted backups never leave a file, and are
+   shown as failed with the reason.
+
+Two backups of the same database never run at the same time. The backend must run as a
+**single process** (the default), because the backup queue lives in memory.
+
+### Where files are stored
+
+Backups are stored in the `mbp-backups` Docker volume, mounted at `/backups` in the backend
+container. To list them:
+
+```bash
+docker compose exec backend find /backups -type f
+```
+
+To keep them in a host directory instead, replace `mbp-backups:/backups` in
+`docker-compose.yml` with a bind mount such as `./backups:/backups`. Then make the directory
+writable by the panel's user:
+
+```bash
+mkdir -p backups && sudo chown 10001:10001 backups
+```
+
+### Settings
+
+Change these under **Settings**. Each instance can override any of them on its own page:
+
+- **Storage directory**: relative to the backup volume.
+- **File name pattern**: the default is `{instance}/{database}_{date}_{time}`.
+  - Available placeholders: `{instance}`, `{database}`, `{date}`, `{time}`, `{datetime}`,
+    `{server_type}`.
+  - `/` creates subfolders.
+  - Times are in UTC.
+  - The extension is added automatically, and an existing file is never overwritten.
+- **Compression**: gzip (the default), bzip2 or none.
+
+Changing settings affects new backups only.
+
+### Restoring a backup
+
+Restore into an existing, empty database with the server's own client:
+
+```bash
+gunzip -c shop_2026-10-11_140804.sql.gz | mysql -h HOST -u root -p shop    # MySQL
+gunzip -c shop_2026-10-11_140804.sql.gz | mariadb -h HOST -u root -p shop  # MariaDB
+```
+
+For bzip2 files use `bunzip2 -c`, and for uncompressed `.sql` files use `cat`.
+
+The dump has no `CREATE DATABASE`/`USE`, so you can restore it under another name. One exception:
+MariaDB stores trigger definitions exactly as written. A trigger that was created with a schema
+prefix (`CREATE TRIGGER olddb.t …`) is recreated in that original schema. In that case, restore
+under the original name.
 
 ## Security notes
 
@@ -219,7 +305,8 @@ npm run dev
 cd backend
 uv run ruff check . && uv run ruff format --check .
 uv run pytest                  # unit and API tests (SQLite)
-uv run pytest -m integration   # real MySQL 8.4 and MariaDB 11.8 containers (needs Docker)
+./scripts/install-dump-tools.sh   # copies mysqldump/mariadb-dump from the official images
+uv run pytest -m integration   # real MySQL 8.4 and MariaDB 11.8 containers, backup + restore
 
 cd frontend
 npm run lint && npm run format:check && npm test && npm run build

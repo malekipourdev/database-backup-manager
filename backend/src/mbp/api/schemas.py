@@ -153,3 +153,100 @@ class SelectionUpdate(BaseModel):
             if not 1 <= len(name) <= 64:
                 raise ValueError("invalid_name")
         return value
+
+
+# --- Backups ---
+
+Compression = Literal["gzip", "bzip2", "none"]
+RunStatus = Literal["queued", "running", "success", "failed"]
+
+
+class BackupSettingsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    storage_dir: str = Field(default="", max_length=255)
+    name_pattern: str = Field(max_length=255)
+    compression: Compression
+
+
+class InstanceBackupOverrides(BaseModel):
+    """null means "inherit the global value"."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    storage_dir: str | None = Field(default=None, max_length=255)
+    name_pattern: str | None = Field(default=None, max_length=255)
+    compression: Compression | None = None
+
+
+class InstanceBackupSettings(BaseModel):
+    overrides: InstanceBackupOverrides
+    effective: BackupSettingsBody
+
+
+class PatternPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    storage_dir: str = Field(default="", max_length=255)
+    name_pattern: str = Field(max_length=255)
+    compression: Compression
+    instance_name: str = Field(default="prod", min_length=1, max_length=100)
+    database_name: str = Field(default="shop", min_length=1, max_length=64)
+
+
+class PatternPreview(BaseModel):
+    path: str
+
+
+class BackupRunOut(BaseModel):
+    id: int
+    instance_id: int | None
+    instance_name: str
+    database_name: str
+    trigger: Literal["all", "single"]
+    status: RunStatus
+    requested_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    elapsed_ms: int | None = None
+    bytes_processed: int
+    file_size: int | None = None
+    compression: Compression | None = None
+    checksum_sha256: str | None = None
+    file_name: str | None = None
+    file_available: bool
+    server_type: Literal["mysql", "mariadb"] | None = None
+    server_version: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class StartAllRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["all"]
+
+
+class StartSingleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["single"]
+    database: str = Field(min_length=1, max_length=64)
+
+
+class SkippedDatabase(BaseModel):
+    database: str
+    reason: Literal["already_in_progress"]
+
+
+class StartBackupResponse(BaseModel):
+    created: list[BackupRunOut]
+    skipped: list[SkippedDatabase]
+
+
+class RunPage(BaseModel):
+    items: list[BackupRunOut]
+    total: int
+    page: int
+    page_size: int
