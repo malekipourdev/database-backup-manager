@@ -185,7 +185,10 @@ class RetentionService:
                 report.deleted.append(item)
 
             remote_runs = [run for run in runs if run.has_remote_copy]
-            to_delete = expired(remote_runs, policy.remote, now)
+            # Remote copies younger than REMOTE_PROTECTION are never deleted, whatever the policy.
+            to_delete = [
+                run for run in expired(remote_runs, policy.remote, now) if run.remote_deletable(now)
+            ]
             if to_delete and not remote_loaded:
                 _, remote = self.remote_factory(self.db)
                 remote_loaded = True

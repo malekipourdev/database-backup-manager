@@ -233,12 +233,15 @@ class BackupRunOut(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     file_deleted_at: datetime | None = None
-    file_deleted_reason: Literal["retention"] | None = None
+    file_deleted_reason: Literal["retention", "manual"] | None = None
     remote_status: RemoteStatus | None = None
     remote_uploaded_at: datetime | None = None
     remote_deleted_at: datetime | None = None
     remote_error: str | None = None
     remote_available: bool = False
+    # When the panel may delete the remote copy (7 days after upload); see REMOTE_PROTECTION.
+    remote_deletable_at: datetime | None = None
+    remote_deletable: bool = False
     # True if the file can be downloaded (from local storage, or else from the remote copy).
     download_available: bool = False
 
@@ -410,7 +413,8 @@ class RetentionPolicyBody(BaseModel):
     local_keep_last: int | None = Field(default=None, ge=1, le=100000)
     local_max_age_days: int | None = Field(default=None, ge=1, le=36500)
     remote_keep_last: int | None = Field(default=None, ge=1, le=100000)
-    remote_max_age_days: int | None = Field(default=None, ge=1, le=36500)
+    # Remote copies are protected for 7 days anyway; a shorter age limit would be misleading.
+    remote_max_age_days: int | None = Field(default=None, ge=7, le=36500)
 
 
 class InstanceStoragePolicyIn(BaseModel):

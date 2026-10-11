@@ -217,7 +217,7 @@ class BotHandler:
             "rf": lambda: self.send_file(db, ctx, num(0), chat_id),
             "ru": lambda: self.upload(db, ctx, num(0)),
             "rd": lambda: self.confirm_delete(db, ctx, num(0)),
-            "rdc": lambda: self.delete(db, ctx, num(0)),
+            "rdc": lambda: self.delete(db, ctx, num(0), remote=num(1) == 1),
             "sl": lambda: self.schedules(db, ctx, num(0)),
             "s": lambda: self.schedule(db, ctx, num(0)),
             "se": lambda: self.toggle_schedule(db, ctx, num(0)),
@@ -625,7 +625,12 @@ class BotHandler:
             if row:
                 keyboard.append(row)
         actions = [button(t(lang, "btn_refresh"), f"r:{run.id}")]
-        if not run.is_active and run.remote_status != "uploading":
+        # Something the panel may delete: a local file, an unprotected remote copy, or a
+        # record without any file (a failed run).
+        deletable = (
+            run.has_local_file or not run.has_remote_copy or run.remote_deletable(self.clock())
+        )
+        if deletable and not run.is_active and run.remote_status != "uploading":
             actions.append(button(t(lang, "btn_delete"), f"rd:{run.id}"))
         keyboard.append(actions)
         keyboard.append(
@@ -678,29 +683,39 @@ class BotHandler:
         return Screen(f"{t(ctx.lang, 'upload_queued')}\n\n{screen.text}", screen.keyboard)
 
     def confirm_delete(self, db: Session, ctx: Ctx, run_id: int) -> Screen:
+        lang = ctx.lang
         run = BackupService(db, None, self.store).get(run_id)
-        return Screen(
-            t(
-                ctx.lang,
-                "confirm_delete",
-                db=run.database_name,
-                time=self._time(ctx, run.requested_at),
-            ),
-            [
-                [
-                    button(t(ctx.lang, "btn_yes"), f"rdc:{run_id}"),
-                    button(t(ctx.lang, "btn_cancel"), f"r:{run_id}"),
-                ]
-            ],
-        )
+        lines = [
+            t(lang, "confirm_delete", db=run.database_name, time=self._time(ctx, run.requested_at))
+        ]
+        rows: Keyboard = []
+        if run.has_local_file:
+            rows.append([button(t(lang, "btn_delete_local"), f"rdc:{run_id}:0")])
+        if run.has_remote_copy:
+            if run.remote_deletable(self.clock()):
+                label = "btn_delete_both" if run.has_local_file else "btn_delete_remote"
+                rows.append([button(t(lang, label), f"rdc:{run_id}:1")])
+            else:
+                lines.append(
+                    t(lang, "remote_protected", time=self._time(ctx, run.remote_deletable_at))
+                )
+        rows.append([button(t(lang, "btn_cancel"), f"r:{run_id}")])
+        return Screen("\n\n".join(lines), rows)
 
-    def delete(self, db: Session, ctx: Ctx, run_id: int) -> Screen:
+    def delete(self, db: Session, ctx: Ctx, run_id: int, *, remote: bool = False) -> Screen:
         run = BackupService(db, None, self.store).get(run_id)
         instance_id = run.instance_id or 0
-        BackupService(db, None, self.store).delete(run_id)
-        logger.info("%s bot: admin %s deleted run %s", self.platform, ctx.admin_id, run_id)
+        kept = run.has_remote_copy and not remote
+        BackupService(db, None, self.store).delete(run_id, delete_remote=remote)
+        logger.info(
+            "%s bot: admin %s deleted run %s (remote: %s)",
+            self.platform,
+            ctx.admin_id,
+            run_id,
+            remote,
+        )
         return Screen(
-            t(ctx.lang, "deleted"),
+            t(ctx.lang, "deleted_local_kept_remote" if kept else "deleted"),
             [
                 [
                     button(t(ctx.lang, "btn_back"), f"rl:{instance_id}:0"),

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -6,6 +6,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from mbp.db import Base, UTCDateTime, utcnow
 
 ACTIVE_STATUSES = ("queued", "running")
+# A remote copy can't be deleted by the panel (retention or by hand) until this long after
+# its upload. Within that window it can only be deleted in the storage provider itself.
+REMOTE_PROTECTION = timedelta(days=7)
 
 
 class BackupRun(Base):
@@ -50,7 +53,7 @@ class BackupRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Set when the local file was removed by retention; the run record is kept.
     file_deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
-    # retention
+    # retention | manual (deleted by an admin while the remote copy was kept)
     file_deleted_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # NULL (not uploaded) | uploading | success | failed | deleted
     remote_status: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
@@ -72,6 +75,18 @@ class BackupRun(Base):
     @property
     def has_remote_copy(self) -> bool:
         return self.remote_status == "success" and bool(self.remote_key)
+
+    @property
+    def remote_deletable_at(self) -> datetime | None:
+        """When the panel may delete the remote copy (None if there is no remote copy)."""
+        if not self.has_remote_copy:
+            return None
+        stored = self.remote_uploaded_at or self.finished_at or self.requested_at
+        return stored + REMOTE_PROTECTION
+
+    def remote_deletable(self, now: datetime) -> bool:
+        deletable_at = self.remote_deletable_at
+        return deletable_at is not None and now >= deletable_at
 
     def __repr__(self) -> str:
         return f"BackupRun(id={self.id!r}, database={self.database_name!r}, status={self.status!r})"

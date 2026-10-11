@@ -73,6 +73,8 @@ def run_out(run: BackupRun, store: LocalBackupStore) -> BackupRunOut:
         remote_deleted_at=run.remote_deleted_at,
         remote_error=run.remote_error,
         remote_available=run.has_remote_copy,
+        remote_deletable_at=run.remote_deletable_at,
+        remote_deletable=run.remote_deletable(utcnow()),
         download_available=file_available or run.has_remote_copy,
     )
 
@@ -131,8 +133,12 @@ def get_run(run_id: int, db: Session = Depends(get_db)) -> BackupRunOut:
 
 
 @router.delete("/backups/runs/{run_id}", status_code=204)
-def delete_run(run_id: int, db: Session = Depends(get_db)) -> Response:
-    BackupService(db, None, get_store()).delete(run_id)
+def delete_run(
+    run_id: int,
+    remote: bool = Query(default=False, description="Also delete the remote copy"),
+    db: Session = Depends(get_db),
+) -> Response:
+    BackupService(db, None, get_store()).delete(run_id, delete_remote=remote)
     return Response(status_code=204)
 
 

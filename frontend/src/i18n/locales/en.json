@@ -83,7 +83,9 @@
     "admin_exists": "This user is already registered for this messenger.",
     "admin_not_found": "This bot admin no longer exists.",
     "notifier_unavailable": "Notifications are not available right now.",
-    "scheduler_unavailable": "The scheduler is not running."
+    "scheduler_unavailable": "The scheduler is not running.",
+    "remote_protected": "The remote copy is protected: the panel can delete it only 7 days after upload.",
+    "nothing_to_delete": "Nothing can be deleted yet: only a protected remote copy is left."
   },
   "validation": {
     "required": "This field is required.",
@@ -252,7 +254,8 @@
     "scheduled": "Scheduled",
     "retryUpload": "Retry upload",
     "fileRemoved": "Removed locally",
-    "removedByRetention": "Local file removed by retention on {{date}}"
+    "removedByRetention": "Local file removed by retention on {{date}}",
+    "removedManually": "Local file deleted on {{date}}; the remote copy was kept"
   },
   "history": {
     "title": "Backup history",
@@ -271,7 +274,16 @@
     "total": "{{formattedCount}} backups",
     "deletedInstance": "{{name}} (deleted)",
     "sortBy": "Sort by {{column}}",
-    "subtitle": "Every backup run, with its status, size and checksum"
+    "subtitle": "Every backup run, with its status, size and checksum",
+    "deleteLocal": "Delete the backup file of “{{database}}” from {{date}} on the server?",
+    "deleteRemoteOnly": "Only the remote copy of “{{database}}” from {{date}} is left. Delete it?",
+    "deleteRemote": "Also delete the remote copy",
+    "deleteRemoteKept": "Unchecked: the remote copy is kept, and the backup stays in the history and can still be downloaded.",
+    "deleteRemoteWarning": "The copy in remote storage is deleted too. This cannot be undone.",
+    "deleteRemoteProtected": "Protected until {{date}}: the panel deletes remote copies only 7 days after upload. Until then they can only be deleted in the storage provider's own panel.",
+    "remoteProtectedShort": "Remote copy protected until {{date}}",
+    "remoteProtectedLabel": "Protected",
+    "deletedLocalKept": "The file on the server was deleted; the remote copy was kept."
   },
   "settings": {
     "title": "Backup settings",
@@ -425,7 +437,8 @@
     "target": {
       "local": "Local",
       "remote": "Remote"
-    }
+    },
+    "remoteMaxAgeHelp": "At least 7: remote copies are always kept for 7 days after upload, whatever the policy."
   },
   "policy": {
     "title": "Remote upload and retention",

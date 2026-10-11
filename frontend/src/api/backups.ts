@@ -32,12 +32,15 @@ export interface BackupRun {
   error_code: string | null;
   error_message: string | null;
   file_deleted_at: string | null;
-  file_deleted_reason: "retention" | null;
+  file_deleted_reason: "retention" | "manual" | null;
   remote_status: RemoteStatus | null;
   remote_uploaded_at: string | null;
   remote_deleted_at: string | null;
   remote_error: string | null;
   remote_available: boolean;
+  /** When the panel may delete the remote copy (7 days after upload). */
+  remote_deletable_at: string | null;
+  remote_deletable: boolean;
   /** Downloadable from local storage, or else streamed from the remote copy. */
   download_available: boolean;
 }
@@ -166,7 +169,8 @@ export function useStartBackup(instanceId: number) {
 export function useDeleteRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (runId: number) => apiFetch<void>(`/backups/runs/${runId}`, { method: "DELETE" }),
+    mutationFn: ({ runId, remote }: { runId: number; remote: boolean }) =>
+      apiFetch<void>(`/backups/runs/${runId}?remote=${remote}`, { method: "DELETE" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: backupKeys.all }),
   });
 }

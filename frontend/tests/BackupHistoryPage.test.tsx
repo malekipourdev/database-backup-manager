@@ -30,6 +30,8 @@ const base = {
   remote_deleted_at: null,
   remote_error: null,
   remote_available: false,
+  remote_deletable_at: null,
+  remote_deletable: false,
 };
 const items = [
   {
@@ -113,7 +115,8 @@ describe("BackupHistoryPage", () => {
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(
-          ([url, init]) => init?.method === "DELETE" && String(url) === "/api/backups/runs/11",
+          ([url, init]) =>
+            init?.method === "DELETE" && String(url) === "/api/backups/runs/11?remote=false",
         ),
       ).toBe(true),
     );

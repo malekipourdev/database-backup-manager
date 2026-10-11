@@ -282,3 +282,9 @@ input[type="checkbox"] {
 .mantine-SegmentedControl-root {
   align-self: flex-start;
 }
+
+/* Disabled checkboxes stay visible (e.g. a protected option with its explanation). */
+.mantine-Checkbox-input:disabled {
+  background: transparent;
+  border-color: var(--color-neutral-700);
+}

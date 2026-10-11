@@ -37,6 +37,8 @@ function makeRun(status: BackupRun["status"], extra: Partial<BackupRun> = {}): B
     remote_deleted_at: null,
     remote_error: null,
     remote_available: false,
+    remote_deletable_at: null,
+    remote_deletable: false,
     download_available: status === "success",
     ...extra,
   };
@@ -124,6 +126,7 @@ describe("remote copies and retention", () => {
       file_deleted_reason: "retention",
       remote_status: "success",
       remote_available: true,
+      remote_deletable_at: "2026-10-18T10:00:00Z",
       download_available: true,
     });
     mockFetch(() => page(run));
@@ -149,5 +152,90 @@ describe("remote copies and retention", () => {
     mockFetch(() => page(makeRun("success", { trigger: "schedule", schedule_id: 4 })));
     renderWithProviders(<Runs />);
     expect(await screen.findByText("Scheduled")).toBeInTheDocument();
+  });
+});
+
+describe("deleting a backup with a remote copy", () => {
+  const page = (run: BackupRun) => ({
+    status: 200,
+    body: { items: [run], total: 1, page: 1, page_size: 10 },
+  });
+  const uploaded = (extra: Partial<BackupRun> = {}) =>
+    makeRun("success", {
+      remote_status: "success",
+      remote_available: true,
+      remote_deletable_at: "2026-10-18T10:00:00Z",
+      ...extra,
+    });
+
+  async function openDialog() {
+    await userEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("keeps the remote copy by default", async () => {
+    const run = uploaded({ remote_deletable: true });
+    const fetchMock = mockFetch((url, init) =>
+      init.method === "DELETE"
+        ? { status: 204 }
+        : url.includes("status=success")
+          ? page(run)
+          : page(run),
+    );
+    renderWithProviders(<Runs />);
+    await openDialog();
+    const box = screen.getByTestId("delete-remote");
+    expect(box).not.toBeChecked();
+    expect(box).toBeEnabled();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete" }).at(-1)!);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, i]) => i?.method === "DELETE")).toBe(true),
+    );
+    const call = fetchMock.mock.calls.find(([, i]) => i?.method === "DELETE")!;
+    expect(String(call[0])).toBe("/api/backups/runs/1?remote=false");
+  });
+
+  it("can also delete the remote copy once it is old enough", async () => {
+    const run = uploaded({ remote_deletable: true });
+    const fetchMock = mockFetch((_url, init) =>
+      init.method === "DELETE" ? { status: 204 } : page(run),
+    );
+    renderWithProviders(<Runs />);
+    await openDialog();
+    await userEvent.click(screen.getByTestId("delete-remote"));
+    expect(screen.getByText(/This cannot be undone/)).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete" }).at(-1)!);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([u, i]) => i?.method === "DELETE" && String(u).endsWith("remote=true"),
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("disables the option with an explanation while the copy is protected", async () => {
+    mockFetch(() => page(uploaded({ remote_deletable: false })));
+    renderWithProviders(<Runs />);
+    await openDialog();
+    expect(screen.getByTestId("delete-remote")).toBeDisabled();
+    expect(screen.getByText(/only 7 days after upload/)).toBeInTheDocument();
+  });
+
+  it("offers no delete while only a protected remote copy is left", async () => {
+    mockFetch(() =>
+      page(
+        uploaded({
+          remote_deletable: false,
+          file_available: false,
+          file_deleted_at: "2026-10-12T10:00:00Z",
+          file_deleted_reason: "manual",
+        }),
+      ),
+    );
+    renderWithProviders(<Runs />);
+    expect(await screen.findByText(/Local file deleted on/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(screen.getByLabelText("Protected")).toBeInTheDocument();
   });
 });

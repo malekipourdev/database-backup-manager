@@ -123,7 +123,7 @@ export function DatabaseSelectorView({ list, saving, onSave, onRetry }: Database
             >
               <Checkbox
                 label={
-                  <span dir="ltr" className="mono">
+                  <span dir="ltr" className="mono cl-db-name" title={db.name}>
                     {db.name}
                   </span>
                 }

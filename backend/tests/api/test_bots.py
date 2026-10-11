@@ -252,8 +252,9 @@ def test_run_detail_file_and_delete(bale_bot, auth_client, probe_ok):
     assert int(document["chat_id"]) == BOT_ADMIN_ID
 
     confirm = press(bale_bot, f"rd:{run_id}")
-    assert f"rdc:{run_id}" in {b["callback_data"] for b in buttons(confirm)}
-    press(bale_bot, f"rdc:{run_id}")
+    # No remote copy: only the local delete is offered.
+    assert {b["callback_data"] for b in buttons(confirm)} == {f"rdc:{run_id}:0", f"r:{run_id}"}
+    press(bale_bot, f"rdc:{run_id}:0")
     assert auth_client.get(f"/api/backups/runs/{run_id}").status_code == 404
     assert not list(BACKUP_ROOT.rglob("*.sql.gz"))
 
@@ -325,3 +326,32 @@ def test_strangers_typing_words_get_their_id(bale_bot):
     assert "شناسه" in screen["text"]
     screen = say(bale_bot, "ZZZZ9999", user_id=STRANGER_ID)  # looks like a code, is not one
     assert "نامعتبر" in screen["text"]
+
+
+def test_bot_never_offers_deleting_a_protected_remote_copy(bale_bot, auth_client, s3, probe_ok):
+    from tests.api.test_remote_storage import age_remote, configure, objects
+
+    configure(auth_client, s3)
+    instance_id = create_instance(auth_client)
+    run_id = auth_client.post(
+        f"/api/instances/{instance_id}/backups", json={"scope": "single", "database": "ok_shop"}
+    ).json()["created"][0]["id"]
+    from tests.conftest import wait_for_remote
+
+    wait_for_run(auth_client, run_id)
+    wait_for_remote(auth_client, run_id)
+    confirm = press(bale_bot, f"rd:{run_id}")
+    assert {b["callback_data"] for b in buttons(confirm)} == {f"rdc:{run_id}:0", f"r:{run_id}"}
+    assert "۷ روز" in confirm["text"]
+    # Even a hand-made callback can't delete it.
+    refused = press(bale_bot, f"rdc:{run_id}:1")
+    assert "remote_protected" in refused["text"]
+    assert len(objects(s3)) == 1
+
+    press(bale_bot, f"rdc:{run_id}:0")
+    assert len(objects(s3)) == 1  # kept
+    age_remote(run_id, 8)
+    confirm = press(bale_bot, f"rd:{run_id}")
+    assert f"rdc:{run_id}:1" in {b["callback_data"] for b in buttons(confirm)}
+    press(bale_bot, f"rdc:{run_id}:1")
+    assert objects(s3) == []

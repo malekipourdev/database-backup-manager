@@ -402,7 +402,7 @@ a.cl-card:hover {
 /* Database picker tiles (instance page). */
 .cl-db-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
 }
 .cl-db-tile {
@@ -417,4 +417,19 @@ a.cl-card:hover {
 }
 .cl-db-tile .mantine-Checkbox-label {
   font-size: 13px;
+}
+/* Long names wrap inside their tile instead of running into the next one. */
+.cl-db-tile .mantine-Checkbox-root,
+.cl-db-tile .mantine-Checkbox-body,
+.cl-db-tile .mantine-Checkbox-labelWrapper {
+  min-width: 0;
+}
+.cl-db-tile .mantine-Checkbox-root {
+  flex: 1 1 auto;
+}
+.cl-db-name {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  text-align: start;
 }
