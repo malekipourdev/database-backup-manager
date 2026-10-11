@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: MySQL Backup Panel API — Auth and Instances
+  version: 0.1.0
+  description: |
+    All endpoints except `GET /api/health` and `POST /api/auth/login` require a valid
+    `mbp_session` cookie and return 401 `{"code": "not_authenticated"}` otherwise.
+    All state-changing requests (POST/PUT/PATCH/DELETE) require the header
+    `X-Requested-With: mbp`, otherwise 403 `{"code": "csrf_failed"}`.
+    Errors use the `Error` schema; `code` is stable and translated by the UI.
+    No response ever contains an instance password.
+servers:
+  - url: /api
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: mbp_session
+
+  schemas:
+    Error:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+        detail:
+          type: string
+          description: Optional extra information (never contains secrets).
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          description: Per-field validation error codes, e.g. {"port": "out_of_range"}.
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64 }
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+
+    Me:
+      type: object
+      required: [username]
+      properties:
+        username: { type: string }
+
+    InstanceCreate:
+      type: object
+      required: [name, host, port, username, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        host: { type: string, minLength: 1, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535, default: 3306 }
+        username: { type: string, minLength: 1, maxLength: 255 }
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+        notes: { type: string, maxLength: 2000, default: "" }
+
+    InstanceUpdate:
+      description: Partial update. Omitted or empty `password` keeps the stored password.
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        host: { type: string, minLength: 1, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string, minLength: 1, maxLength: 255 }
+        password: { type: string, maxLength: 1024, writeOnly: true }
+        notes: { type: string, maxLength: 2000 }
+
+    Instance:
+      type: object
+      required: [id, name, host, port, username, notes, has_password, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        notes: { type: string }
+        has_password: { type: boolean, const: true }
+        server_type: { type: [string, "null"], enum: [mysql, mariadb, null] }
+        server_version: { type: [string, "null"] }
+        last_test_at: { type: [string, "null"], format: date-time }
+        last_test_ok: { type: [boolean, "null"] }
+        last_test_error_code: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ConnectionParams:
+      description: Unsaved form values for testing before save.
+      type: object
+      required: [host, port, username, password]
+      properties:
+        host: { type: string, minLength: 1, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string, minLength: 1, maxLength: 255 }
+        password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+
+    ConnectionTestResult:
+      type: object
+      required: [ok, tested_at]
+      properties:
+        ok: { type: boolean }
+        tested_at: { type: string, format: date-time }
+        server_type: { type: [string, "null"], enum: [mysql, mariadb, null] }
+        server_version: { type: [string, "null"] }
+        error_code:
+          type: [string, "null"]
+          enum: [host_not_found, connection_refused, timeout, auth_rejected, server_error, null]
+        error_detail:
+          type: [string, "null"]
+          description: Sanitized server message for `server_error`; max 500 chars.
+
+    DatabaseEntry:
+      type: object
+      required: [name, is_system, selectable, selected, missing]
+      properties:
+        name: { type: string }
+        is_system: { type: boolean }
+        selectable: { type: boolean }
+        selected: { type: boolean }
+        missing: { type: boolean, description: Selected but not present on the server. }
+
+    DatabaseList:
+      type: object
+      required: [reachable, databases]
+      properties:
+        reachable: { type: boolean }
+        error_code: { type: [string, "null"] }
+        error_detail: { type: [string, "null"] }
+        databases:
+          type: array
+          description: |
+            When unreachable, contains only the stored selections (all with missing=false,
+            since presence is unknown).
+          items: { $ref: "#/components/schemas/DatabaseEntry" }
+
+    SelectionUpdate:
+      type: object
+      required: [databases]
+      properties:
+        databases:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+
+  responses:
+    Unauthorized:
+      description: No valid session.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Instance not found (`code`=`instance_not_found`).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ValidationError:
+      description: Validation failed (`code`=`validation_error`, details in `fields`).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+security:
+  - session: []
+
+paths:
+  /health:
+    get:
+      summary: Liveness check (no data exposed)
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { const: ok } } }
+
+  /auth/login:
+    post:
+      summary: Sign in
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LoginRequest" } } }
+      responses:
+        "200":
+          description: Signed in; sets `mbp_session` cookie (HttpOnly, SameSite=Strict).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } }
+        "401":
+          description: |
+            `invalid_credentials` for wrong username, wrong password, or locked out
+            (identical response in all three cases).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /auth/logout:
+    post:
+      summary: Sign out (deletes session, clears cookie)
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/me:
+    get:
+      summary: Current admin (used by the SPA to check session)
+      responses:
+        "200":
+          description: Signed in
+          content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /instances:
+    get:
+      summary: List instances (ordered by name)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Instance" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Create instance
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InstanceCreate" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Instance" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`name_taken`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /instances/test-connection:
+    post:
+      summary: Test unsaved connection parameters (nothing is stored)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConnectionParams" } } }
+      responses:
+        "200":
+          description: Test completed (success or classified failure)
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ConnectionTestResult" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /instances/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: Get instance
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Instance" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update instance
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InstanceUpdate" } } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/Instance" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`name_taken`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      summary: Delete instance and its selections
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /instances/{id}/test-connection:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Test a saved instance; records type/version and outcome on the instance
+      responses:
+        "200":
+          description: Test completed (success or classified failure)
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ConnectionTestResult" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /instances/{id}/databases:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: List databases on the server merged with stored selections
+      description: Returns all entries including system schemas; the UI hides system ones by default.
+      responses:
+        "200":
+          description: OK (check `reachable`)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DatabaseList" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /instances/{id}/selection:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Replace the set of databases included in backups
+      description: |
+        Rejects `information_schema`, `performance_schema`, `sys` (`not_selectable`).
+        Rejects names neither on the server nor already selected (`unknown_database`).
+        If the server is unreachable, only removals and already-selected names are accepted.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SelectionUpdate" } } }
+      responses:
+        "200":
+          description: Saved; returns the updated listing
+          content: { application/json: { schema: { $ref: "#/components/schemas/DatabaseList" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
