@@ -15,6 +15,9 @@ The UI is available in Persian (right-to-left) and English.
 - **notifications and alerts**: failures, missing backups, low disk space and a daily summary,
   sent to Bale, Telegram and a signed webhook, with configurable rules and a history
 - **Bale and Telegram bots**: manage backups from a chat with inline buttons
+- **two-step sign-in** with Google Authenticator or any other TOTP app (optional)
+- **containers** (optional): see the server's Docker containers, their usage and logs, start,
+  stop and restart them from the panel or a bot, and get alerts when one goes down
 
 ## Quick start
 
@@ -104,6 +107,10 @@ a trusted private network sits in front of the panel.
 | `MBP_MONITOR_INTERVAL_MINUTES` | `10` | How often missing backups and disk space are checked for alerts. `0` turns these checks off. |
 | `MBP_BOTS_ENABLED` | `true` | Master switch for the Bale and Telegram bots, for example `false` on a standby copy of the panel. Bots are configured in the panel. |
 | `MBP_SCHEDULE_MISFIRE_GRACE_SECONDS` | `300` | A scheduled backup whose time passed while the panel was down still starts if the panel is back within this many seconds. Later ones are skipped until the next scheduled time. |
+| `COMPOSE_PROFILES` | (none) | Set to `containers` to run the agent for [container management](#containers). |
+| `MBP_DOCKER_GID` | `999` | The group ID of the Docker socket on the server (`stat -c %g /var/run/docker.sock`); the agent needs it to use the socket. |
+| `MBP_DOCKER_SOCKET` | `/var/run/docker.sock` | The Docker socket on the server, e.g. for rootless Docker or Podman (`/run/user/1000/podman/podman.sock`). |
+| `MBP_CONTAINER_MONITOR_SECONDS` | `60` | How often containers and server resources are checked for alerts. `0` turns these checks off. |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
 ## Connecting to your database servers
@@ -397,6 +404,8 @@ needs no public address, domain or open port.
   the file, if you allow it.
 - **Schedules:** enable, disable, run now.
 - **Retention:** preview what would be deleted, then apply.
+- **Containers:** state, usage and server status; logs (if you allow it); start, stop and
+  restart, each confirmed with a Google Authenticator code (see [Containers](#containers)).
 - **Notifications and language:** each admin picks their alert level (everything, warnings and
   errors, errors only, off) and their language.
 
@@ -434,6 +443,91 @@ The dump has no `CREATE DATABASE`/`USE`, so you can restore it under another nam
 MariaDB stores trigger definitions exactly as written. A trigger that was created with a schema
 prefix (`CREATE TRIGGER olddb.t …`) is recreated in that original schema. In that case, restore
 under the original name.
+
+## Containers
+
+See and control the Docker containers on the panel's server: their state, CPU and memory use,
+logs, and start, stop and restart, from the panel and from the Bale or Telegram bot. Alerts
+tell you when a container goes down, keeps restarting, fails its health check, uses too much,
+or when the server runs low on memory or disk.
+
+This is **off by default**. It needs one more container, the **agent**: the only part of the
+panel that can talk to Docker (`docker.sock`). Access to `docker.sock` is equivalent to root
+on the server, so the agent is kept small and strict:
+
+- It listens only on the panel's internal Docker network, publishes no port, and answers only
+  the panel's backend (with a secret derived from `MBP_ENCRYPTION_KEY`).
+- It knows a fixed list of operations: list, details, usage, logs, start, stop, restart. It
+  can't run commands in containers, create or remove containers, or pull images.
+- It never returns the values of environment variables (they often hold passwords); the panel
+  shows their names only.
+- It refuses to stop or restart the panel's own containers.
+- It runs with a read-only filesystem, no Linux capabilities and `no-new-privileges`.
+
+### Turn it on
+
+In the panel's folder on the server:
+
+```bash
+echo "COMPOSE_PROFILES=containers" >> .env
+echo "MBP_DOCKER_GID=$(stat -c %g /var/run/docker.sock)" >> .env
+docker compose up -d
+```
+
+Then open **Containers** in the panel. If it says the agent may not use `docker.sock`, check
+`MBP_DOCKER_GID`. For rootless Docker or Podman, also set `MBP_DOCKER_SOCKET` to the socket's
+path.
+
+To turn it off again, remove `COMPOSE_PROFILES=containers` from `.env` and run
+`docker compose up -d --remove-orphans`.
+
+### What you can do
+
+- **Containers tab:** every container, grouped by compose project, with problems first;
+  state, health, uptime or exit code, CPU, RAM and automatic restarts, refreshed every 5
+  seconds. Filters (running, problems, stopped) and search. Server CPU, RAM and Docker disk
+  at the top.
+- **Details:** image, ports, networks, volumes, restart policy, the last health check output,
+  and the names of the environment variables. **Logs:** the last 100 to 5,000 lines, stdout
+  and stderr marked, with filter, follow and download.
+- **Start, stop, restart.** Stop and restart ask for confirmation.
+- **Activity tab:** every start, stop and restart asked for, from the panel or a bot, by whom,
+  and the result.
+- **Settings tab:**
+  - **Read-only mode:** watch only; no container can be started, stopped or restarted.
+  - **Hidden containers:** names or patterns (`vault*`) the panel doesn't show at all.
+  - **Locked containers:** shown, but never controlled from the panel or the bots.
+  - **Logs in the bots:** off by default, because logs can hold sensitive data and showing
+    them in a chat copies them to the messenger's servers.
+  - **Alerts:** which containers are watched, and the limits for container CPU and RAM,
+    restart loops, server RAM and Docker disk. `0` turns a check off.
+
+### Alerts
+
+Checked every minute (`MBP_CONTAINER_MONITOR_SECONDS`). Each alert is sent once when the
+problem starts and once when it clears. Turn each one on or off, and choose its channels, on
+the **Notifications** page.
+
+| Alert | When |
+|-------|------|
+| Container went down | It exited with an error, or was killed for running out of memory. Not when it was stopped on purpose (`docker stop`, or from the panel). |
+| Restart loop | Its restart policy restarted it 3 times within 10 minutes (adjustable). |
+| Unhealthy | Its health check fails. |
+| High usage | Its CPU or RAM (as % of its limit) stays above the limit for two checks in a row. |
+| Server resources | The server's RAM or Docker disk is above the limit. |
+| Agent unreachable | The agent worked and then stopped answering. |
+
+### From the bot
+
+**Containers** in the bot menu lists them with problems first, shows details, usage and the
+server status, and, if allowed in the settings, the last 30 log lines.
+
+**Start, stop and restart from the bot need a Google Authenticator code.** The bot asks for
+the current 6-digit code of a panel account that has [two-step
+verification](#two-step-verification-google-authenticator) turned on, and the code must arrive
+within 2 minutes. If nobody has turned on two-step verification, containers can only be
+watched from the bot. After 5 wrong codes in 15 minutes, container control from the bot is
+blocked for 15 minutes. So a stolen or borrowed messenger account can't stop your services.
 
 ## Two-step verification (Google Authenticator)
 
@@ -474,6 +568,8 @@ Then sign in with the password and set it up again.
   two-step verification step) and `/api/health`.
 - Optional two-step verification with an authenticator app (see
   [Two-step verification](#two-step-verification-google-authenticator)).
+- `docker.sock` is never given to the backend. Only the optional agent has it; see
+  [Containers](#containers) for its limits.
 - Stored database passwords and the S3 secret key are encrypted and are never returned by the API
   or written to logs. An edit form shows only that a secret is stored.
 - Database names that start with `-` or contain control characters are rejected, so a name can

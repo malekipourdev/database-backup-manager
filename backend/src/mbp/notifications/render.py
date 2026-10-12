@@ -45,6 +45,62 @@ def render(event: Event, lang: str, zone: ZoneInfo) -> str:
             total=format_size(p.get("total"), lang),
             threshold=str(p.get("threshold", "")),
         )
+    if kind == "container_down":
+        oom = t(lang, "event_container_down_oom") if p.get("oom") else ""
+        code = digits(str(p.get("exit_code", "")), lang)
+        return t(lang, "event_container_down", name=p.get("name", ""), code=code, oom=oom)
+    if kind == "container_restarting":
+        return t(
+            lang,
+            "event_container_restarting",
+            name=p.get("name", ""),
+            n=digits(str(p.get("restarts", "")), lang),
+            minutes=digits(str(p.get("minutes", "")), lang),
+        )
+    if kind == "container_unhealthy":
+        return t(lang, "event_container_unhealthy", name=p.get("name", ""))
+    if kind == "container_resources":
+        parts = []
+        if p.get("cpu") is not None:
+            parts.append(t(lang, "event_usage_cpu", value=digits(f"{p['cpu']:.0f}", lang)))
+        if p.get("memory_percent") is not None:
+            parts.append(
+                t(
+                    lang,
+                    "event_usage_memory",
+                    value=digits(f"{p['memory_percent']:.0f}", lang),
+                    used=format_size(p.get("memory_usage"), lang),
+                    limit=format_size(p.get("memory_limit"), lang),
+                )
+            )
+        usage = ("، " if lang == "fa" else ", ").join(parts)
+        return t(lang, "event_container_resources", name=p.get("name", ""), usage=usage)
+    if kind == "host_resources":
+        return t(
+            lang,
+            f"event_host_{p.get('kind', 'memory')}",
+            percent=digits(f"{p.get('percent', 0):.0f}", lang),
+            used=format_size(p.get("used"), lang),
+            total=format_size(p.get("total"), lang),
+            threshold=digits(str(p.get("threshold", "")), lang),
+        )
+    if kind == "agent_unreachable":
+        return t(lang, "event_agent_unreachable", code=p.get("code", ""))
+    if kind == "recovered" and p.get("kind") in (
+        "container_down",
+        "container_restarting",
+        "container_unhealthy",
+        "container_resources",
+        "host_memory",
+        "host_disk",
+        "agent",
+    ):
+        return t(
+            lang,
+            f"event_recovered_{p['kind']}",
+            name=p.get("name", ""),
+            percent=digits(f"{p.get('percent', 0):.0f}", lang),
+        )
     if kind == "recovered":
         if p.get("kind") == "disk_low":
             return t(lang, "event_recovered_disk", free=format_size(p.get("free"), lang))

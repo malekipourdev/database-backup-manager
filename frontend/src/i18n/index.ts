@@ -67,6 +67,14 @@ export function formatDateTime(iso: string, lang: string): string {
   }).format(new Date(iso));
 }
 
+/** A percentage given as 0-100, e.g. "12.5%" or "۱۲٫۵٪". */
+export function formatPercent(value: number, lang: string): string {
+  return new Intl.NumberFormat(localeOf(lang), {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(value / 100);
+}
+
 export function formatNumber(value: number, lang: string): string {
   return new Intl.NumberFormat(localeOf(lang)).format(value);
 }

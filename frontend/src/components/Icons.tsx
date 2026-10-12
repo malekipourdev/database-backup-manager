@@ -1,6 +1,7 @@
 // The panel's icon set (Phosphor, as in the design), re-exported in one place.
 export {
   Archive,
+  ArrowClockwise,
   ArrowLeft,
   ArrowRight,
   Bell,
@@ -11,6 +12,7 @@ export {
   CloudArrowUp,
   CloudCheck,
   CloudSlash,
+  Cube,
   ClockCountdown,
   Database,
   DownloadSimple,
@@ -18,11 +20,13 @@ export {
   HardDrives,
   Lock,
   PencilSimple,
+  Play,
   Plus,
   PlugsConnected,
   Robot,
   ShieldCheck,
   SlidersHorizontal,
   SignOut,
+  Stop,
   Trash,
 } from "@phosphor-icons/react";

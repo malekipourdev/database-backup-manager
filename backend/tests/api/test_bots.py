@@ -51,10 +51,11 @@ def press(fake, data: str):
     return screen
 
 
-def say(fake, text: str, user_id: int = BOT_ADMIN_ID):
+def say(fake, text: str, user_id: int = BOT_ADMIN_ID, messages: int = 1):
+    """Send a message; returns the last of the `messages` answers it is expected to get."""
     before = count(fake)
     fake.push_message(user_id, text)
-    wait_until(lambda: count(fake) > before, message=f"answer to {text}")
+    wait_until(lambda: count(fake) >= before + messages, message=f"answer to {text}")
     return last_screen(fake, before)
 
 
@@ -156,7 +157,8 @@ def test_link_code_registers_the_sender(auth_client, bale_bot):
     code = auth_client.post("/api/bots/bale/link-codes", json={"display_name": "Reza"}).json()[
         "code"
     ]
-    screen = say(bale_bot, f"/start {code}", user_id=555)
+    # Two answers: "linked", then the menu.
+    screen = say(bale_bot, f"/start {code}", user_id=555, messages=2)
     assert "منو" in screen["text"] or "MySQL" in screen["text"]
     admins = {a["user_id"]: a for a in auth_client.get("/api/bot-admins").json()}
     assert admins[555]["display_name"] == "Reza"

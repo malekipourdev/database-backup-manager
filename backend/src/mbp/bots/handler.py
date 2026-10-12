@@ -23,6 +23,7 @@ from mbp.api.errors import ApiError
 from mbp.api.schemas import ScheduleIn
 from mbp.backups.store import LocalBackupStore
 from mbp.bots.api import BotApi, BotApiError, Keyboard
+from mbp.bots.containers import ContainerMenu
 from mbp.bots.texts import format_duration, format_size, format_time, t
 from mbp.db import utcnow
 from mbp.models import BackupRun, BotAdmin
@@ -69,7 +70,7 @@ def button(text: str, data: str) -> dict[str, str]:
     return {"text": text, "callback_data": data}
 
 
-class BotHandler:
+class BotHandler(ContainerMenu):
     def __init__(
         self,
         platform: str,
@@ -79,6 +80,7 @@ class BotHandler:
         store: LocalBackupStore,
         *,
         scheduler=None,
+        agent=None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self.platform = platform
@@ -92,6 +94,8 @@ class BotHandler:
         # (database names can be 64 characters, i.e. up to 256 bytes).
         self._tokens: dict[str, tuple[float, tuple]] = {}
         self._lock = threading.Lock()
+        # `agent` returns the current Docker agent client (or None).
+        self._init_containers(agent)
 
     # --- entry points ---
 
@@ -150,7 +154,16 @@ class BotHandler:
                 )
                 admin = linked
             ctx = self._ctx(db, admin)
-            screen = self.status(db, ctx) if text.startswith("/status") else self.menu(ctx)
+            screen = None
+            if self.pending_action(chat_id) is not None:
+                try:
+                    screen = self.answer_code(db, ctx, chat_id, text)
+                except ApiError as exc:
+                    screen = Screen(
+                        t(ctx.lang, "error", message=self._error(ctx, exc.code)), self._home(ctx)
+                    )
+            if screen is None:
+                screen = self.status(db, ctx) if text.startswith("/status") else self.menu(ctx)
             db.commit()
         self.api.send_message(chat_id, screen.text, screen.keyboard)
 
@@ -228,6 +241,14 @@ class BotHandler:
             "ns": lambda: self.settings(db, ctx),
             "nl": lambda: self.set_level(db, ctx, args[0] if args else ""),
             "lg": lambda: self.toggle_language(db, ctx),
+            "cl": lambda: self.containers_list(db, ctx, num(0)),
+            "cs": lambda: self.server_status(db, ctx),
+            "c": lambda: self.container_view(db, ctx, args[0] if args else ""),
+            "cg": lambda: self.container_logs(db, ctx, args[0] if args else ""),
+            "ca": lambda: self.ask_action(
+                db, ctx, args[0] if args else "", args[1] if len(args) > 1 else "", chat_id
+            ),
+            "cx": lambda: self.cancel_action(db, ctx, args[0] if args else "", chat_id),
         }
         action = routes.get(head)
         if action is None:
@@ -278,7 +299,8 @@ class BotHandler:
             [
                 [button(t(lang, "btn_status"), "st"), button(t(lang, "btn_instances"), "il:0")],
                 [button(t(lang, "btn_runs"), "rl:0:0"), button(t(lang, "btn_schedules"), "sl:0")],
-                [button(t(lang, "btn_retention"), "rt"), button(t(lang, "btn_settings"), "ns")],
+                [button(t(lang, "btn_retention"), "rt"), button(t(lang, "btn_containers"), "cl:0")],
+                [button(t(lang, "btn_settings"), "ns")],
             ],
         )
 

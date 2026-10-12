@@ -2,6 +2,7 @@ from mbp.models.admin import AdminAccount
 from mbp.models.backup_run import BackupRun
 from mbp.models.backup_settings import BackupSettings
 from mbp.models.bot import BotAdmin, BotLinkCode, BotSettings
+from mbp.models.container import ContainerAction, ContainerSettings
 from mbp.models.instance import DbInstance
 from mbp.models.login_attempt import LoginAttempt
 from mbp.models.notification import AlertState, NotificationLog, NotificationSettings
@@ -20,6 +21,8 @@ __all__ = [
     "BotAdmin",
     "BotLinkCode",
     "BotSettings",
+    "ContainerAction",
+    "ContainerSettings",
     "DbInstance",
     "DbSelection",
     "LoginAttempt",
