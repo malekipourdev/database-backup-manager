@@ -24,7 +24,17 @@ The UI is available in Persian (right-to-left) and English.
 Requirements: a Linux server with Docker and Compose v2 (Podman with `podman compose` also
 works, see [Podman](#podman)), plus `openssl`.
 
-1. Create `.env` with a generated encryption key and admin password. Run this on the server,
+1. Get the code onto the server:
+
+   ```bash
+   git clone https://github.com/malekipourdev/database-backup-manager.git mysql-backup-panel
+   cd mysql-backup-panel
+   ```
+
+   For a private repository, use a GitHub deploy key or a personal access token, or copy the
+   folder to the server with `scp`/`rsync`.
+
+2. Create `.env` with a generated encryption key and admin password. Run this on the server,
    in the project directory:
 
    ```bash
@@ -49,22 +59,28 @@ works, see [Podman](#podman)), plus `openssl`.
    encrypts the stored database passwords; if you lose it, you'll have to re-enter every
    password.
 
-2. Start the panel:
+3. Start the panel:
 
    ```bash
    docker compose up -d --build
    ```
 
-3. Check that the panel listens on the loopback interface only:
+4. Check that the panel listens on the loopback interface only:
 
    ```bash
    ss -tlnp | grep 8080   # expect 127.0.0.1:8080, not 0.0.0.0:8080
    ```
 
-4. Open the panel through an SSH tunnel (see the next section) and sign in.
+5. Open the panel through an SSH tunnel (see the next section) and sign in.
 
-5. After your first successful sign-in, you can delete the `MBP_ADMIN_PASSWORD` line from `.env`.
+6. After your first successful sign-in, you can delete the `MBP_ADMIN_PASSWORD` line from `.env`.
    It is only used to create the admin on first start.
+
+Optional features you can turn on later: [remote storage](#remote-storage-s3) (with a
+[step-by-step ArvanCloud guide](#arvancloud-object-storage-step-by-step)), [bots](#bale-and-telegram-bots),
+[two-step verification](#two-step-verification-google-authenticator) and
+[containers](#containers). To keep the panel up to date and safe, see
+[Maintenance](#maintenance).
 
 ## Accessing the panel over an SSH tunnel
 
@@ -324,6 +340,38 @@ retention or lifecycle rule on the bucket in your storage provider.
 To use an access key with minimal permissions, allow `s3:PutObject`, `s3:GetObject`,
 `s3:DeleteObject` and `s3:ListBucket` on the bucket.
 
+#### ArvanCloud Object Storage, step by step
+
+1. In the ArvanCloud console, open **Object Storage** and create a bucket (for example
+   `airplus`). Keep it **private**.
+2. Under **Access keys**, create a key pair and copy the **Access key** and **Secret key**.
+   The secret is shown once. Never paste it into a chat or a ticket; enter it only in the panel.
+3. Note the **endpoint** of the bucket's region, shown in the console, for example
+   `https://s3.ir-thr-at1.arvanstorage.ir` (Tehran). The region name is the middle part, for
+   example `ir-thr-at1`.
+4. In the panel, open **Settings → Remote storage** and fill in:
+
+   | Field | Value |
+   |-------|-------|
+   | Endpoint URL | `https://s3.ir-thr-at1.arvanstorage.ir` (your region's endpoint) |
+   | Region | `ir-thr-at1` |
+   | Bucket | `airplus` (the bucket name only, no `s3://` and no slashes) |
+   | Key prefix | `mysql-backup` (a "folder" inside the bucket; optional) |
+   | Access key / Secret key | from step 2 |
+   | Use path-style addressing | on |
+
+   An address like `s3://airplus/mysql-backup/` means bucket `airplus`, prefix
+   `mysql-backup`.
+5. Use **Test connection**. It must succeed before you go on.
+6. Turn on **Upload backups to remote storage** and **Save**. Without this switch, backups
+   stay local only, even when the connection test succeeds.
+7. Run a backup. Its row shows the remote status ("Stored remotely" when done), and the file
+   appears in the bucket under the prefix, with the same path and name as on the server (see
+   **Settings → Backups** for the naming pattern).
+
+If the test succeeds but nothing is uploaded, check step 6 and the server's own setting
+(**Always / Never / Global setting**) on its page.
+
 ### Retention
 
 Under **Settings → Retention**, set separate rules for local files and remote copies:
@@ -560,7 +608,98 @@ two-step verification off for an admin:
 docker compose exec backend python -m mbp.cli disable-2fa admin
 ```
 
-Then sign in with the password and set it up again.
+Then sign in with the password and set it up again. For a forgotten password, see
+[Forgotten password or locked out](#forgotten-password-or-locked-out).
+
+## Maintenance
+
+### Updating the panel
+
+In the panel's folder on the server:
+
+```bash
+git pull
+docker compose up -d --build
+docker image prune -f   # optional: remove the old images
+```
+
+Database migrations run automatically when the backend starts; your settings, servers,
+schedules and backups are kept. Take a [backup of the panel](#backing-up-the-panel-itself)
+first if the update is large. If the agent is on (`COMPOSE_PROFILES=containers`), it is
+updated by the same command.
+
+### Backing up the panel itself
+
+Everything the panel knows is in two places:
+
+- **`.env`**: above all `MBP_ENCRYPTION_KEY`. Without it, the stored database passwords,
+  storage keys and bot tokens can't be decrypted. Keep a copy somewhere safe, away from the
+  server (a password manager, for example).
+- **The `mbp-data` volume**: the panel's own database (servers, schedules, history,
+  settings), when `MBP_DATABASE_URL` is the default SQLite. With PostgreSQL or MySQL, back up
+  that database instead.
+
+The backup files themselves are in the `mbp-backups` volume; with remote storage on, they
+are also in your bucket.
+
+Save the panel's database to a file (the backend is stopped for a moment so the copy is
+consistent):
+
+```bash
+docker compose stop backend
+docker compose run --rm --no-deps -T --entrypoint tar backend czf - -C /data . > mbp-data-$(date +%F).tgz
+docker compose start backend
+```
+
+### Moving to another server
+
+1. On the old server, make a backup as above and copy `.env` and the `.tgz` file to the new
+   server.
+2. On the new server, [get the code](#quick-start), put the **same** `.env` in its folder
+   (same `MBP_ENCRYPTION_KEY`), and restore:
+
+   ```bash
+   docker compose up --no-start --build
+   docker compose run --rm --no-deps -T --entrypoint tar backend xzf - -C /data < mbp-data-2026-10-12.tgz
+   docker compose up -d
+   ```
+
+3. Check that the database servers are reachable from the new server (**Test connection** on
+   each server's page). Local backup files are not moved by this; copy the `mbp-backups`
+   volume the same way (`-C /backups`) if you need them, or download them from remote
+   storage.
+
+### Forgotten password or locked out
+
+Run these on the server, in the panel's folder:
+
+```bash
+# Who are the admins?
+docker compose exec backend python -m mbp.cli list-admins
+
+# Set a new password (asked twice; at least 10 characters)
+docker compose exec backend python -m mbp.cli reset-password admin
+
+# ...or generate a random one and print it
+docker compose exec backend python -m mbp.cli reset-password admin --generate
+
+# Lost the phone and the recovery codes: turn two-step verification off
+docker compose exec backend python -m mbp.cli disable-2fa admin
+```
+
+`reset-password` also ends all of that admin's sessions and lifts a lockout from failed
+sign-ins. It does not turn off two-step verification; use `disable-2fa` for that. A lockout
+also ends by itself after 15 minutes.
+
+### Uninstalling
+
+```bash
+docker compose --profile containers down   # stop and remove the containers; data is kept
+docker compose --profile containers down -v # also delete the volumes: the panel's database and local backup files!
+```
+
+Copies in remote storage are not touched; delete them in your storage provider if you no
+longer need them. Then remove the panel's folder.
 
 ## Security notes
 
