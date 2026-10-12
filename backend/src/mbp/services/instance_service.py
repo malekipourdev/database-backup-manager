@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from mbp.api.errors import ApiError
 from mbp.api.schemas import InstanceCreate, InstanceUpdate
 from mbp.logging import register_secret
-from mbp.models import DbInstance
+from mbp.models import DbInstance, Server
 from mbp.repositories.instance_repository import InstanceRepository
 from mbp.security import crypto
-from mbp.services import mysql_probe
+from mbp.servers import db_access
 from mbp.services.mysql_probe import ConnParams, ProbeResult
 
 CONNECTION_FIELDS = ("host", "port", "username", "password")
@@ -27,6 +27,15 @@ def conn_params(instance: DbInstance) -> ConnParams:
         username=instance.username,
         password=get_decrypted_password(instance),
     )
+
+
+def check_server(db: Session, server_id: int | None) -> None:
+    """A database can be reached through another server's agent, not the local one's."""
+    if server_id is None:
+        return
+    server = db.get(Server, server_id)
+    if server is None or server.is_local:
+        raise ApiError(422, "validation_error", fields={"server_id": "invalid_server"})
 
 
 def _clear_detection(instance: DbInstance) -> None:
@@ -53,6 +62,7 @@ class InstanceService:
 
     def create(self, data: InstanceCreate) -> DbInstance:
         self._ensure_name_free(data.name)
+        check_server(self.db, data.server_id)
         password = data.password.get_secret_value()
         register_secret(password)
         instance = DbInstance(
@@ -63,6 +73,7 @@ class InstanceService:
             username=data.username,
             password_encrypted=crypto.encrypt(password),
             notes=data.notes,
+            server_id=data.server_id,
         )
         self.repo.add(instance)
         self._commit()
@@ -72,6 +83,10 @@ class InstanceService:
         instance = self.get(instance_id)
         changes = data.model_dump(exclude_unset=True, exclude_none=True)
         connection_changed = False
+        if "server_id" in data.model_fields_set and data.server_id != instance.server_id:
+            check_server(self.db, data.server_id)
+            instance.server_id = data.server_id
+            connection_changed = True
 
         if "name" in changes:
             self._ensure_name_free(changes["name"], exclude_id=instance.id)
@@ -101,10 +116,10 @@ class InstanceService:
 
     def test_saved(self, instance_id: int) -> ProbeResult:
         """Test a saved instance and record the outcome on it."""
-        params = conn_params(self.get(instance_id))
+        params, server_id = self._target(instance_id)
         # Release the DB transaction while the (slow) network test runs.
         self.db.commit()
-        result = mysql_probe.test_connection(params)
+        result = db_access.test_connection(server_id, params)
 
         instance = self.repo.get(instance_id)
         if instance is None:
@@ -118,6 +133,11 @@ class InstanceService:
             instance.server_version = result.server_version
         self.db.commit()
         return result
+
+    def _target(self, instance_id: int) -> tuple[ConnParams, int | None]:
+        """Connection details, without keeping the instance (it may be deleted meanwhile)."""
+        instance = self.get(instance_id)
+        return conn_params(instance), instance.server_id
 
     def _ensure_name_free(self, name: str, exclude_id: int | None = None) -> None:
         existing = self.repo.get_by_name_normalized(name.lower())

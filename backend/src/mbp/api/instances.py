@@ -11,8 +11,8 @@ from mbp.api.schemas import (
     SelectionUpdate,
 )
 from mbp.db import get_db
-from mbp.services import mysql_probe
-from mbp.services.instance_service import InstanceService
+from mbp.servers import db_access
+from mbp.services.instance_service import InstanceService, check_server
 from mbp.services.mysql_probe import ConnParams, ProbeResult
 from mbp.services.selection_service import SelectionService
 
@@ -35,14 +35,18 @@ def create_instance(body: InstanceCreate, db: Session = Depends(get_db)) -> Inst
 
 # Declared before the /instances/{instance_id} routes.
 @router.post("/instances/test-connection", response_model=ConnectionTestResult)
-def test_unsaved_connection(body: ConnectionParams) -> ConnectionTestResult:
+def test_unsaved_connection(
+    body: ConnectionParams, db: Session = Depends(get_db)
+) -> ConnectionTestResult:
+    check_server(db, body.server_id)
+    db.commit()
     params = ConnParams(
         host=body.host,
         port=body.port,
         username=body.username,
         password=body.password.get_secret_value(),
     )
-    return _result(mysql_probe.test_connection(params))
+    return _result(db_access.test_connection(body.server_id, params))
 
 
 @router.get("/instances/{instance_id}", response_model=Instance)

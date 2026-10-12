@@ -17,6 +17,7 @@ import { InstancesPage } from "./pages/InstancesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
+import { ServersPage } from "./pages/ServersPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BotsPage } from "./pages/BotsPage";
 import { ContainersPage } from "./pages/ContainersPage";
@@ -90,6 +91,7 @@ export function AppRoutes() {
           <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/bots" element={<BotsPage />} />
+          <Route path="/servers" element={<ServersPage />} />
           <Route path="/containers" element={<ContainersPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/new" element={<ProjectFormPage />} />

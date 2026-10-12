@@ -1,4 +1,4 @@
-"""The bot's containers menu: list, details, logs, server status, and confirmed actions.
+"""The bot's containers menu: servers, list, details, logs, server status, confirmed actions.
 
 Viewing is open to every bot admin. Start, stop and restart ask for a fresh Google
 Authenticator code of a panel account (two-step verification must be on in the panel), so
@@ -19,8 +19,9 @@ from mbp.api.errors import ApiError
 from mbp.bots.api import Keyboard
 from mbp.bots.texts import digits, format_size, t
 from mbp.containers.service import ContainerService
-from mbp.models import AdminAccount, BotAdmin
+from mbp.models import AdminAccount, BotAdmin, Server
 from mbp.repositories.container_repository import ContainerRepository
+from mbp.repositories.server_repository import ServerRepository
 from mbp.security import crypto, totp
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class PendingAction:
     action: str
     expires: float
     tries: int = 0
+    server_id: int = 0
 
 
 def _icon(container: dict) -> str:
@@ -77,36 +79,75 @@ def _percent(value: float | None, lang: str) -> str:
 class ContainerMenu:
     """Mixed into BotHandler; uses its api, platform, clock, _token and helpers."""
 
-    def _init_containers(self, agent_provider) -> None:
-        self.agent_provider = agent_provider
+    def _init_containers(self, agents_provider) -> None:
+        # Returns the app's AgentRegistry (or None).
+        self.agents_provider = agents_provider
         self._pending: dict[int, PendingAction] = {}
         self._failures: dict[int, list[float]] = {}
         self._pending_lock = threading.Lock()
 
-    def _containers(self, db: Session) -> ContainerService:
-        agent = self.agent_provider() if self.agent_provider else None
-        if agent is None:
-            raise ApiError(503, "agent_unreachable")
-        return ContainerService(db, agent)
+    def _server(self, db: Session, server_id: int | None) -> Server:
+        repo = ServerRepository(db)
+        server = repo.get(server_id) if server_id else repo.local()
+        if server is None:
+            raise ApiError(404, "server_not_found")
+        return server
 
-    def _unavailable(self, ctx, exc: ApiError):
+    def _containers(self, db: Session, server_id: int | None) -> ContainerService:
+        registry = self.agents_provider() if self.agents_provider else None
+        if registry is None:
+            raise ApiError(503, "agent_unreachable")
+        server = self._server(db, server_id)
+        return ContainerService(db, registry.for_server(server), server)
+
+    def _unavailable(self, ctx, exc: ApiError, server_id: int):
         from mbp.bots.handler import Screen, button
 
         return Screen(
             t(ctx.lang, "containers_unavailable", reason=self._error(ctx, exc.code)),
-            [[button(t(ctx.lang, "btn_refresh"), "cl:0"), button(t(ctx.lang, "btn_menu"), "m")]],
+            [
+                [
+                    button(t(ctx.lang, "btn_refresh"), f"cl:0:{server_id}"),
+                    button(t(ctx.lang, "btn_menu"), "m"),
+                ]
+            ],
         )
 
     # --- screens ---
 
-    def containers_list(self, db: Session, ctx, page: int):
+    def servers_list(self, db: Session, ctx):
+        """The connected servers; skipped when the panel's own is the only one."""
+        from mbp.bots.handler import Screen, button
+
+        servers = [s for s in ServerRepository(db).list_all() if s.paired]
+        keyboard: Keyboard = []
+        for server in servers:
+            icon = "🔴" if server.last_error else "🟢"
+            label = f"{icon} {server.name}" + (
+                f" ({t(ctx.lang, 'server_local')})" if server.is_local else ""
+            )
+            keyboard.append([button(label[:60], f"cl:0:{server.id}")])
+        keyboard.append([button(t(ctx.lang, "btn_menu"), "m")])
+        return Screen(t(ctx.lang, "servers_title", n=len(servers)), keyboard)
+
+    def containers_entry(self, db: Session, ctx, page: int, server_id: int | None):
+        if server_id is None:
+            servers = [s for s in ServerRepository(db).list_all() if s.paired]
+            if len(servers) > 1:
+                return self.servers_list(db, ctx)
+            server_id = servers[0].id if servers else ServerRepository(db).local().id
+        return self.containers_list(db, ctx, page, server_id)
+
+    def containers_list(self, db: Session, ctx, page: int, server_id: int):
         from mbp.bots.handler import Screen, button
 
         lang = ctx.lang
         try:
-            items = sorted(self._containers(db).containers(), key=_order)
+            svc = self._containers(db, server_id)
+            items = sorted(svc.containers(), key=_order)
         except ApiError as exc:
-            return self._unavailable(ctx, exc)
+            return self._unavailable(ctx, exc, server_id)
+        multiple = sum(1 for s in ServerRepository(db).list_all() if s.paired) > 1
         running = sum(1 for c in items if c["state"] == "running")
         problems = sum(1 for c in items if c.get("problem"))
         title = t(
@@ -116,28 +157,40 @@ class ContainerMenu:
             total=len(items),
             problems=t(lang, "containers_problems", n=problems) if problems else "",
         )
+        if multiple:
+            title = f"🖥 {svc.server_name}\n{title}"
         keyboard: Keyboard = [
-            [button(f"{_icon(c)} {c['name']}"[:60], f"c:{self._token(c['name'])}")]
+            [button(f"{_icon(c)} {c['name']}"[:60], f"c:{self._token(server_id, c['name'])}")]
             for c in items[page * CONTAINER_PAGE_SIZE : (page + 1) * CONTAINER_PAGE_SIZE]
         ]
         pager = self._pager(ctx, "cl", page, len(items), CONTAINER_PAGE_SIZE)
         if pager:
+            for item in pager:
+                item["callback_data"] += f":{server_id}"
             keyboard.append(pager)
         keyboard.append(
-            [button(t(lang, "btn_server"), "cs"), button(t(lang, "btn_refresh"), f"cl:{page}")]
+            [
+                button(t(lang, "btn_server"), f"cs:{server_id}"),
+                button(t(lang, "btn_refresh"), f"cl:{page}:{server_id}"),
+            ]
         )
-        keyboard.append([button(t(lang, "btn_menu"), "m")])
+        if multiple:
+            keyboard.append(
+                [button(t(lang, "btn_servers"), "sv"), button(t(lang, "btn_menu"), "m")]
+            )
+        else:
+            keyboard.append([button(t(lang, "btn_menu"), "m")])
         text = title if items else f"{title}\n\n{t(lang, 'containers_empty')}"
         return Screen(text, keyboard)
 
-    def server_status(self, db: Session, ctx):
+    def server_status(self, db: Session, ctx, server_id: int):
         from mbp.bots.handler import Screen, button
 
         lang = ctx.lang
         try:
-            info = self._containers(db).info()
+            info = self._containers(db, server_id).info()
         except ApiError as exc:
-            return self._unavailable(ctx, exc)
+            return self._unavailable(ctx, exc, server_id)
         docker, host = info["docker"], info["host"]
         lines = [
             t(lang, "server_title", name=docker.get("name") or ""),
@@ -178,7 +231,10 @@ class ContainerMenu:
         return Screen(
             "\n".join(lines),
             [
-                [button(t(lang, "btn_refresh"), "cs"), button(t(lang, "btn_back"), "cl:0")],
+                [
+                    button(t(lang, "btn_refresh"), f"cs:{server_id}"),
+                    button(t(lang, "btn_back"), f"cl:0:{server_id}"),
+                ],
                 [button(t(lang, "btn_menu"), "m")],
             ],
         )
@@ -187,21 +243,21 @@ class ContainerMenu:
         from mbp.bots.handler import Screen, button
 
         resolved = self._resolve(token)
-        if not resolved:
+        if not resolved or len(resolved) != 2:
             return Screen(t(ctx.lang, "expired_button"), self._home(ctx))
-        name = resolved[0]
+        server_id, name = resolved
         lang = ctx.lang
         try:
-            svc = self._containers(db)
+            svc = self._containers(db, server_id)
             c = svc.container(name)
             usage = svc.agent.container_stats(name) if c["state"] == "running" else None
         except ApiError as exc:
             if exc.code == "container_not_found":
                 return Screen(
                     t(lang, "error", message=self._error(ctx, exc.code)),
-                    [[button(t(lang, "btn_back"), "cl:0")]],
+                    [[button(t(lang, "btn_back"), f"cl:0:{server_id}")]],
                 )
-            return self._unavailable(ctx, exc)
+            return self._unavailable(ctx, exc, server_id)
         settings = svc.settings
         lines = [
             t(lang, "container_title", name=c["name"]),
@@ -265,7 +321,9 @@ class ContainerMenu:
                 button(t(lang, "btn_refresh"), f"c:{token}"),
             ]
         )
-        keyboard.append([button(t(lang, "btn_back"), "cl:0"), button(t(lang, "btn_menu"), "m")])
+        keyboard.append(
+            [button(t(lang, "btn_back"), f"cl:0:{server_id}"), button(t(lang, "btn_menu"), "m")]
+        )
         text = "\n".join(lines)
         if note:
             text = f"{note}\n\n{text}"
@@ -279,9 +337,9 @@ class ContainerMenu:
         from mbp.bots.handler import Screen, button
 
         resolved = self._resolve(token)
-        if not resolved:
+        if not resolved or len(resolved) != 2:
             return Screen(t(ctx.lang, "expired_button"), self._home(ctx))
-        name = resolved[0]
+        server_id, name = resolved
         lang = ctx.lang
         back = [
             [
@@ -289,10 +347,10 @@ class ContainerMenu:
                 button(t(lang, "btn_refresh"), f"cg:{token}"),
             ]
         ]
-        if not ContainerRepository(db).get_settings().bot_logs:
+        if not ContainerRepository(db).get_settings(server_id).bot_logs:
             return Screen(t(lang, "logs_disabled"), [[button(t(lang, "btn_back"), f"c:{token}")]])
         try:
-            lines = self._containers(db).logs(name, LOG_LINES)["lines"]
+            lines = self._containers(db, server_id).logs(name, LOG_LINES)["lines"]
         except ApiError as exc:
             return Screen(t(lang, "error", message=self._error(ctx, exc.code)), back)
         if not lines:
@@ -319,12 +377,12 @@ class ContainerMenu:
         from mbp.bots.handler import Screen, button
 
         resolved = self._resolve(token)
-        if not resolved or action not in ("start", "stop", "restart"):
+        if not resolved or len(resolved) != 2 or action not in ("start", "stop", "restart"):
             return Screen(t(ctx.lang, "expired_button"), self._home(ctx))
-        name = resolved[0]
+        server_id, name = resolved
         lang = ctx.lang
         back = [[button(t(lang, "btn_back"), f"c:{token}")]]
-        svc = self._containers(db)
+        svc = self._containers(db, server_id)
         if svc.settings.read_only:
             raise ApiError(403, "containers_read_only")
         if svc.locked(svc.container(name)):
@@ -332,7 +390,7 @@ class ContainerMenu:
         refused = self._code_prerequisites(db, ctx, back)
         if refused is not None:
             return refused
-        self._set_pending(chat_id, ctx, name, action)
+        self._set_pending(chat_id, ctx, name, action, server_id)
         return Screen(
             t(lang, "confirm_code", action=t(lang, f"action_{action}"), name=name),
             [[button(t(lang, "btn_cancel"), f"cx:{token}")]],
@@ -351,10 +409,14 @@ class ContainerMenu:
             return Screen(t(ctx.lang, "code_locked"), back)
         return None
 
-    def _set_pending(self, chat_id: int, ctx, name: str, action: str) -> None:
+    def _set_pending(self, chat_id: int, ctx, name: str, action: str, server_id: int = 0) -> None:
         with self._pending_lock:
             self._pending[chat_id] = PendingAction(
-                ctx.admin_id, name, action, time.monotonic() + CODE_TTL_SECONDS
+                ctx.admin_id,
+                name,
+                action,
+                time.monotonic() + CODE_TTL_SECONDS,
+                server_id=server_id,
             )
 
     def cancel_action(self, db: Session, ctx, token: str, chat_id: int):
@@ -393,7 +455,7 @@ class ContainerMenu:
         if pending.action == "deploy":
             back, cancel = f"p:{pending.name}", f"pdx:{pending.name}"
         else:
-            token = self._token(pending.name)
+            token = self._token(pending.server_id, pending.name)
             back, cancel = f"c:{token}", f"cx:{token}"
         if time.monotonic() > pending.expires:
             with self._pending_lock:
@@ -428,7 +490,7 @@ class ContainerMenu:
         if pending.action == "deploy":
             return self.deploy_confirmed(db, ctx, int(pending.name), actor, chat_id)
         try:
-            self._containers(db).act(
+            self._containers(db, pending.server_id).act(
                 pending.name, pending.action, actor=actor, source=self.platform
             )
         except ApiError as exc:

@@ -137,7 +137,7 @@ class BotManager:
         self.runner = runner
         self.store = store
         self.scheduler = scheduler
-        # Returns the current Docker agent client; see mbp.bots.containers.
+        # Returns the app's AgentRegistry; see mbp.bots.containers.
         self.agent = agent
         self.deploy_runner = deploy_runner
         self.transport = transport

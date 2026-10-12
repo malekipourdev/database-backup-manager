@@ -136,3 +136,24 @@ def test_read_only_and_locked(bot, containers_client):
 def test_without_the_agent(bale_bot):
     screen = press(bale_bot, "cl:0")
     assert "agent" in screen["text"]
+
+
+def test_several_servers(bot, containers_client, remote, docker, db):
+    secret, _ = enable(containers_client)
+    servers = press(bot, "cl:0")
+    choices = [b["callback_data"] for b in buttons(servers) if b["callback_data"].startswith("cl:")]
+    assert len(choices) == 2
+    edge = button_data(servers, "edge")
+    assert edge == f"cl:0:{remote['id']}"
+    screen = press(bot, edge)
+    assert "edge" in screen["text"]
+    data = next(b["callback_data"] for b in buttons(screen) if "shop-web-1" in b["text"])
+    details = press(bot, data)
+    assert f"cl:0:{remote['id']}" in [b["callback_data"] for b in buttons(details)]
+    press(bot, button_data(details, "ری‌استارت"))
+    done = say(bot, code_for(secret, 1))
+    assert "✅" in done["text"]
+    entry = db.query(ContainerAction).one()
+    assert (entry.server_id, entry.server_name, entry.action) == (remote["id"], "edge", "restart")
+    status = press(bot, f"cs:{remote['id']}")
+    assert "Docker" in status["text"]

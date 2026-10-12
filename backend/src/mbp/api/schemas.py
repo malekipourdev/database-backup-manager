@@ -107,6 +107,8 @@ class InstanceCreate(BaseModel):
     username: str = Field(min_length=1, max_length=255)
     password: SecretStr = Field(min_length=1, max_length=1024)
     notes: str = Field(default="", max_length=2000)
+    # Another server whose agent reaches the database; None: the panel connects itself.
+    server_id: int | None = None
 
     _name = field_validator("name")(validate_name)
     _host = field_validator("host")(validate_host)
@@ -123,6 +125,8 @@ class InstanceUpdate(BaseModel):
     username: str | None = Field(default=None, min_length=1, max_length=255)
     password: SecretStr | None = Field(default=None, max_length=1024)
     notes: str | None = Field(default=None, max_length=2000)
+    # Sent as null: the panel connects itself; omitted: unchanged.
+    server_id: int | None = None
 
     @field_validator("name")
     @classmethod
@@ -144,6 +148,7 @@ class Instance(BaseModel):
     port: int
     username: str
     notes: str
+    server_id: int | None = None
     has_password: Literal[True] = True
     server_type: Literal["mysql", "mariadb"] | None = None
     server_version: str | None = None
@@ -164,13 +169,14 @@ class ConnectionParams(BaseModel):
     port: int = Field(ge=1, le=65535)
     username: str = Field(min_length=1, max_length=255)
     password: SecretStr = Field(min_length=1, max_length=1024)
+    server_id: int | None = None
 
     _host = field_validator("host")(validate_host)
 
 
-ErrorCode = Literal[
-    "host_not_found", "connection_refused", "timeout", "auth_rejected", "server_error"
-]
+# host_not_found | connection_refused | timeout | auth_rejected | server_error, or an
+# agent's error (agent_unreachable, agent_timeout, ...) for a database on another server.
+ErrorCode = str
 
 
 class ConnectionTestResult(BaseModel):
@@ -886,6 +892,8 @@ class ContainerActionItem(BaseModel):
     created_at: datetime
     actor: str
     source: str
+    server_id: int | None = None
+    server_name: str = ""
     container: str
     action: str
     result: str
@@ -918,6 +926,8 @@ class ProjectIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=40)
+    # The server it is deployed on; None: the panel's own.
+    server_id: int | None = None
     repo_url: str = Field(min_length=1, max_length=500)
     branch: str = Field(default="main", min_length=1, max_length=200)
     compose_file: str = Field(default="docker-compose.yml", min_length=1, max_length=200)
@@ -990,6 +1000,8 @@ class DeploymentPage(BaseModel):
 class ProjectOut(BaseModel):
     id: int
     name: str
+    server_id: int
+    server_name: str
     repo_url: str
     branch: str
     compose_file: str
@@ -1019,3 +1031,65 @@ class DeployIn(BaseModel):
 
     # A branch, tag or commit; empty deploys the project's branch.
     ref: str | None = Field(default=None, max_length=200)
+
+
+# --- Servers ---
+
+
+class ServerIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=8443, ge=1, le=65535)
+    notes: str = Field(default="", max_length=2000)
+
+    _name = field_validator("name")(validate_name)
+    _host = field_validator("host")(validate_host)
+
+
+class ServerUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    host: str | None = Field(default=None, min_length=1, max_length=255)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str | None) -> str | None:
+        return None if value is None else validate_name(value)
+
+    @field_validator("host")
+    @classmethod
+    def _host(cls, value: str | None) -> str | None:
+        return None if value is None else validate_host(value)
+
+
+class ServerOut(BaseModel):
+    id: int
+    name: str
+    # local | remote
+    kind: str
+    host: str | None
+    port: int | None
+    notes: str
+    paired: bool
+    cert_fingerprint: str | None
+    paired_at: datetime | None
+    last_seen_at: datetime | None
+    last_error: str | None
+    agent_hostname: str | None
+    docker_version: str | None
+    projects: int
+    instances: int
+    created_at: datetime
+
+
+class ServerSetup(BaseModel):
+    """Shown once: the agent's token and the commands that install it on the server."""
+
+    server: ServerOut
+    token: str
+    install_command: str

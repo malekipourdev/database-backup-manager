@@ -15,6 +15,7 @@ import {
   CloudCheck,
   ClockCountdown,
   Cube,
+  Database,
   GearSix,
   HardDrives,
   Robot,
@@ -26,9 +27,10 @@ import {
 type Icon = PhosphorIcon;
 
 const NAV: { to: string; label: string; icon: Icon }[] = [
-  { to: "/instances", label: "nav.instances", icon: HardDrives },
+  { to: "/instances", label: "nav.instances", icon: Database },
   { to: "/backups", label: "nav.backups", icon: Archive },
   { to: "/schedules", label: "nav.schedules", icon: ClockCountdown },
+  { to: "/servers", label: "nav.servers", icon: HardDrives },
   { to: "/containers", label: "nav.containers", icon: Cube },
   { to: "/projects", label: "nav.projects", icon: RocketLaunch },
   { to: "/notifications", label: "nav.notifications", icon: Bell },

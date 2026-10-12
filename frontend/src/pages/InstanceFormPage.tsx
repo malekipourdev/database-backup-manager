@@ -6,6 +6,7 @@ import {
   NumberInput,
   Paper,
   PasswordInput,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -30,6 +31,7 @@ import {
   useTestInstance,
   useUpdateInstance,
 } from "../api/instances";
+import { useServers } from "../api/servers";
 import { PageHeader } from "../components/PageHeader";
 import { ConnectionResult } from "../components/ConnectionResult";
 
@@ -43,6 +45,8 @@ interface FormValues {
   username: string;
   password: string;
   notes: string;
+  /** "" for the panel itself, else a server id. */
+  server: string;
 }
 
 function buildSchema(t: TFunction, requirePassword: boolean) {
@@ -66,6 +70,7 @@ function buildSchema(t: TFunction, requirePassword: boolean) {
       ? z.string().min(1, required).max(1024, tooLong(1024))
       : z.string().max(1024, tooLong(1024)),
     notes: z.string().max(NOTES_MAX, tooLong(NOTES_MAX)),
+    server: z.string(),
   });
 }
 
@@ -77,6 +82,7 @@ function toFormValues(instance?: Instance): FormValues {
     username: instance?.username ?? "",
     password: "",
     notes: instance?.notes ?? "",
+    server: instance?.server_id ? String(instance.server_id) : "",
   };
 }
 
@@ -94,6 +100,8 @@ export function InstanceFormPage() {
   const testSaved = useTestInstance(instanceId ?? 0);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const servers = useServers();
+  const remoteServers = (servers.data ?? []).filter((s) => s.kind === "remote");
 
   const form = useForm<FormValues>({
     initialValues: toFormValues(),
@@ -139,6 +147,7 @@ export function InstanceFormPage() {
       port: Number(values.port),
       username: values.username,
       notes: values.notes,
+      server_id: values.server ? Number(values.server) : null,
     };
     if (isEdit) {
       const patch: InstanceUpdate = { ...body };
@@ -184,7 +193,8 @@ export function InstanceFormPage() {
         loaded !== undefined &&
         values.host.trim() === loaded.host &&
         Number(values.port) === loaded.port &&
-        values.username === loaded.username;
+        values.username === loaded.username &&
+        (values.server ? Number(values.server) : null) === loaded.server_id;
       if (!unchanged) {
         form.setFieldError("password", t("connection.passwordNeeded"));
         return;
@@ -198,6 +208,7 @@ export function InstanceFormPage() {
         port: Number(values.port),
         username: values.username,
         password: values.password,
+        server_id: values.server ? Number(values.server) : null,
       },
       handlers,
     );
@@ -236,12 +247,31 @@ export function InstanceFormPage() {
               maxLength={100}
               {...form.getInputProps("name")}
             />
+            {remoteServers.length > 0 && (
+              <Select
+                label={t("instances.fields.route")}
+                description={t("instances.routeHint")}
+                allowDeselect={false}
+                data={[
+                  { value: "", label: t("instances.routeDirect") },
+                  ...remoteServers.map((s) => ({
+                    value: String(s.id),
+                    label: s.paired
+                      ? t("instances.routeServer", { name: s.name })
+                      : `${t("instances.routeServer", { name: s.name })} (${t("servers.notConnected")})`,
+                  })),
+                ]}
+                {...form.getInputProps("server")}
+              />
+            )}
             <Group grow align="flex-start">
               <TextInput
                 label={t("instances.fields.host")}
                 required
                 dir="ltr"
-                description={t("instances.hostHint")}
+                description={
+                  form.values.server ? t("instances.hostHintServer") : t("instances.hostHint")
+                }
                 {...form.getInputProps("host")}
               />
               <NumberInput

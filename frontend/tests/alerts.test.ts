@@ -60,4 +60,12 @@ describe("container alerts", () => {
       /out of memory/,
     );
   });
+
+  it("names another server first", async () => {
+    await i18n.changeLanguage("en");
+    const params = { ...SAMPLES[2][1], server: "edge", server_id: 4 };
+    expect(renderAlert(item("container_restarting", params), i18n.t, "en")).toBe(
+      "edge: Container “web” restarted 4 times in 10 minutes.",
+    );
+  });
 });

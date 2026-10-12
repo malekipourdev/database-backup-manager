@@ -335,3 +335,90 @@ def containers_client(auth_client, app, agent):
     app.state.deploy_runner.poll_seconds = 0.02
     yield auth_client
     app.state.agent = previous
+
+
+# --- Other servers (a real agent in remote mode: HTTPS with its own certificate) ---
+
+
+@pytest.fixture
+def remote_agents(docker, agent_commands, tmp_path):
+    """start(token, name="a", **settings) runs a remote-mode agent on a free port (its port)."""
+    import socket
+    import threading
+
+    import uvicorn
+
+    from mbp.agent.app import AgentSettings, create_agent_app
+    from mbp.agent.deploy import DeployManager
+    from mbp.agent.docker import DockerClient
+    from mbp.agent.host import HostProbe
+    from mbp.agent.tls import ensure_certificate
+    from mbp.security.agent_auth import fingerprint
+
+    servers = []
+
+    def start(token: str, name: str = "a", **overrides) -> int:
+        values = {
+            "agent_token": token,
+            "agent_data_dir": str(tmp_path / f"agent-{name}"),
+            "mysqldump_path": str(FAKE_DUMP),
+            "mariadb_dump_path": str(FAKE_DUMP),
+            **overrides,
+        }
+        settings = AgentSettings(**values)
+        cert, key, der = ensure_certificate(settings.agent_data_dir)
+        app = create_agent_app(
+            settings,
+            docker=DockerClient("http://docker", transport=docker.transport()),
+            host=HostProbe(proc=docker.proc),
+            deployer=DeployManager(
+                tmp_path / f"projects-{name}",
+                runner=agent_commands,
+                protected_projects=lambda: {"mysql-backup-panel"},
+                sleep=lambda seconds: None,
+            ),
+            cert_fingerprint=fingerprint(der),
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host="127.0.0.1",
+                port=port,
+                ssl_certfile=str(cert),
+                ssl_keyfile=str(key),
+                log_level="warning",
+            )
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 10
+        while not server.started:
+            if time.monotonic() > deadline:
+                raise AssertionError("the agent did not start")
+            time.sleep(0.02)
+        servers.append((server, thread))
+        return port
+
+    yield start
+    for server, thread in servers:
+        server.should_exit = True
+        thread.join(timeout=10)
+
+
+@pytest.fixture
+def remote(auth_client, remote_agents):
+    """Another server "edge", added in the panel and connected to its running agent."""
+    response = auth_client.post(
+        "/api/servers", json={"name": "edge", "host": "127.0.0.1", "port": 1}
+    )
+    assert response.status_code == 201, response.text
+    setup = response.json()
+    port = remote_agents(setup["token"])
+    server_id = setup["server"]["id"]
+    assert auth_client.patch(f"/api/servers/{server_id}", json={"port": port}).status_code == 200
+    response = auth_client.post(f"/api/servers/{server_id}/connect")
+    assert response.status_code == 200, response.text
+    return response.json()

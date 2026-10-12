@@ -16,8 +16,9 @@ from mbp.agent.deploy import (
 from mbp.api.errors import ApiError
 from mbp.db import utcnow
 from mbp.logging import register_secret
-from mbp.models import DbInstance, Deployment, Project
+from mbp.models import DbInstance, Deployment, Project, Server
 from mbp.repositories.project_repository import ProjectRepository
+from mbp.repositories.server_repository import ServerRepository
 from mbp.security import crypto
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,9 @@ class ProjectService:
         )
         if auth_type != "none" and not has_credential:
             fields["credential"] = "required"
+        server_id = data.get("server_id")
+        if server_id is not None and self.db.get(Server, server_id) is None:
+            fields["server_id"] = "server_not_found"
         instance_id = data.get("backup_instance_id")
         if instance_id is not None and self.db.get(DbInstance, instance_id) is None:
             fields["backup_instance_id"] = "instance_not_found"
@@ -111,12 +115,18 @@ class ProjectService:
         project.env_encrypted = crypto.encrypt(json.dumps(result)) if result else None
 
     def save(self, data: dict, project: Project | None = None) -> Project:
+        if data.get("server_id") is None:
+            # Omitted: the panel's own server for a new project, unchanged for a saved one.
+            data = {k: v for k, v in data.items() if k != "server_id"}
+            if project is None:
+                data["server_id"] = ServerRepository(self.db).local().id
         self._check(data, project)
         if project is None:
             project = Project(backup_databases=[], backup_required=True, auth_type="none")
             self.repo.add(project)
         for field in (
             "name",
+            "server_id",
             "repo_url",
             "branch",
             "compose_file",

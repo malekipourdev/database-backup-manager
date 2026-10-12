@@ -88,12 +88,14 @@ describe("Projects", () => {
       "env",
       "name",
       "repo_url",
+      "server_id",
     ]);
     expect(JSON.parse(String(post[1]!.body))).toMatchObject({
       name: "shop",
       auth_type: "token",
       credential: "ghp_secret",
       env: [{ name: "DB_PASSWORD", value: "pw-1" }],
+      server_id: null,
     });
     expect(await screen.findByTestId("navigated")).toBeInTheDocument();
   });

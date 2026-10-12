@@ -14,6 +14,10 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Also the compose project name and the directory name: [a-z0-9][a-z0-9_-]{0,39}.
     name: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    # The server it is deployed on.
+    server_id: Mapped[int] = mapped_column(
+        ForeignKey("servers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     repo_url: Mapped[str] = mapped_column(String(500), nullable=False)
     branch: Mapped[str] = mapped_column(String(200), nullable=False, default="main")
     compose_file: Mapped[str] = mapped_column(

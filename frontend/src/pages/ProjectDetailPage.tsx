@@ -41,13 +41,13 @@ import { formatDateTime } from "../i18n";
 
 function Services({ project }: { project: Project }) {
   const { t } = useTranslation();
-  const containers = useContainers();
+  const containers = useContainers(project.server_id);
   const mine = (containers.data?.containers ?? []).filter((c) => c.project === project.name);
   return (
     <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("projects.services")}</Title>
-        <Anchor component={Link} to="/containers" size="sm">
+        <Anchor component={Link} to={`/containers?server=${project.server_id}`} size="sm">
           {t("projects.allContainers")}
         </Anchor>
       </Group>

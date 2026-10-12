@@ -1,0 +1,43 @@
+# The agent for another server managed by the panel (see the README, "Servers").
+#
+#   docker compose -f docker-compose.agent.yml --env-file .env.agent up -d --build
+#
+# .env.agent holds MBP_AGENT_TOKEN (from the panel's "Add server" page), MBP_AGENT_PORT and
+# MBP_DOCKER_GID. The panel shows the exact commands when the server is added.
+name: mbp-agent
+
+services:
+  agent:
+    build:
+      context: ./backend
+      target: agent
+    restart: unless-stopped
+    # The host's network: the agent reaches databases published on the host (127.0.0.1)
+    # and other containers by name, and the host firewall (ufw, ...) applies to its port.
+    # Allow that port only from the panel's IP address.
+    network_mode: host
+    environment:
+      MBP_AGENT_TOKEN: ${MBP_AGENT_TOKEN:?Set MBP_AGENT_TOKEN in .env.agent}
+      MBP_AGENT_PORT: ${MBP_AGENT_PORT:-8443}
+      MBP_AGENT_BIND: ${MBP_AGENT_BIND:-0.0.0.0}
+      MBP_PROJECTS_DIR: ${MBP_PROJECTS_DIR:-/opt/mbp-projects}
+    group_add:
+      - "${MBP_DOCKER_GID:-999}"
+    volumes:
+      - ${MBP_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      # Deployed projects, at the same path as on the host (see docker-compose.yml).
+      - ${MBP_PROJECTS_DIR:-/opt/mbp-projects}:${MBP_PROJECTS_DIR:-/opt/mbp-projects}
+      # The agent's TLS certificate, pinned by the panel: keep it across rebuilds.
+      - mbp-agent-data:/data
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # The agent's own container can never be stopped or deployed over from the panel.
+      mbp.role: agent
+
+volumes:
+  mbp-agent-data:

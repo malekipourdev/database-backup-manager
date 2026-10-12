@@ -3,8 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 
 export type ServerType = "mysql" | "mariadb";
-export type ConnectionErrorCode =
-  "host_not_found" | "connection_refused" | "timeout" | "auth_rejected" | "server_error";
+export type ConnectionErrorCode = string;
 
 export interface Instance {
   id: number;
@@ -13,6 +12,8 @@ export interface Instance {
   port: number;
   username: string;
   notes: string;
+  /** Another server whose agent reaches the database; null: the panel connects itself. */
+  server_id: number | null;
   has_password: true;
   server_type: ServerType | null;
   server_version: string | null;
@@ -30,6 +31,7 @@ export interface InstanceCreate {
   username: string;
   password: string;
   notes: string;
+  server_id: number | null;
 }
 
 export type InstanceUpdate = Partial<InstanceCreate>;
@@ -39,6 +41,7 @@ export interface ConnectionParams {
   port: number;
   username: string;
   password: string;
+  server_id: number | null;
 }
 
 export interface ConnectionTestResult {

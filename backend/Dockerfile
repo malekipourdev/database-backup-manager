@@ -37,16 +37,20 @@ COPY --from=builder /app/.venv /app/.venv
 # --- Agent (docker compose target "agent"): the only image with Docker tools.
 # git and ssh fetch deployed projects; the Docker CLI runs docker compose. ---
 FROM base AS agent
+# The dump tools back up databases on another server (mariadb-client: mariadb-dump).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
+    && apt-get install -y --no-install-recommends git openssh-client ca-certificates mariadb-client \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=mysqldump /usr/bin/mysqldump /usr/local/bin/mysqldump
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+# Remote mode keeps its TLS certificate here (a volume).
+RUN mkdir -p /data && chown mbp:mbp /data
 USER mbp
-EXPOSE 8090
+EXPOSE 8090 8443
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"]
+    CMD ["python", "-m", "mbp.agent.health"]
 CMD ["python", "-m", "mbp.agent"]
 
 # --- Runtime (the backend; default target): venv + migrations + dump tools ---

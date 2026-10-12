@@ -8,6 +8,7 @@ import { type Instance, useInstances } from "../api/instances";
 import { useRemoteStorage } from "../api/storage";
 import { CloudArrowUp, CloudCheck, Database, HardDrives, Plus } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
+import { RouteLabel } from "../components/RouteLabel";
 import { formatDateTime, formatNumber } from "../i18n";
 
 function startOfToday(): string {
@@ -115,6 +116,14 @@ function InstanceCard({ instance }: { instance: Instance }) {
           <span>{t("instances.columns.username")}</span>
           <code dir="ltr">{instance.username}</code>
         </div>
+        {instance.server_id !== null && (
+          <div className="cl-kv">
+            <span>{t("instances.columns.route")}</span>
+            <span>
+              <RouteLabel serverId={instance.server_id} />
+            </span>
+          </div>
+        )}
       </div>
       <div className="cl-card-foot">
         {instance.last_test_at ? (

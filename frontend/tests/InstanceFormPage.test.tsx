@@ -13,6 +13,7 @@ const instance: Instance = {
   port: 3306,
   username: "backup",
   notes: "",
+  server_id: null,
   has_password: true,
   server_type: null,
   server_version: null,
@@ -25,7 +26,8 @@ const instance: Instance = {
 
 describe("InstanceFormPage", () => {
   it("edit mode keeps the stored password when the field is left empty", async () => {
-    const fetchMock = mockFetch((_url, init) => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith("/api/servers")) return { status: 200, body: [] };
       if (init.method === "PATCH") return { status: 200, body: { ...instance, notes: "x" } };
       return { status: 200, body: instance };
     });
@@ -51,7 +53,9 @@ describe("InstanceFormPage", () => {
   });
 
   it("shows a translated error for an invalid port", async () => {
-    const fetchMock = mockFetch(() => ({ status: 201, body: instance }));
+    const fetchMock = mockFetch((url) =>
+      url.endsWith("/api/servers") ? { status: 200, body: [] } : { status: 201, body: instance },
+    );
     renderWithProviders(<InstanceFormPage />, { path: "/instances/new", route: "/instances/new" });
 
     await userEvent.type(screen.getByLabelText(/Name/), "prod");
@@ -66,14 +70,15 @@ describe("InstanceFormPage", () => {
     expect(
       await screen.findByText("Port must be a number between 1 and 65535."),
     ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toEqual([]);
   });
 
   it("maps name_taken from the server to the name field", async () => {
-    mockFetch(() => ({
-      status: 409,
-      body: { code: "name_taken", fields: { name: "name_taken" } },
-    }));
+    mockFetch((url) =>
+      url.endsWith("/api/servers")
+        ? { status: 200, body: [] }
+        : { status: 409, body: { code: "name_taken", fields: { name: "name_taken" } } },
+    );
     renderWithProviders(<InstanceFormPage />, { path: "/instances/new", route: "/instances/new" });
 
     await userEvent.type(screen.getByLabelText(/Name/), "prod");
@@ -85,5 +90,33 @@ describe("InstanceFormPage", () => {
     expect(
       await screen.findByText("This name is already used by another instance."),
     ).toBeInTheDocument();
+  });
+
+  it("backs up a database on another server through its agent", async () => {
+    const servers = [
+      { id: 1, name: "main", kind: "local", paired: true },
+      { id: 4, name: "edge", kind: "remote", paired: true },
+    ];
+    const fetchMock = mockFetch((url) =>
+      url.endsWith("/api/servers")
+        ? { status: 200, body: servers }
+        : { status: 201, body: { ...instance, server_id: 4 } },
+    );
+    renderWithProviders(<InstanceFormPage />, { path: "/instances/new", route: "/instances/new" });
+
+    const route = await screen.findByRole("textbox", { name: /Connect from/ });
+    await userEvent.click(route);
+    await userEvent.click(await screen.findByText("Through the server “edge”"));
+    expect(screen.getByText(/as seen from that server/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/^Name/), "prod");
+    await userEvent.type(screen.getByLabelText(/^Host/), "shop-db");
+    await userEvent.type(screen.getByLabelText(/^Username/), "backup");
+    await userEvent.type(screen.getByLabelText(/^Password/), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true),
+    );
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(post[1]!.body))).toMatchObject({ host: "shop-db", server_id: 4 });
   });
 });

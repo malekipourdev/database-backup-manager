@@ -10,7 +10,9 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from mbp.api.errors import ApiError
 from mbp.backups import dump_command, errors, naming
+from mbp.backups.agent_dump import AgentDumpError, AgentDumpProcess
 from mbp.backups.dump_command import ToolMissing
 from mbp.backups.pipeline import DumpProcess
 from mbp.backups.remote import RemoteError, join_key
@@ -22,7 +24,9 @@ from mbp.models import DbInstance
 from mbp.notifications.events import Event
 from mbp.repositories.backup_run_repository import BackupRunRepository
 from mbp.repositories.remote_storage_repository import RemoteStorageRepository
-from mbp.services import mysql_probe
+from mbp.servers import db_access
+from mbp.servers.db_access import target
+from mbp.servers.registry import get_registry
 from mbp.services.backup_settings_service import effective_for
 from mbp.services.instance_service import conn_params
 from mbp.services.remote_storage_service import get_remote_storage, upload_enabled_for
@@ -181,6 +185,8 @@ class BackupRunner:
                 db.commit()
                 return
             params = conn_params(instance)
+            # Set: the dump runs on that server, by its agent.
+            server_id = instance.server_id
             effective = effective_for(db, instance)
             instance_name = run.instance_name
             database = run.database_name
@@ -191,7 +197,7 @@ class BackupRunner:
         try:
             if not dump_command.is_safe_database_name(database):
                 raise _Failure("invalid_database_name", "The database name is not allowed.")
-            probe = mysql_probe.test_connection(params)
+            probe = db_access.test_connection(server_id, params)
             if not probe.ok:
                 raise _Failure(probe.error_code or "server_error", probe.error_detail)
             with self.session_factory() as db:
@@ -200,7 +206,6 @@ class BackupRunner:
                 repo.set_server(run, probe.server_type, probe.server_version)
                 db.commit()
 
-            tool = dump_command.tool_for(probe.server_type, self.settings)
             rendered = naming.render(
                 effective.name_pattern,
                 instance=instance_name,
@@ -209,33 +214,32 @@ class BackupRunner:
                 now=utcnow(),
                 compression=effective.compression,
             )
-            relative, temp = self.store.prepare(effective.storage_dir, rendered, run_id)
-
-            with dump_command.option_file(params.username, params.password) as cnf:
-                args = dump_command.build_args(
-                    tool,
-                    cnf,
-                    host=params.host,
-                    port=params.port,
-                    server_type=probe.server_type,
-                    server_version=probe.server_version,
-                    database=database,
-                )
-                process = DumpProcess(args, home=cnf.parent)
-                with self._lock:
-                    self._processes[run_id] = process
-                try:
-                    if self._stopping:
-                        process.terminate()
-                    result = process.run(
-                        temp,
-                        effective.compression,
-                        lambda n: self._report_progress(run_id, n),
-                        self.settings.backup_progress_interval_seconds,
+            if server_id is None:
+                tool = dump_command.tool_for(probe.server_type, self.settings)
+                relative, temp = self.store.prepare(effective.storage_dir, rendered, run_id)
+                with dump_command.option_file(params.username, params.password) as cnf:
+                    args = dump_command.build_args(
+                        tool,
+                        cnf,
+                        host=params.host,
+                        port=params.port,
+                        server_type=probe.server_type,
+                        server_version=probe.server_version,
+                        database=database,
                     )
-                finally:
-                    with self._lock:
-                        self._processes.pop(run_id, None)
+                    process = DumpProcess(args, home=cnf.parent)
+                    result = self._run_dump(run_id, process, temp, effective.compression)
+            else:
+                agent = get_registry().get(server_id)
+                payload = {
+                    **target(params),
+                    "database": database,
+                    "server_type": probe.server_type,
+                    "server_version": probe.server_version,
+                }
+                relative, temp = self.store.prepare(effective.storage_dir, rendered, run_id)
+                process = AgentDumpProcess(agent, payload)
+                result = self._run_dump(run_id, process, temp, effective.compression)
 
             if process.terminated or self._stopping:
                 raise _Failure("interrupted", INTERRUPTED_MESSAGE)
@@ -274,6 +278,13 @@ class BackupRunner:
         except _Failure as failure:
             self.store.discard(temp)
             self._record_failure(run_id, failure.code, failure.message)
+        except AgentDumpError as exc:
+            self.store.discard(temp)
+            self._record_failure(run_id, exc.code, exc.message)
+        except ApiError as exc:
+            # The server's agent could not be used (not connected, deleted, ...).
+            self.store.discard(temp)
+            self._record_failure(run_id, exc.code, exc.detail)
         except ToolMissing as exc:
             self.store.discard(temp)
             self._record_failure(run_id, "tool_missing", f"Dump tool not found: {exc}")
@@ -286,6 +297,22 @@ class BackupRunner:
         finally:
             # Covers unexpected exceptions too (handled by _execute_safely).
             self.store.discard(temp)
+
+    def _run_dump(self, run_id: int, process, temp: Path, compression: str):
+        with self._lock:
+            self._processes[run_id] = process
+        try:
+            if self._stopping:
+                process.terminate()
+            return process.run(
+                temp,
+                compression,
+                lambda n: self._report_progress(run_id, n),
+                self.settings.backup_progress_interval_seconds,
+            )
+        finally:
+            with self._lock:
+                self._processes.pop(run_id, None)
 
     # --- after a successful backup: remote upload, then retention ---
 

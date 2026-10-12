@@ -32,6 +32,8 @@ export interface DeploymentDetail extends DeploymentSummary {
 export interface Project {
   id: number;
   name: string;
+  server_id: number;
+  server_name: string;
   repo_url: string;
   branch: string;
   compose_file: string;
@@ -49,6 +51,8 @@ export interface Project {
 
 export interface ProjectInput {
   name: string;
+  /** null: the panel's own server (new project) or unchanged. */
+  server_id: number | null;
   repo_url: string;
   branch: string;
   compose_file: string;

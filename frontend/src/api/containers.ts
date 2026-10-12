@@ -112,6 +112,8 @@ export interface ContainerActionItem {
   created_at: string;
   actor: string;
   source: string;
+  server_id: number | null;
+  server_name: string;
   container: string;
   action: ContainerAction;
   result: string;
@@ -128,61 +130,81 @@ export interface ContainerActionPage {
 /** Live numbers refresh this often while the page is open. */
 export const LIVE_MS = 5000;
 
+/** null: the panel's own server. */
+export type ServerRef = number | null;
+
 export const containerKeys = {
   all: ["containers"] as const,
-  list: ["containers", "list"] as const,
-  info: ["containers", "info"] as const,
-  stats: ["containers", "stats"] as const,
-  one: (name: string) => ["containers", "one", name] as const,
-  oneStats: (name: string) => ["containers", "one", name, "stats"] as const,
-  logs: (name: string, tail: number) => ["containers", "logs", name, tail] as const,
-  settings: ["containers", "settings"] as const,
-  actions: (page: number) => ["containers", "actions", page] as const,
+  list: (server: ServerRef) => ["containers", server, "list"] as const,
+  info: (server: ServerRef) => ["containers", server, "info"] as const,
+  stats: (server: ServerRef) => ["containers", server, "stats"] as const,
+  one: (server: ServerRef, name: string) => ["containers", server, "one", name] as const,
+  logs: (server: ServerRef, name: string, tail: number) =>
+    ["containers", server, "logs", name, tail] as const,
+  settings: (server: ServerRef) => ["containers", server, "settings"] as const,
+  actions: (server: ServerRef, page: number) => ["containers", server, "actions", page] as const,
 };
 
 const enc = encodeURIComponent;
 
-export function useContainers() {
-  return useQuery({
-    queryKey: containerKeys.list,
-    queryFn: () => apiFetch<{ containers: ContainerSummary[]; read_only: boolean }>("/containers"),
-    refetchInterval: LIVE_MS,
-  });
+/** The `server` query parameter, joined to `path` (which may already have a query). */
+function withServer(path: string, server: ServerRef): string {
+  if (server === null) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}server=${server}`;
 }
 
-export function useServerInfo(enabled = true) {
+export function useContainers(server: ServerRef = null, enabled = true) {
   return useQuery({
-    queryKey: containerKeys.info,
-    queryFn: () => apiFetch<ServerInfo>("/containers/-/info"),
-    refetchInterval: LIVE_MS,
-    enabled,
-  });
-}
-
-export function useContainerStats(enabled = true) {
-  return useQuery({
-    queryKey: containerKeys.stats,
+    queryKey: containerKeys.list(server),
     queryFn: () =>
-      apiFetch<{ stats: Record<string, ContainerStats | null> }>("/containers/-/stats"),
+      apiFetch<{ containers: ContainerSummary[]; read_only: boolean }>(
+        withServer("/containers", server),
+      ),
     refetchInterval: LIVE_MS,
     enabled,
   });
 }
 
-export function useContainer(name: string | null) {
+export function useServerInfo(server: ServerRef, enabled = true) {
   return useQuery({
-    queryKey: containerKeys.one(name ?? ""),
-    queryFn: () => apiFetch<ContainerDetails>(`/containers/${enc(name ?? "")}`),
+    queryKey: containerKeys.info(server),
+    queryFn: () => apiFetch<ServerInfo>(withServer("/containers/-/info", server)),
+    refetchInterval: LIVE_MS,
+    enabled,
+  });
+}
+
+export function useContainerStats(server: ServerRef, enabled = true) {
+  return useQuery({
+    queryKey: containerKeys.stats(server),
+    queryFn: () =>
+      apiFetch<{ stats: Record<string, ContainerStats | null> }>(
+        withServer("/containers/-/stats", server),
+      ),
+    refetchInterval: LIVE_MS,
+    enabled,
+  });
+}
+
+export function useContainer(server: ServerRef, name: string | null) {
+  return useQuery({
+    queryKey: containerKeys.one(server, name ?? ""),
+    queryFn: () => apiFetch<ContainerDetails>(withServer(`/containers/${enc(name ?? "")}`, server)),
     enabled: Boolean(name),
   });
 }
 
-export function useContainerLogs(name: string | null, tail: number, follow: boolean) {
+export function useContainerLogs(
+  server: ServerRef,
+  name: string | null,
+  tail: number,
+  follow: boolean,
+) {
   return useQuery({
-    queryKey: containerKeys.logs(name ?? "", tail),
+    queryKey: containerKeys.logs(server, name ?? "", tail),
     queryFn: () =>
       apiFetch<{ lines: LogLine[]; truncated: boolean }>(
-        `/containers/${enc(name ?? "")}/logs?tail=${tail}`,
+        withServer(`/containers/${enc(name ?? "")}/logs?tail=${tail}`, server),
       ),
     enabled: Boolean(name),
     refetchInterval: follow ? 3000 : false,
@@ -190,40 +212,47 @@ export function useContainerLogs(name: string | null, tail: number, follow: bool
   });
 }
 
-export function useContainerAction() {
+export function useContainerAction(server: ServerRef) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ name, action }: { name: string; action: ContainerAction }) =>
-      apiFetch<{ container: ContainerSummary }>(`/containers/${enc(name)}/${action}`, {
-        method: "POST",
-      }),
+      apiFetch<{ container: ContainerSummary }>(
+        withServer(`/containers/${enc(name)}/${action}`, server),
+        { method: "POST" },
+      ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: containerKeys.all }),
   });
 }
 
-export function useContainerSettings() {
+export function useContainerSettings(server: ServerRef) {
   return useQuery({
-    queryKey: containerKeys.settings,
-    queryFn: () => apiFetch<ContainerSettings>("/containers/-/settings"),
+    queryKey: containerKeys.settings(server),
+    queryFn: () => apiFetch<ContainerSettings>(withServer("/containers/-/settings", server)),
   });
 }
 
-export function useSaveContainerSettings() {
+export function useSaveContainerSettings(server: ServerRef) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: ContainerSettings) =>
-      apiFetch<ContainerSettings>("/containers/-/settings", { method: "PUT", body }),
+      apiFetch<ContainerSettings>(withServer("/containers/-/settings", server), {
+        method: "PUT",
+        body,
+      }),
     onSuccess: (data) => {
-      queryClient.setQueryData(containerKeys.settings, data);
-      void queryClient.invalidateQueries({ queryKey: containerKeys.list });
+      queryClient.setQueryData(containerKeys.settings(server), data);
+      void queryClient.invalidateQueries({ queryKey: containerKeys.list(server) });
     },
   });
 }
 
-export function useContainerActions(page: number) {
+export function useContainerActions(server: ServerRef, page: number) {
   return useQuery({
-    queryKey: containerKeys.actions(page),
-    queryFn: () => apiFetch<ContainerActionPage>(`/containers/-/actions?page=${page}&page_size=20`),
+    queryKey: containerKeys.actions(server, page),
+    queryFn: () =>
+      apiFetch<ContainerActionPage>(
+        withServer(`/containers/-/actions?page=${page}&page_size=20`, server),
+      ),
     placeholderData: keepPreviousData,
   });
 }

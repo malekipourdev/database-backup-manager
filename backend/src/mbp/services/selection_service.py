@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from mbp.api.errors import ApiError
 from mbp.api.schemas import DatabaseEntry, DatabaseList
 from mbp.repositories.selection_repository import SelectionRepository
-from mbp.services import mysql_probe
+from mbp.servers import db_access
 from mbp.services.instance_service import InstanceService, conn_params
 from mbp.services.mysql_probe import ListResult
 
@@ -66,9 +66,9 @@ class SelectionService:
     def _load(self, instance_id: int) -> tuple[list[str], ListResult]:
         instance = self.instances.get(instance_id)
         stored = self.repo.list_names(instance_id)
-        params = conn_params(instance)
+        params, server_id = conn_params(instance), instance.server_id
         self.db.commit()
-        return stored, mysql_probe.list_databases(params)
+        return stored, db_access.list_databases(server_id, params)
 
     def get_listing(self, instance_id: int) -> DatabaseList:
         stored, live = self._load(instance_id)

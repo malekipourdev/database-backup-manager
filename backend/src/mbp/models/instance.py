@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mbp.db import Base, UTCDateTime, utcnow
@@ -23,6 +23,11 @@ class DbInstance(Base):
     # Fernet token; never returned or logged.
     password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # NULL: the panel connects to host:port itself. Otherwise the agent of this server tests,
+    # lists and dumps the databases on the panel's behalf (host:port as seen from there).
+    server_id: Mapped[int | None] = mapped_column(
+        ForeignKey("servers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     server_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     server_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_test_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

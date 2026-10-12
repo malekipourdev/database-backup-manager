@@ -14,6 +14,7 @@ from mbp.api import (
     notifications,
     projects,
     schedules,
+    servers,
     storage,
 )
 from mbp.api.errors import register_error_handlers
@@ -29,8 +30,10 @@ from mbp.logging import configure_logging
 from mbp.notifications.monitor import AlertMonitor
 from mbp.notifications.notifier import Notifier
 from mbp.projects.runner import DeployRunner
+from mbp.repositories.server_repository import ServerRepository
 from mbp.security import crypto
 from mbp.security.sessions import require_csrf, require_session
+from mbp.servers.registry import AgentRegistry, set_registry
 from mbp.services.auth_service import bootstrap_admin
 
 API_PREFIX = "/api"
@@ -40,6 +43,7 @@ API_PREFIX = "/api"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     with get_sessionmaker()() as db:
         bootstrap_admin(db, get_settings())
+        ServerRepository(db).local()
     # Runs left queued/running by a previous process are failed and their temp files removed
     # before new work is accepted (single backend process: the queue lives in memory).
     settings, sessions, store = get_settings(), get_sessionmaker(), get_store()
@@ -47,8 +51,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner.recover()
     runner.start()
     app.state.backup_runner = runner
+    # The local agent's client; other servers' clients come from the registry.
     agent = AgentClient.from_settings(settings)
     app.state.agent = agent
+    agents = AgentRegistry(settings, sessions, local=lambda: app.state.agent)
+    app.state.agents = agents
+    set_registry(agents)
     notifier = Notifier(sessions)
     runner.notifier = notifier
     app.state.notifier = notifier
@@ -60,12 +68,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         store,
         notifier=notifier,
         monitor=monitor,
-        container_monitor=ContainerMonitor(sessions, notifier, agent),
+        container_monitor=ContainerMonitor(sessions, notifier, agents),
     )
     scheduler.start()
     app.state.backup_scheduler = scheduler
     deploy_runner = DeployRunner(
-        sessions, runner, store, agent=lambda: app.state.agent, notifier=notifier
+        sessions, runner, store, agents=lambda: app.state.agents, notifier=notifier
     )
     deploy_runner.recover()
     app.state.deploy_runner = deploy_runner
@@ -74,7 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         runner,
         store,
         scheduler=scheduler,
-        agent=lambda: app.state.agent,
+        agent=lambda: app.state.agents,
         deploy_runner=lambda: app.state.deploy_runner,
     )
     # Alerts reach the bots' admins; the bots then poll for their admins' commands.
@@ -90,6 +98,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler.stop()
         runner.stop()
         notifier.close()
+        set_registry(None)
+        agents.close()
         agent.close()
 
 
@@ -121,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(projects.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(servers.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

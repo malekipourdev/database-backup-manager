@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.api.errors import ApiError
 from mbp.db import utcnow
-from mbp.models import BackupRun, Deployment
+from mbp.models import BackupRun, Deployment, Project, Server
 from mbp.notifications.events import Event
 from mbp.projects.service import credential_of, env_of
 from mbp.repositories.project_repository import ProjectRepository
@@ -40,7 +40,7 @@ class DeployRunner:
         session_factory: sessionmaker[Session],
         backups,
         store,
-        agent: Callable[[], object],
+        agents: Callable[[], object],
         *,
         notifier=None,
         poll_seconds: float = 1.0,
@@ -49,7 +49,8 @@ class DeployRunner:
         self.session_factory = session_factory
         self.backups = backups
         self.store = store
-        self.agent = agent
+        # () -> mbp.servers.registry.AgentRegistry
+        self.agents = agents
         self.notifier = notifier
         self.poll_seconds = poll_seconds
         self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mbp-deploy")
@@ -117,6 +118,7 @@ class DeployRunner:
             project = ProjectRepository(db).get(deployment.project_id or 0)
             if project is None:
                 raise _Failed("project_not_found")
+            server_id = project.server_id
             payload = {
                 "project": project.name,
                 "repo_url": project.repo_url,
@@ -134,7 +136,7 @@ class DeployRunner:
         self._update(deployment_id, status="running", started_at=utcnow())
         if backup[0] and backup[1]:
             self._backup(deployment_id, *backup)
-        self._deploy(deployment_id, payload)
+        self._deploy(deployment_id, server_id, payload)
 
     def _backup(self, deployment_id: int, instance_id: int, names: list[str], required: bool):
         self._update(
@@ -178,10 +180,11 @@ class DeployRunner:
         else:
             self._update(deployment_id, lines=["Backup done."])
 
-    def _deploy(self, deployment_id: int, payload: dict) -> None:
-        agent = self.agent()
-        if agent is None:
-            raise _Failed("agent_unreachable")
+    def _deploy(self, deployment_id: int, server_id: int, payload: dict) -> None:
+        try:
+            agent = self.agents().get(server_id)
+        except ApiError as exc:
+            raise _Failed(exc.code) from exc
         self._update(deployment_id, step="fetch")
         try:
             job_id = agent.deploy(payload)
@@ -258,6 +261,13 @@ class DeployRunner:
                 "error": d.error_code,
                 "detail": d.error_detail,
             }
+            server = (
+                db.get(Server, project.server_id)
+                if (project := d.project_id and db.get(Project, d.project_id))
+                else None
+            )
+            if server is not None and not server.is_local:
+                params["server"] = server.name
             kind = "deploy_succeeded" if d.status == "success" else "deploy_failed"
             subject = f"{kind}:{d.project_name}:{deployment_id}"
         self.notifier.emit(Event(kind, subject, params))

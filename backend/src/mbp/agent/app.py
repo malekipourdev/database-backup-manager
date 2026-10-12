@@ -1,4 +1,9 @@
-"""The agent's HTTP API, used only by the backend over the internal network."""
+"""The agent's HTTP API, used only by the panel.
+
+Local mode (the panel's own server): plain HTTP on the compose network, with a bearer token
+derived from MBP_ENCRYPTION_KEY. Remote mode (MBP_AGENT_TOKEN set, another server): HTTPS
+with the agent's own certificate and signed requests (see mbp.security.agent_auth).
+"""
 
 import hmac
 import logging
@@ -6,10 +11,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Depends, FastAPI, Header, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from mbp.agent import PROTOCOL, mysql
 from mbp.agent.deploy import DeployManager, DeploySpec
 from mbp.agent.docker import (
     ACTIONS,
@@ -26,6 +33,8 @@ from mbp.agent.docker import (
     summarize,
 )
 from mbp.agent.host import HostProbe
+from mbp.backups import dump_command
+from mbp.security import agent_auth
 from mbp.security.agent_token import agent_token
 
 logger = logging.getLogger(__name__)
@@ -34,7 +43,12 @@ logger = logging.getLogger(__name__)
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MBP_")
 
-    encryption_key: SecretStr
+    # Local mode: the token is derived from the panel's key, which this agent shares.
+    encryption_key: SecretStr | None = None
+    # Remote mode: the server's own token, from the panel's "add server" page. The agent
+    # then serves HTTPS with a certificate kept in agent_data_dir.
+    agent_token: SecretStr | None = None
+    agent_data_dir: str = "/data"
     docker_host: str = "unix:///var/run/docker.sock"
     agent_bind: str = "0.0.0.0"  # noqa: S104 - reachable only on the compose network
     agent_port: int = 8090
@@ -43,6 +57,21 @@ class AgentSettings(BaseSettings):
     projects_dir: str = "/opt/mbp-projects"
     # Transports git may use (GIT_ALLOW_PROTOCOL).
     git_protocols: str = "https:ssh"
+    # Dump tools for the backups of databases on this server.
+    mysqldump_path: str = "/usr/local/bin/mysqldump"
+    mariadb_dump_path: str = "/usr/bin/mariadb-dump"
+    connect_timeout_seconds: int = 10
+
+    @property
+    def remote(self) -> bool:
+        return self.agent_token is not None and bool(self.agent_token.get_secret_value())
+
+    def token(self) -> str:
+        if self.remote:
+            return self.agent_token.get_secret_value()  # type: ignore[union-attr]
+        if self.encryption_key is None:
+            raise RuntimeError("Set MBP_AGENT_TOKEN (another server) or MBP_ENCRYPTION_KEY")
+        return agent_token(self.encryption_key.get_secret_value())
 
 
 class DeployRequest(BaseModel):
@@ -53,6 +82,10 @@ class DeployRequest(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     auth_type: str = "none"
     credential: str | None = Field(default=None, max_length=20000)
+
+
+class HelloRequest(BaseModel):
+    nonce: str = Field(min_length=16, max_length=128)
 
 
 class RemoveRequest(BaseModel):
@@ -85,7 +118,9 @@ def create_agent_app(
     docker: DockerClient | None = None,
     host: HostProbe | None = None,
     deployer: DeployManager | None = None,
+    cert_fingerprint: str = "",
 ) -> FastAPI:
+    """`cert_fingerprint`: of the agent's TLS certificate, in remote mode."""
     docker = docker or DockerClient(settings.docker_host)
     host = host or HostProbe()
 
@@ -102,7 +137,8 @@ def create_agent_app(
         protected_projects=protected_projects,
         git_protocols=settings.git_protocols,
     )
-    token = agent_token(settings.encryption_key.get_secret_value())
+    token = settings.token()
+    remote = settings.remote
     cache = StatsCache()
     pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="mbp-agent")
     app = FastAPI(title="MBP agent", docs_url=None, redoc_url=None, openapi_url=None)
@@ -114,9 +150,18 @@ def create_agent_app(
             body["detail"] = exc.message
         return JSONResponse(status_code=exc.status, content=body)
 
-    def require_token(authorization: str = Header(default="")) -> None:
-        scheme, _, value = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not hmac.compare_digest(value, token):
+    def require_token(request: Request, authorization: str = Header(default="")) -> None:
+        if remote:
+            ok = agent_auth.verify(
+                authorization, token, request.method, request.url.path, cert_fingerprint
+            )
+            if not ok and agent_auth.clock_skewed(authorization):
+                # Says nothing about the token; tells the admin to fix the server's clock.
+                raise DockerError("agent_clock_skew", 401)
+        else:
+            scheme, _, value = authorization.partition(" ")
+            ok = scheme.lower() == "bearer" and hmac.compare_digest(value, token)
+        if not ok:
             raise DockerError("agent_unauthorized", 401)
 
     def checked(ref: str) -> str:
@@ -153,6 +198,17 @@ def create_agent_app(
         return {"ok": True}
 
     auth = [Depends(require_token)]
+
+    @app.post("/v1/hello", dependencies=auth)
+    def hello(body: HelloRequest) -> dict:
+        """Proves to the panel that this agent holds the token and this certificate."""
+        version = docker.version()
+        return {
+            "proof": agent_auth.proof(token, body.nonce, cert_fingerprint),
+            "protocol": PROTOCOL,
+            "docker_version": version.get("Version"),
+            "hostname": docker.info().get("Name"),
+        }
 
     @app.get("/v1/info", dependencies=auth)
     def info() -> dict:
@@ -253,5 +309,27 @@ def create_agent_app(
     @app.post("/v1/projects/{name}/remove", dependencies=auth)
     def project_remove(name: str, body: RemoveRequest) -> dict:
         return deployer.remove(name, body.compose_file, body.down)
+
+    # --- databases on this server ---
+
+    @app.post("/v1/mysql/test", dependencies=auth)
+    def mysql_test(body: mysql.MysqlTarget) -> dict:
+        return mysql.test(docker, body, settings.connect_timeout_seconds)
+
+    @app.post("/v1/mysql/databases", dependencies=auth)
+    def mysql_databases(body: mysql.MysqlTarget) -> dict:
+        return mysql.databases(docker, body, settings.connect_timeout_seconds)
+
+    @app.post("/v1/mysql/dump", dependencies=auth)
+    async def mysql_dump(body: mysql.DumpRequest) -> StreamingResponse:
+        if not dump_command.is_safe_database_name(body.database):
+            raise DockerError("invalid_database_name", 400)
+        tool = mysql.tool_path(
+            body.server_type, settings.mysqldump_path, settings.mariadb_dump_path
+        )
+        params = await run_in_threadpool(mysql.params_of, docker, body)
+        return StreamingResponse(
+            mysql.dump_stream(tool, params, body), media_type="application/octet-stream"
+        )
 
     return app
