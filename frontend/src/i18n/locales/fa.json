@@ -18,7 +18,8 @@
     "bots": "ربات‌ها",
     "notifications": "اعلان‌ها",
     "account": "حساب کاربری",
-    "containers": "کانتینرها"
+    "containers": "کانتینرها",
+    "projects": "پروژه‌ها"
   },
   "language": {
     "label": "زبان",
@@ -68,7 +69,7 @@
     "dump_failed": "ابزار dump خطا گزارش کرد.",
     "disk_full": "فضای دیسک برای پشتیبان کافی نیست.",
     "verification_failed": "فایل پشتیبان در بررسی صحت رد شد و حذف شد.",
-    "interrupted": "پشتیبان‌گیری به‌دلیل توقف یا راه‌اندازی مجدد پنل نیمه‌کاره ماند.",
+    "interrupted": "دیپلوی با ری‌استارت پنل قطع شد. دوباره دیپلوی کنید.",
     "instance_deleted": "سرور پیش از شروع پشتیبان‌گیری حذف شد.",
     "tool_missing": "ابزار dump در پنل نصب نیست.",
     "storage_error": "فایل پشتیبان در محل ذخیره نوشته نشد.",
@@ -105,7 +106,7 @@
     "agent_unreachable": "سرویس agent (مدیریت کانتینرها) در دسترس نیست. نصب و روشن است؟",
     "agent_timeout": "سرویس agent به‌موقع پاسخ نداد.",
     "agent_unauthorized": "سرویس agent توکن پنل را نپذیرفت. هر دو باید MBP_ENCRYPTION_KEY یکسان داشته باشند.",
-    "agent_error": "سرویس agent خطا برگرداند.",
+    "agent_error": "agent با خطای غیرمنتظره روبه‌رو شد.",
     "docker_unavailable": "Docker از سمت agent در دسترس نیست.",
     "docker_permission_denied": "agent اجازه‌ی استفاده از docker.sock را ندارد: MBP_DOCKER_GID را برابر گروه سوکت قرار دهید.",
     "docker_timeout": "Docker به‌موقع پاسخ نداد.",
@@ -114,7 +115,27 @@
     "container_locked": "این کانتینر قفل است و از پنل شروع، متوقف یا ری‌استارت نمی‌شود.",
     "container_protected": "کانتینرهای خود پنل از پنل قابل کنترل نیستند.",
     "containers_read_only": "حالت فقط‌خواندنی فعال است و کانتینرها قابل کنترل نیستند.",
-    "invalid_action": "این عملیات مجاز نیست."
+    "invalid_action": "این عملیات مجاز نیست.",
+    "fetch_failed": "دریافت کد از گیت ناموفق بود. نشانی مخزن، شاخه و تنظیمات دسترسی را بررسی کنید.",
+    "compose_invalid": "فایل compose معتبر نیست یا در مسیر داده‌شده پیدا نشد.",
+    "build_failed": "ساخت ایمیج‌ها ناموفق بود. خطا را در لاگ ببینید.",
+    "up_failed": "اجرای سرویس‌ها ناموفق بود. لاگ را ببینید.",
+    "service_failed": "یک سرویس پس از دیپلوی متوقف شد، مدام ری‌استارت می‌شود یا ناسالم است.",
+    "backup_failed": "بکاپ پیش از دیپلوی ناموفق بود، پس چیزی دیپلوی نشد.",
+    "agent_restarted": "سرویس agent در میانه‌ی دیپلوی ری‌استارت شد. دوباره دیپلوی کنید.",
+    "deploy_in_progress": "یک دیپلوی از این پروژه در حال انجام است.",
+    "project_not_found": "این پروژه دیگر وجود ندارد.",
+    "deployment_not_found": "این دیپلوی دیگر وجود ندارد.",
+    "projects_dir_not_writable": "agent اجازه‌ی نوشتن در پوشه‌ی پروژه‌ها روی سرور را ندارد (README را ببینید).",
+    "project_protected": "این نام متعلق به خود پنل است.",
+    "invalid_repo_url": "نشانی مخزن معتبر نیست.",
+    "invalid_ref": "شاخه یا کامیت معتبر نیست.",
+    "invalid_compose_file": "مسیر فایل compose معتبر نیست.",
+    "invalid_project": "نام پروژه معتبر نیست.",
+    "invalid_env_name": "نام یکی از متغیرها معتبر نیست.",
+    "invalid_auth": "تنظیمات دسترسی کامل نیست.",
+    "down_failed": "متوقف کردن کانتینرهای پروژه ناموفق بود.",
+    "job_not_found": "agent دیگر این دیپلوی را نمی‌شناسد."
   },
   "validation": {
     "required": "پر کردن این فیلد الزامی است.",
@@ -284,7 +305,8 @@
     "retryUpload": "بارگذاری دوباره",
     "fileRemoved": "حذف‌شده از سرور",
     "removedByRetention": "فایل محلی در {{date}} توسط سیاست نگهداری حذف شد",
-    "removedManually": "فایل محلی در {{date}} حذف شد؛ نسخه‌ی ابری نگه داشته شد"
+    "removedManually": "فایل محلی در {{date}} حذف شد؛ نسخه‌ی ابری نگه داشته شد",
+    "beforeDeploy": "پیش از دیپلوی"
   },
   "history": {
     "title": "تاریخچه‌ی پشتیبان‌ها",
@@ -602,7 +624,9 @@
       "container_unhealthy": "کانتینر ناسالم",
       "container_resources": "مصرف بالای کانتینر",
       "host_resources": "کمبود منابع سرور",
-      "agent_unreachable": "قطع ارتباط با agent"
+      "agent_unreachable": "قطع ارتباط با agent",
+      "deploy_failed": "دیپلوی ناموفق",
+      "deploy_succeeded": "دیپلوی موفق"
     },
     "descriptions": {
       "backup_failed": "یک بکاپ با خطا تمام شد.",
@@ -619,7 +643,9 @@
       "container_unhealthy": "بررسی سلامت یک کانتینر ناموفق است.",
       "container_resources": "مصرف CPU یا RAM یک کانتینر از حدهای «کانتینرها ← تنظیمات» بیشتر است.",
       "host_resources": "RAM سرور یا دیسک Docker از حدهای «کانتینرها ← تنظیمات» بیشتر است.",
-      "agent_unreachable": "ارتباط پنل با سرویس agent (مدیریت کانتینرها) قطع شده."
+      "agent_unreachable": "ارتباط پنل با سرویس agent (مدیریت کانتینرها) قطع شده.",
+      "deploy_failed": "دیپلوی یک پروژه ناموفق بود (دریافت، ساخت، اجرا، بررسی یا بکاپ پیش از آن).",
+      "deploy_succeeded": "یک پروژه دیپلوی شد."
     },
     "thresholds": {
       "title": "آستانه‌ها و زمان‌بندی",
@@ -699,7 +725,9 @@
       "recovered_container_resources": "مصرف کانتینر «{{name}}» به حالت عادی برگشت.",
       "recovered_host_memory": "مصرف حافظه‌ی سرور به حالت عادی برگشت ({{percent}}).",
       "recovered_host_disk": "فضای دیسک Docker دوباره کافی است ({{percent}} مصرف).",
-      "recovered_agent": "ارتباط با agent برقرار شد."
+      "recovered_agent": "ارتباط با agent برقرار شد.",
+      "deploy_succeeded": "پروژه‌ی «{{project}}» دیپلوی شد: {{commit}} {{message}} (توسط {{actor}}).",
+      "deploy_failed": "دیپلوی پروژه‌ی «{{project}}» ناموفق بود: {{error}}"
     }
   },
   "layout": {
@@ -911,5 +939,140 @@
       "saved": "تنظیمات کانتینرها ذخیره شد."
     },
     "readOnlyMount": "فقط‌خواندنی"
+  },
+  "projects": {
+    "title": "پروژه‌ها",
+    "subtitle": "برنامه‌هایی که از گیت با docker compose دیپلوی می‌شوند.",
+    "add": "پروژه‌ی جدید",
+    "empty": "هنوز پروژه‌ای ثبت نشده",
+    "emptyHint": "یک مخزن گیت با فایل docker compose اضافه کنید؛ پنل آن را دریافت، build و روی همین سرور اجرا می‌کند و تاریخچه‌ی هر دیپلوی را نگه می‌دارد.",
+    "newTitle": "پروژه‌ی جدید",
+    "editTitle": "ویرایش پروژه",
+    "formSubtitle": "کد کجاست، چطور به آن دسترسی داریم، و در هر دیپلوی چه چیزی تنظیم شود.",
+    "never": "هنوز دیپلوی نشده",
+    "current": "کامیت در حال اجرا",
+    "deploy": "دیپلوی",
+    "deploying": "در حال دیپلوی…",
+    "redeploy": "دیپلوی دوباره‌ی این نسخه",
+    "deployTitle": "دیپلوی",
+    "deployBody": "آخرین نسخه‌ی شاخه‌ی «{{branch}}» از {{name}} دریافت، build و اجرا شود؟ سرویس‌ها یکی‌یکی جایگزین می‌شوند.",
+    "redeployTitle": "دیپلوی دوباره‌ی این نسخه",
+    "redeployBody": "{{name}} دوباره روی کامیت {{commit}} دیپلوی شود (مثلاً برای برگرداندن یک دیپلوی خراب)؟",
+    "deleteTitle": "حذف پروژه",
+    "deleteBody": "«{{name}}» از پنل حذف شود؟ تاریخچه‌ی دیپلوی‌هایش نگه داشته می‌شود.",
+    "deleteDown": "کانتینرهایش روی سرور هم متوقف و حذف شوند",
+    "deleteDownHint": "docker compose down: volumeها و پوشه‌های داده باقی می‌مانند.",
+    "deleted": "پروژه حذف شد.",
+    "saved": "پروژه ذخیره شد.",
+    "onServer": "روی سرور",
+    "notCheckedOut": "دریافت نشده",
+    "services": "سرویس‌ها",
+    "allContainers": "همه‌ی کانتینرها",
+    "noServices": "کانتینری از این پروژه در حال اجرا نیست.",
+    "history": "دیپلوی‌ها",
+    "required": "الزامی",
+    "noBackup": "ندارد",
+    "lastSuccess": "آخرین دیپلوی موفق: {{time}}",
+    "deploymentTitle": "دیپلوی #{{id}}",
+    "requestedBy": "توسط {{actor}} ({{source}})، {{time}}",
+    "logEmpty": "هنوز خروجی‌ای نیست.",
+    "status": {
+      "queued": "در صف",
+      "running": "در حال اجرا",
+      "success": "دیپلوی شد",
+      "failed": "ناموفق"
+    },
+    "step": {
+      "backup": "بکاپ",
+      "fetch": "دریافت کد",
+      "build": "ساخت",
+      "up": "اجرا",
+      "check": "بررسی"
+    },
+    "columns": {
+      "status": "وضعیت",
+      "commit": "کامیت",
+      "by": "توسط",
+      "time": "زمان",
+      "duration": "مدت"
+    },
+    "sections": {
+      "source": "منبع",
+      "access": "دسترسی به مخزن",
+      "env": "متغیرهای محیطی",
+      "backup": "بکاپ پیش از دیپلوی"
+    },
+    "accessHint": "برای مخزن خصوصی. بهتر است از deploy key یا توکنی استفاده کنید که فقط دسترسی خواندن همین مخزن را دارد.",
+    "auth": {
+      "none": "عمومی",
+      "token": "توکن دسترسی",
+      "ssh_key": "کلید SSH (deploy key)"
+    },
+    "envHint": "در هر دیپلوی در فایل ‎.env کنار فایل compose نوشته می‌شود (فقط agent آن را می‌خواند). مقدارها رمزنگاری‌شده ذخیره می‌شوند و دیگر نمایش داده نمی‌شوند.",
+    "backupHint": "درست پیش از هر دیپلوی از این دیتابیس‌ها بکاپ گرفته می‌شود تا اگر مایگریشنی خراب کرد، بشود برگشت.",
+    "addVar": "افزودن متغیر",
+    "removeVar": "حذف متغیر",
+    "fields": {
+      "name": "نام",
+      "nameHint": "حروف کوچک انگلیسی، عدد، - و _. همین نام پروژه‌ی compose روی سرور است: اگر پروژه‌ی compose هم‌نامی آن‌جا در حال اجرا باشد، دیپلوی آن را در دست می‌گیرد.",
+      "nameLocked": "پس از اولین دیپلوی قابل تغییر نیست.",
+      "repoUrl": "مخزن",
+      "repoUrlHint": "https://… یا git@host:owner/repo.git",
+      "branch": "شاخه",
+      "composeFile": "فایل compose",
+      "composeFileHint": "مسیر داخل مخزن.",
+      "token": "توکن دسترسی",
+      "tokenHint": "توکن GitHub/GitLab/Gitea با دسترسی خواندن.",
+      "sshKey": "کلید خصوصی",
+      "sshKeyHint": "کلید عمومی متناظر را در مخزن به‌عنوان deploy key فقط‌خواندنی اضافه کنید.",
+      "keepCredential": "ذخیره شده. برای نگه داشتن، خالی بگذارید.",
+      "envName": "NAME",
+      "envValue": "مقدار",
+      "envStored": "ذخیره شده — برای نگه داشتن خالی بگذارید",
+      "backupInstance": "سرور دیتابیس",
+      "noBackup": "بدون بکاپ",
+      "backupDatabases": "دیتابیس‌ها",
+      "backupRequired": "اگر بکاپ ناموفق بود، دیپلوی انجام نشود",
+      "backupRequiredHint": "پیشنهادی: بدون بکاپ تازه چیزی دیپلوی نمی‌شود."
+    },
+    "validation": {
+      "invalid_project_name": "حروف کوچک انگلیسی، عدد، - و _، با حرف یا عدد شروع شود (نه نام خود پنل).",
+      "name_taken": "پروژه‌ی دیگری این نام را دارد.",
+      "rename_after_deploy": "پس از دیپلوی قابل تغییر نام نیست.",
+      "invalid_repo_url": "از https://… یا git@host:path استفاده کنید.",
+      "invalid_ref": "نام شاخه معتبر نیست.",
+      "invalid_compose_file": "مسیر نسبی به یک فایل ‎.yml یا ‎.yaml.",
+      "required": "برای این نوع دسترسی لازم است.",
+      "instance_not_found": "این سرور دیگر وجود ندارد.",
+      "invalid_env_name": "نام متغیر: حروف انگلیسی، عدد و _، بدون شروع با عدد.",
+      "duplicate_env_name": "نام یک متغیر تکراری است.",
+      "env_value_required": "متغیر جدید مقدار لازم دارد.",
+      "env_value_too_long": "یکی از مقدارها خیلی طولانی است.",
+      "too_many": "تعداد متغیرها زیاد است."
+    },
+    "errors": {
+      "fetch_failed": "دریافت کد از گیت ناموفق بود. نشانی مخزن، شاخه و تنظیمات دسترسی را بررسی کنید.",
+      "compose_invalid": "فایل compose معتبر نیست یا در مسیر داده‌شده پیدا نشد.",
+      "build_failed": "ساخت ایمیج‌ها ناموفق بود. خطا را در لاگ ببینید.",
+      "up_failed": "اجرای سرویس‌ها ناموفق بود. لاگ را ببینید.",
+      "service_failed": "یک سرویس پس از دیپلوی متوقف شد، مدام ری‌استارت می‌شود یا ناسالم است.",
+      "backup_failed": "بکاپ پیش از دیپلوی ناموفق بود، پس چیزی دیپلوی نشد.",
+      "agent_restarted": "سرویس agent در میانه‌ی دیپلوی ری‌استارت شد. دوباره دیپلوی کنید.",
+      "interrupted": "دیپلوی با ری‌استارت پنل قطع شد. دوباره دیپلوی کنید.",
+      "deploy_in_progress": "یک دیپلوی از این پروژه در حال انجام است.",
+      "project_not_found": "این پروژه دیگر وجود ندارد.",
+      "deployment_not_found": "این دیپلوی دیگر وجود ندارد.",
+      "projects_dir_not_writable": "agent اجازه‌ی نوشتن در پوشه‌ی پروژه‌ها روی سرور را ندارد (README را ببینید).",
+      "project_protected": "این نام متعلق به خود پنل است.",
+      "invalid_repo_url": "نشانی مخزن معتبر نیست.",
+      "invalid_ref": "شاخه یا کامیت معتبر نیست.",
+      "invalid_compose_file": "مسیر فایل compose معتبر نیست.",
+      "invalid_project": "نام پروژه معتبر نیست.",
+      "invalid_env_name": "نام یکی از متغیرها معتبر نیست.",
+      "invalid_auth": "تنظیمات دسترسی کامل نیست.",
+      "down_failed": "متوقف کردن کانتینرهای پروژه ناموفق بود.",
+      "job_not_found": "agent دیگر این دیپلوی را نمی‌شناسد.",
+      "agent_error": "agent با خطای غیرمنتظره روبه‌رو شد."
+    }
   }
 }

@@ -13,6 +13,13 @@ def _time(value: str | None, lang: str, zone: ZoneInfo) -> str:
     return format_time(datetime.fromisoformat(value) if value else None, lang, zone)
 
 
+def _result(lang: str, code: str | None) -> str:
+    if not code:
+        return ""
+    text = t(lang, f"result_{code}")
+    return code if text == f"result_{code}" else text
+
+
 def render(event: Event, lang: str, zone: ZoneInfo) -> str:
     p = dict(event.params)
     kind = event.type
@@ -84,6 +91,18 @@ def render(event: Event, lang: str, zone: ZoneInfo) -> str:
             total=format_size(p.get("total"), lang),
             threshold=digits(str(p.get("threshold", "")), lang),
         )
+    if kind in ("deploy_succeeded", "deploy_failed"):
+        detail = p.get("detail")
+        return t(
+            lang,
+            f"event_{kind}",
+            project=p.get("project", ""),
+            commit=p.get("commit") or "",
+            message=p.get("message") or "",
+            actor=p.get("actor", ""),
+            error=_result(lang, p.get("error")),
+            detail=f" — {detail}" if detail else "",
+        ).strip()
     if kind == "agent_unreachable":
         return t(lang, "event_agent_unreachable", code=p.get("code", ""))
     if kind == "recovered" and p.get("kind") in (

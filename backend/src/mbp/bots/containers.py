@@ -329,21 +329,33 @@ class ContainerMenu:
             raise ApiError(403, "containers_read_only")
         if svc.locked(svc.container(name)):
             raise ApiError(403, "container_locked")
-        has_2fa = db.scalar(
-            select(AdminAccount.id).where(AdminAccount.totp_enabled.is_(True)).limit(1)
-        )
-        if has_2fa is None:
-            return Screen(t(lang, "need_2fa"), back)
-        if self._blocked(ctx.admin_id):
-            return Screen(t(lang, "code_locked"), back)
-        with self._pending_lock:
-            self._pending[chat_id] = PendingAction(
-                ctx.admin_id, name, action, time.monotonic() + CODE_TTL_SECONDS
-            )
+        refused = self._code_prerequisites(db, ctx, back)
+        if refused is not None:
+            return refused
+        self._set_pending(chat_id, ctx, name, action)
         return Screen(
             t(lang, "confirm_code", action=t(lang, f"action_{action}"), name=name),
             [[button(t(lang, "btn_cancel"), f"cx:{token}")]],
         )
+
+    def _code_prerequisites(self, db: Session, ctx, back):
+        """A refusal screen when an action cannot be confirmed with a code, else None."""
+        from mbp.bots.handler import Screen
+
+        has_2fa = db.scalar(
+            select(AdminAccount.id).where(AdminAccount.totp_enabled.is_(True)).limit(1)
+        )
+        if has_2fa is None:
+            return Screen(t(ctx.lang, "need_2fa"), back)
+        if self._blocked(ctx.admin_id):
+            return Screen(t(ctx.lang, "code_locked"), back)
+        return None
+
+    def _set_pending(self, chat_id: int, ctx, name: str, action: str) -> None:
+        with self._pending_lock:
+            self._pending[chat_id] = PendingAction(
+                ctx.admin_id, name, action, time.monotonic() + CODE_TTL_SECONDS
+            )
 
     def cancel_action(self, db: Session, ctx, token: str, chat_id: int):
         with self._pending_lock:
@@ -378,11 +390,15 @@ class ContainerMenu:
             pending = self._pending.get(chat_id)
         if pending is None or pending.bot_admin_id != ctx.admin_id:
             return None
-        token = self._token(pending.name)
+        if pending.action == "deploy":
+            back, cancel = f"p:{pending.name}", f"pdx:{pending.name}"
+        else:
+            token = self._token(pending.name)
+            back, cancel = f"c:{token}", f"cx:{token}"
         if time.monotonic() > pending.expires:
             with self._pending_lock:
                 self._pending.pop(chat_id, None)
-            return Screen(t(lang, "code_expired"), [[button(t(lang, "btn_back"), f"c:{token}")]])
+            return Screen(t(lang, "code_expired"), [[button(t(lang, "btn_back"), back)]])
         code = re.sub(r"\s", "", text)
         if not CODE_RE.fullmatch(code):
             # Anything else cancels the request and continues as a normal message.
@@ -394,23 +410,23 @@ class ContainerMenu:
             pending.tries += 1
             with self._pending_lock:
                 self._failures.setdefault(ctx.admin_id, []).append(time.monotonic())
-            logger.warning(
-                "%s bot: wrong container action code from admin %s", self.platform, ctx.admin_id
-            )
+            logger.warning("%s bot: wrong action code from admin %s", self.platform, ctx.admin_id)
             if pending.tries >= CODE_TRIES or self._blocked(ctx.admin_id):
                 with self._pending_lock:
                     self._pending.pop(chat_id, None)
                 key = "code_locked" if self._blocked(ctx.admin_id) else "code_expired"
-                return Screen(t(lang, key), [[button(t(lang, "btn_back"), f"c:{token}")]])
+                return Screen(t(lang, key), [[button(t(lang, "btn_back"), back)]])
             return Screen(
                 t(lang, "code_wrong", left=CODE_TRIES - pending.tries),
-                [[button(t(lang, "btn_cancel"), f"cx:{token}")]],
+                [[button(t(lang, "btn_cancel"), cancel)]],
             )
         with self._pending_lock:
             self._pending.pop(chat_id, None)
         db.commit()  # the code is spent even if the action fails
         bot_admin = db.get(BotAdmin, ctx.admin_id)
         actor = f"{bot_admin.display_name if bot_admin else ctx.admin_id} ({account.username})"
+        if pending.action == "deploy":
+            return self.deploy_confirmed(db, ctx, int(pending.name), actor, chat_id)
         try:
             self._containers(db).act(
                 pending.name, pending.action, actor=actor, source=self.platform
@@ -418,7 +434,7 @@ class ContainerMenu:
         except ApiError as exc:
             return Screen(
                 t(lang, "error", message=self._error(ctx, exc.code)),
-                [[button(t(lang, "btn_back"), f"c:{token}")]],
+                [[button(t(lang, "btn_back"), back)]],
             )
         done = t(lang, "action_done", action=t(lang, f"action_{pending.action}"), name=pending.name)
         return self.container_view(db, ctx, token, note=done)

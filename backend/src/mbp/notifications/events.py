@@ -19,6 +19,8 @@ EVENTS: dict[str, str] = {
     "container_resources": "warning",
     "host_resources": "warning",
     "agent_unreachable": "warning",
+    "deploy_failed": "error",
+    "deploy_succeeded": "info",
     "backup_succeeded": "info",
     "recovered": "info",
     "daily_summary": "info",

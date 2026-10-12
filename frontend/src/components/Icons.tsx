@@ -24,6 +24,7 @@ export {
   Plus,
   PlugsConnected,
   Robot,
+  RocketLaunch,
   ShieldCheck,
   SlidersHorizontal,
   SignOut,

@@ -12,6 +12,7 @@ from mbp.api import (
     health,
     instances,
     notifications,
+    projects,
     schedules,
     storage,
 )
@@ -27,6 +28,7 @@ from mbp.db import get_sessionmaker
 from mbp.logging import configure_logging
 from mbp.notifications.monitor import AlertMonitor
 from mbp.notifications.notifier import Notifier
+from mbp.projects.runner import DeployRunner
 from mbp.security import crypto
 from mbp.security.sessions import require_csrf, require_session
 from mbp.services.auth_service import bootstrap_admin
@@ -62,8 +64,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     scheduler.start()
     app.state.backup_scheduler = scheduler
+    deploy_runner = DeployRunner(
+        sessions, runner, store, agent=lambda: app.state.agent, notifier=notifier
+    )
+    deploy_runner.recover()
+    app.state.deploy_runner = deploy_runner
     bot_manager = BotManager(
-        sessions, runner, store, scheduler=scheduler, agent=lambda: app.state.agent
+        sessions,
+        runner,
+        store,
+        scheduler=scheduler,
+        agent=lambda: app.state.agent,
+        deploy_runner=lambda: app.state.deploy_runner,
     )
     # Alerts reach the bots' admins; the bots then poll for their admins' commands.
     notifier.bots = bot_manager
@@ -74,6 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         bot_manager.stop()
+        deploy_runner.stop()
         scheduler.stop()
         runner.stop()
         notifier.close()
@@ -107,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(bots.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(notifications.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(projects.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

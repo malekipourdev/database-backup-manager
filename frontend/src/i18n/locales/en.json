@@ -18,7 +18,8 @@
     "bots": "Bots",
     "notifications": "Notifications",
     "account": "Account",
-    "containers": "Containers"
+    "containers": "Containers",
+    "projects": "Projects"
   },
   "language": {
     "label": "Language",
@@ -68,7 +69,7 @@
     "dump_failed": "The dump tool reported an error.",
     "disk_full": "Not enough disk space for the backup.",
     "verification_failed": "The backup file failed verification and was deleted.",
-    "interrupted": "The backup was interrupted because the panel stopped or restarted.",
+    "interrupted": "The deploy was interrupted because the panel restarted. Deploy again.",
     "instance_deleted": "The instance was deleted before the backup started.",
     "tool_missing": "The dump tool is not installed in the panel.",
     "storage_error": "The backup file could not be written to the storage area.",
@@ -105,7 +106,7 @@
     "agent_unreachable": "The agent (container management) is not reachable. Is it installed and running?",
     "agent_timeout": "The agent did not answer in time.",
     "agent_unauthorized": "The agent refused the panel's token. Both must use the same MBP_ENCRYPTION_KEY.",
-    "agent_error": "The agent returned an error.",
+    "agent_error": "The agent hit an unexpected error.",
     "docker_unavailable": "Docker is not reachable from the agent.",
     "docker_permission_denied": "The agent may not use docker.sock: set MBP_DOCKER_GID to the socket's group.",
     "docker_timeout": "Docker did not answer in time.",
@@ -114,7 +115,27 @@
     "container_locked": "This container is locked: it cannot be started, stopped or restarted from the panel.",
     "container_protected": "The panel's own containers cannot be controlled from the panel.",
     "containers_read_only": "Read-only mode is on: containers cannot be controlled.",
-    "invalid_action": "This action is not allowed."
+    "invalid_action": "This action is not allowed.",
+    "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
+    "compose_invalid": "The compose file is not valid, or was not found at the given path.",
+    "build_failed": "Building the images failed. See the log for the build error.",
+    "up_failed": "Starting the services failed. See the log.",
+    "service_failed": "A service stopped, keeps restarting or is unhealthy after the deploy.",
+    "backup_failed": "The backup before the deploy failed, so nothing was deployed.",
+    "agent_restarted": "The agent restarted during the deploy. Deploy again.",
+    "deploy_in_progress": "A deploy of this project is already running.",
+    "project_not_found": "This project no longer exists.",
+    "deployment_not_found": "This deploy no longer exists.",
+    "projects_dir_not_writable": "The agent may not write to the projects directory on the server (see the README).",
+    "project_protected": "This name belongs to the panel itself.",
+    "invalid_repo_url": "The repository address is not valid.",
+    "invalid_ref": "The branch or commit is not valid.",
+    "invalid_compose_file": "The compose file path is not valid.",
+    "invalid_project": "The project name is not valid.",
+    "invalid_env_name": "A variable name is not valid.",
+    "invalid_auth": "The access settings are incomplete.",
+    "down_failed": "Stopping the project's containers failed.",
+    "job_not_found": "The agent no longer knows this deploy."
   },
   "validation": {
     "required": "This field is required.",
@@ -284,7 +305,8 @@
     "retryUpload": "Retry upload",
     "fileRemoved": "Removed locally",
     "removedByRetention": "Local file removed by retention on {{date}}",
-    "removedManually": "Local file deleted on {{date}}; the remote copy was kept"
+    "removedManually": "Local file deleted on {{date}}; the remote copy was kept",
+    "beforeDeploy": "Before a deploy"
   },
   "history": {
     "title": "Backup history",
@@ -602,7 +624,9 @@
       "container_unhealthy": "Container unhealthy",
       "container_resources": "High container usage",
       "host_resources": "Server resources low",
-      "agent_unreachable": "Agent unreachable"
+      "agent_unreachable": "Agent unreachable",
+      "deploy_failed": "Deploy failed",
+      "deploy_succeeded": "Deploy succeeded"
     },
     "descriptions": {
       "backup_failed": "A backup ended with an error.",
@@ -619,7 +643,9 @@
       "container_unhealthy": "A container's health check is failing.",
       "container_resources": "A container uses more CPU or RAM than the limits in Containers → Settings.",
       "host_resources": "The server's RAM or Docker disk is above the limits in Containers → Settings.",
-      "agent_unreachable": "The panel lost contact with the agent that manages containers."
+      "agent_unreachable": "The panel lost contact with the agent that manages containers.",
+      "deploy_failed": "A project's deploy failed (fetch, build, start, check or the backup before it).",
+      "deploy_succeeded": "A project was deployed."
     },
     "thresholds": {
       "title": "Thresholds and timing",
@@ -699,7 +725,9 @@
       "recovered_container_resources": "Usage of container “{{name}}” is back to normal.",
       "recovered_host_memory": "Server memory use is back to normal ({{percent}}).",
       "recovered_host_disk": "The Docker disk has enough space again ({{percent}} used).",
-      "recovered_agent": "Contact with the agent is back."
+      "recovered_agent": "Contact with the agent is back.",
+      "deploy_succeeded": "Project “{{project}}” deployed: {{commit}} {{message}} (by {{actor}}).",
+      "deploy_failed": "Deploy of project “{{project}}” failed: {{error}}"
     }
   },
   "layout": {
@@ -911,5 +939,140 @@
       "saved": "Container settings saved."
     },
     "readOnlyMount": "read-only"
+  },
+  "projects": {
+    "title": "Projects",
+    "subtitle": "Applications deployed from git with docker compose.",
+    "add": "New project",
+    "empty": "No projects yet",
+    "emptyHint": "Add a git repository with a docker compose file; the panel fetches it, builds and starts it on this server, and keeps the history of every deploy.",
+    "newTitle": "New project",
+    "editTitle": "Edit project",
+    "formSubtitle": "Where the code is, how to reach it, and what to set up on every deploy.",
+    "never": "Not deployed yet",
+    "current": "Running commit",
+    "deploy": "Deploy",
+    "deploying": "Deploying…",
+    "redeploy": "Redeploy this version",
+    "deployTitle": "Deploy",
+    "deployBody": "Fetch the latest “{{branch}}” of {{name}}, build and start it? Services are replaced one by one.",
+    "redeployTitle": "Redeploy this version",
+    "redeployBody": "Deploy {{name}} at commit {{commit}} again (for example to undo a bad deploy)?",
+    "deleteTitle": "Delete project",
+    "deleteBody": "Delete “{{name}}” from the panel? Its deploy history is kept.",
+    "deleteDown": "Also stop and remove its containers on the server",
+    "deleteDownHint": "docker compose down: volumes and data directories are kept.",
+    "deleted": "Project deleted.",
+    "saved": "Project saved.",
+    "onServer": "On the server",
+    "notCheckedOut": "not checked out",
+    "services": "Services",
+    "allContainers": "All containers",
+    "noServices": "No containers of this project are running.",
+    "history": "Deploys",
+    "required": "required",
+    "noBackup": "none",
+    "lastSuccess": "Last successful deploy: {{time}}",
+    "deploymentTitle": "Deploy #{{id}}",
+    "requestedBy": "By {{actor}} ({{source}}), {{time}}",
+    "logEmpty": "No output yet.",
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "success": "Deployed",
+      "failed": "Failed"
+    },
+    "step": {
+      "backup": "backup",
+      "fetch": "fetching code",
+      "build": "building",
+      "up": "starting",
+      "check": "checking"
+    },
+    "columns": {
+      "status": "Status",
+      "commit": "Commit",
+      "by": "By",
+      "time": "Time",
+      "duration": "Duration"
+    },
+    "sections": {
+      "source": "Source",
+      "access": "Repository access",
+      "env": "Environment variables",
+      "backup": "Backup before deploy"
+    },
+    "accessHint": "For a private repository. Prefer a deploy key or a token with read-only access to this repository only.",
+    "auth": {
+      "none": "Public",
+      "token": "Access token",
+      "ssh_key": "SSH deploy key"
+    },
+    "envHint": "Written to a .env file next to the compose file on every deploy (readable only by the agent). Values are stored encrypted and never shown again.",
+    "backupHint": "Back up these databases right before every deploy, so a bad migration can be undone.",
+    "addVar": "Add variable",
+    "removeVar": "Remove variable",
+    "fields": {
+      "name": "Name",
+      "nameHint": "Lowercase letters, digits, - and _. Also the compose project name on the server: if a compose project with this name already runs there, deploys take it over.",
+      "nameLocked": "Can't be changed after the first deploy.",
+      "repoUrl": "Repository",
+      "repoUrlHint": "https://… or git@host:owner/repo.git",
+      "branch": "Branch",
+      "composeFile": "Compose file",
+      "composeFileHint": "Path inside the repository.",
+      "token": "Access token",
+      "tokenHint": "A GitHub/GitLab/Gitea token with read access.",
+      "sshKey": "Private key",
+      "sshKeyHint": "Add the matching public key to the repository as a read-only deploy key.",
+      "keepCredential": "Stored. Leave empty to keep it.",
+      "envName": "NAME",
+      "envValue": "Value",
+      "envStored": "stored — leave empty to keep",
+      "backupInstance": "Database server",
+      "noBackup": "No backup",
+      "backupDatabases": "Databases",
+      "backupRequired": "Stop the deploy if the backup fails",
+      "backupRequiredHint": "Recommended: nothing is deployed without a fresh backup."
+    },
+    "validation": {
+      "invalid_project_name": "Lowercase letters, digits, - and _, starting with a letter or digit (not the panel's own name).",
+      "name_taken": "Another project has this name.",
+      "rename_after_deploy": "Can't be renamed after it was deployed.",
+      "invalid_repo_url": "Use https://… or git@host:path.",
+      "invalid_ref": "Not a valid branch name.",
+      "invalid_compose_file": "A relative path to a .yml or .yaml file.",
+      "required": "Required for this access type.",
+      "instance_not_found": "This server no longer exists.",
+      "invalid_env_name": "Variable names: letters, digits and _, not starting with a digit.",
+      "duplicate_env_name": "A variable name is used twice.",
+      "env_value_required": "A new variable needs a value.",
+      "env_value_too_long": "A value is too long.",
+      "too_many": "Too many variables."
+    },
+    "errors": {
+      "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
+      "compose_invalid": "The compose file is not valid, or was not found at the given path.",
+      "build_failed": "Building the images failed. See the log for the build error.",
+      "up_failed": "Starting the services failed. See the log.",
+      "service_failed": "A service stopped, keeps restarting or is unhealthy after the deploy.",
+      "backup_failed": "The backup before the deploy failed, so nothing was deployed.",
+      "agent_restarted": "The agent restarted during the deploy. Deploy again.",
+      "interrupted": "The deploy was interrupted because the panel restarted. Deploy again.",
+      "deploy_in_progress": "A deploy of this project is already running.",
+      "project_not_found": "This project no longer exists.",
+      "deployment_not_found": "This deploy no longer exists.",
+      "projects_dir_not_writable": "The agent may not write to the projects directory on the server (see the README).",
+      "project_protected": "This name belongs to the panel itself.",
+      "invalid_repo_url": "The repository address is not valid.",
+      "invalid_ref": "The branch or commit is not valid.",
+      "invalid_compose_file": "The compose file path is not valid.",
+      "invalid_project": "The project name is not valid.",
+      "invalid_env_name": "A variable name is not valid.",
+      "invalid_auth": "The access settings are incomplete.",
+      "down_failed": "Stopping the project's containers failed.",
+      "job_not_found": "The agent no longer knows this deploy.",
+      "agent_error": "The agent hit an unexpected error."
+    }
   }
 }

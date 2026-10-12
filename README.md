@@ -18,6 +18,8 @@ The UI is available in Persian (right-to-left) and English.
 - **two-step sign-in** with Google Authenticator or any other TOTP app (optional)
 - **containers** (optional): see the server's Docker containers, their usage and logs, start,
   stop and restart them from the panel or a bot, and get alerts when one goes down
+- **projects** (optional): deploy applications from git with docker compose, from the panel
+  or a bot, with a backup of their databases before every deploy and one-click rollback
 
 ## Quick start
 
@@ -78,8 +80,8 @@ works, see [Podman](#podman)), plus `openssl`.
 
 Optional features you can turn on later: [remote storage](#remote-storage-s3) (with a
 [step-by-step ArvanCloud guide](#arvancloud-object-storage-step-by-step)), [bots](#bale-and-telegram-bots),
-[two-step verification](#two-step-verification-google-authenticator) and
-[containers](#containers). To keep the panel up to date and safe, see
+[two-step verification](#two-step-verification-google-authenticator),
+[containers](#containers) and [projects](#projects-deploy-from-git). To keep the panel up to date and safe, see
 [Maintenance](#maintenance).
 
 ## Accessing the panel over an SSH tunnel
@@ -126,6 +128,7 @@ a trusted private network sits in front of the panel.
 | `COMPOSE_PROFILES` | (none) | Set to `containers` to run the agent for [container management](#containers). |
 | `MBP_DOCKER_GID` | `999` | The group ID of the Docker socket on the server (`stat -c %g /var/run/docker.sock`); the agent needs it to use the socket. |
 | `MBP_DOCKER_SOCKET` | `/var/run/docker.sock` | The Docker socket on the server, e.g. for rootless Docker or Podman (`/run/user/1000/podman/podman.sock`). |
+| `MBP_PROJECTS_DIR` | `/opt/mbp-projects` | Where the agent checks out [projects](#projects-deploy-from-git) on the server. It is mounted at the same path in the agent, so relative bind mounts in their compose files work. Must be writable by uid 10001. |
 | `MBP_CONTAINER_MONITOR_SECONDS` | `60` | How often containers and server resources are checked for alerts. `0` turns these checks off. |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
@@ -454,6 +457,8 @@ needs no public address, domain or open port.
 - **Retention:** preview what would be deleted, then apply.
 - **Containers:** state, usage and server status; logs (if you allow it); start, stop and
   restart, each confirmed with a Google Authenticator code (see [Containers](#containers)).
+- **Projects:** last deploys, and deploys confirmed with a Google Authenticator code (see
+  [Projects](#projects-deploy-from-git)).
 - **Notifications and language:** each admin picks their alert level (everything, warnings and
   errors, errors only, off) and their language.
 
@@ -519,7 +524,8 @@ In the panel's folder on the server:
 ```bash
 echo "COMPOSE_PROFILES=containers" >> .env
 echo "MBP_DOCKER_GID=$(stat -c %g /var/run/docker.sock)" >> .env
-docker compose up -d
+sudo mkdir -p /opt/mbp-projects && sudo chown 10001:10001 /opt/mbp-projects   # for projects
+docker compose up -d --build
 ```
 
 Then open **Containers** in the panel. If it says the agent may not use `docker.sock`, check
@@ -576,6 +582,84 @@ verification](#two-step-verification-google-authenticator) turned on, and the co
 within 2 minutes. If nobody has turned on two-step verification, containers can only be
 watched from the bot. After 5 wrong codes in 15 minutes, container control from the bot is
 blocked for 15 minutes. So a stolen or borrowed messenger account can't stop your services.
+
+## Projects (deploy from git)
+
+Deploy your own applications to this server from a git repository with a `docker compose`
+file, from the panel or the Bale/Telegram bot. The panel keeps every deploy's log, can put an
+earlier version back with one click, and can back up the application's databases right
+before each deploy.
+
+It uses the [agent](#containers), so turn that on first, including the projects folder
+(`/opt/mbp-projects` by default, owned by uid 10001).
+
+> **Whoever can deploy can run anything on this server.** A compose file can mount the host's
+> files or run privileged containers. Only admins can deploy, deploys from a bot need a Google
+> Authenticator code, and every deploy is recorded with who asked for it.
+
+### Add a project
+
+**Projects → New project**:
+
+- **Name**: lowercase letters, digits, `-` and `_`. It is also the compose project name on
+  the server: if a compose project with this name is already running there (for example one
+  you started by hand), deploys take it over. It can't be changed after the first deploy.
+- **Repository, branch, compose file**: `https://…` or `git@host:owner/repo.git`, the branch to
+  deploy, and the compose file's path in the repository (default `docker-compose.yml`).
+- **Repository access** for a private repository:
+  - **SSH deploy key** (recommended): generate a key pair with
+    `ssh-keygen -t ed25519 -N "" -f deploy_key`, add `deploy_key.pub` to the repository as a
+    read-only deploy key (GitHub: Settings → Deploy keys), and paste the private key
+    (`deploy_key`) into the panel.
+  - **Access token**: a token with read access to the repository (GitHub fine-grained token
+    with "Contents: read", GitLab/Gitea token with `read_repository`).
+
+  The key or token is stored encrypted, never shown again, never put on a command line, and
+  masked in logs.
+- **Environment variables**: written to a `.env` file next to the compose file on every
+  deploy (readable only by the agent). Use them in the compose file with `env_file: .env` or
+  `${NAME}`. Values are stored encrypted and never shown again; to change one, type the new
+  value, to keep it, leave the field empty.
+- **Backup before deploy**: pick a database server and databases. They are backed up right
+  before every deploy (shown in the backup history as "Before a deploy"). With **Stop the
+  deploy if the backup fails** on, nothing is deployed without a fresh backup.
+
+### Deploy
+
+**Deploy** on the project's page (or in the bot) does this, with a live log:
+
+1. **Backup** of the chosen databases, if set.
+2. **Fetch**: the branch's latest commit from git (into `/opt/mbp-projects/<name>`). Files the
+   repository doesn't track, such as data directories, are left alone.
+3. **Build**: `docker compose pull` (images that are not built; if pulling fails, for example
+   without internet access, the images already on the server are used) and
+   `docker compose build`.
+4. **Up**: `docker compose up -d --remove-orphans`.
+5. **Check**: the services are watched for up to a minute. The deploy fails if one exits with
+   an error, keeps restarting, or its health check fails.
+
+Only one deploy of a project runs at a time. The result is sent as an alert (**Deploy
+succeeded** / **Deploy failed** on the Notifications page), and a deploy started from the bot
+reports back in that chat.
+
+**Rollback:** open an earlier successful deploy and use **Redeploy this version**: the same
+commit is deployed again (the database backup from before the bad deploy is in the backup
+history if you need it).
+
+**From the bot:** **Projects** lists them with their last deploy; open one to see details
+and recent deploys, and **Deploy** asks for the current Google Authenticator code of a panel
+account with two-step verification on.
+
+**Deleting a project** removes it from the panel and, if you tick the box, stops and removes
+its containers (`docker compose down`; volumes and data directories are kept) and deletes its
+checkout. The deploy history is kept.
+
+### On a server in Iran
+
+Pulling images from Docker Hub may be blocked or rate-limited. Configure a registry mirror
+for Docker on the server (`/etc/docker/daemon.json`, `"registry-mirrors": [...]`, then
+`systemctl restart docker`), or use images from a registry you can reach. Builds that
+download packages (npm, pip, apt) may need mirrors set in the project's own Dockerfile.
 
 ## Two-step verification (Google Authenticator)
 
@@ -709,6 +793,8 @@ longer need them. Then remove the panel's folder.
   [Two-step verification](#two-step-verification-google-authenticator)).
 - `docker.sock` is never given to the backend. Only the optional agent has it; see
   [Containers](#containers) for its limits.
+- Deploy credentials and environment variables of [projects](#projects-deploy-from-git) are
+  stored encrypted, never returned, never put on a command line, and masked in deploy logs.
 - Stored database passwords and the S3 secret key are encrypted and are never returned by the API
   or written to logs. An edit form shows only that a secret is stored.
 - Database names that start with `-` or contain control characters are rejected, so a name can

@@ -13,7 +13,7 @@ export interface BackupRun {
   instance_id: number | null;
   instance_name: string;
   database_name: string;
-  trigger: "all" | "single" | "schedule";
+  trigger: "all" | "single" | "schedule" | "deploy";
   schedule_id: number | null;
   status: RunStatus;
   requested_at: string;

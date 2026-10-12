@@ -287,14 +287,32 @@ def docker(tmp_path):
 
 
 @pytest.fixture
-def agent_app(docker):
+def agent_commands():
+    """Scripted git / docker compose commands for the agent's deploy jobs."""
+    from tests.fakes.fake_commands import FakeCommands
+
+    return FakeCommands()
+
+
+@pytest.fixture
+def agent_app(docker, agent_commands, tmp_path, monkeypatch):
     from mbp.agent.app import AgentSettings, create_agent_app
+    from mbp.agent.deploy import DeployManager
     from mbp.agent.docker import DockerClient
     from mbp.agent.host import HostProbe
 
+    monkeypatch.setenv("MBP_AGENT_HOME", str(tmp_path / "agent-home"))
     settings = AgentSettings(encryption_key=TEST_ENCRYPTION_KEY)
     client = DockerClient("http://docker", transport=docker.transport())
-    return create_agent_app(settings, docker=client, host=HostProbe(proc=docker.proc))
+    deployer = DeployManager(
+        tmp_path / "projects",
+        runner=agent_commands,
+        protected_projects=lambda: {"mysql-backup-panel"},
+        sleep=lambda seconds: None,
+    )
+    return create_agent_app(
+        settings, docker=client, host=HostProbe(proc=docker.proc), deployer=deployer
+    )
 
 
 @pytest.fixture
@@ -314,5 +332,6 @@ def containers_client(auth_client, app, agent):
     """Signed-in client whose backend talks to the agent over the fake Docker API."""
     previous = app.state.agent
     app.state.agent = agent
+    app.state.deploy_runner.poll_seconds = 0.02
     yield auth_client
     app.state.agent = previous

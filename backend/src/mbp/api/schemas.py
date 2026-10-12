@@ -631,6 +631,8 @@ EventName = Literal[
     "container_resources",
     "host_resources",
     "agent_unreachable",
+    "deploy_failed",
+    "deploy_succeeded",
     "backup_succeeded",
     "recovered",
     "daily_summary",
@@ -899,3 +901,121 @@ class ContainerActionPage(BaseModel):
 
 class ContainerActionResult(BaseModel):
     container: ContainerSummary
+
+
+# --- Projects and deployments ---
+
+
+class ProjectEnvItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128)
+    # None keeps the stored value (values are never sent back to the browser).
+    value: SecretStr | None = Field(default=None, max_length=32768)
+
+
+class ProjectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=40)
+    repo_url: str = Field(min_length=1, max_length=500)
+    branch: str = Field(default="main", min_length=1, max_length=200)
+    compose_file: str = Field(default="docker-compose.yml", min_length=1, max_length=200)
+    auth_type: Literal["none", "token", "ssh_key"] = "none"
+    # Empty keeps the stored credential.
+    credential: SecretStr | None = Field(default=None, max_length=20000)
+    clear_credential: bool = False
+    env: list[ProjectEnvItem] = Field(default=[], max_length=200)
+    backup_instance_id: int | None = None
+    backup_databases: list[str] = Field(default=[], max_length=50)
+    backup_required: bool = True
+
+    @field_validator("repo_url", "branch", "compose_file", "name")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("backup_databases")
+    @classmethod
+    def _databases(cls, value: list[str]) -> list[str]:
+        if any(not is_safe_database_name(name) for name in value):
+            raise ValueError("invalid_database_name")
+        return list(dict.fromkeys(value))
+
+    def to_data(self) -> dict:
+        data = self.model_dump(exclude={"credential", "env"})
+        if self.credential is not None and self.credential.get_secret_value():
+            data["credential"] = self.credential.get_secret_value()
+        data["env"] = [
+            {"name": item.name, "value": item.value.get_secret_value() if item.value else None}
+            for item in self.env
+        ]
+        return data
+
+
+class DeploymentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int | None
+    project_name: str
+    status: str
+    step: str | None = None
+    ref: str
+    commit_sha: str | None = None
+    commit_message: str | None = None
+    trigger: str
+    actor: str
+    error_code: str | None = None
+    error_detail: str | None = None
+    backup_run_ids: list[int] = []
+    requested_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class DeploymentDetail(DeploymentSummary):
+    # The log from `offset` on, and its full length (for the next request).
+    log: str
+    log_size: int
+
+
+class DeploymentPage(BaseModel):
+    items: list[DeploymentSummary]
+    total: int
+    page: int
+    page_size: int
+
+
+class ProjectOut(BaseModel):
+    id: int
+    name: str
+    repo_url: str
+    branch: str
+    compose_file: str
+    auth_type: str
+    has_credential: bool
+    # Names only; values are never returned.
+    env_names: list[str]
+    backup_instance_id: int | None
+    backup_databases: list[str]
+    backup_required: bool
+    created_at: datetime
+    updated_at: datetime
+    last_deployment: DeploymentSummary | None = None
+    last_success: DeploymentSummary | None = None
+
+
+class ProjectState(BaseModel):
+    available: bool
+    error_code: str | None = None
+    exists: bool = False
+    commit_sha: str | None = None
+    commit_message: str | None = None
+
+
+class DeployIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # A branch, tag or commit; empty deploys the project's branch.
+    ref: str | None = Field(default=None, max_length=200)

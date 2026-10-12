@@ -18,6 +18,7 @@ import {
   GearSix,
   HardDrives,
   Robot,
+  RocketLaunch,
   ShieldCheck,
   SignOut,
 } from "./Icons";
@@ -29,6 +30,7 @@ const NAV: { to: string; label: string; icon: Icon }[] = [
   { to: "/backups", label: "nav.backups", icon: Archive },
   { to: "/schedules", label: "nav.schedules", icon: ClockCountdown },
   { to: "/containers", label: "nav.containers", icon: Cube },
+  { to: "/projects", label: "nav.projects", icon: RocketLaunch },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
   { to: "/bots", label: "nav.bots", icon: Robot },
   { to: "/settings/backups", label: "nav.settings", icon: GearSix },
