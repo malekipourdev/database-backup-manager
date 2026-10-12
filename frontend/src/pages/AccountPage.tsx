@@ -344,6 +344,7 @@ export function AccountPage() {
   return (
     <Stack gap="md">
       <PageHeader
+        help="two-factor"
         title={t("account.title")}
         subtitle={me.data ? t("account.subtitle", { name: me.data.username }) : undefined}
       />

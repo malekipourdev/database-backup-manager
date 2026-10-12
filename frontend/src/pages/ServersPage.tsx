@@ -406,6 +406,7 @@ export function ServersPage() {
   return (
     <Stack gap={18}>
       <PageHeader
+        help="servers-overview"
         title={t("servers.title")}
         subtitle={t("servers.subtitle")}
         actions={

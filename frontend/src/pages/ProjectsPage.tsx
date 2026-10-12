@@ -69,6 +69,7 @@ export function ProjectsPage() {
   return (
     <Stack gap={18}>
       <PageHeader
+        help="projects-overview"
         title={t("projects.title")}
         subtitle={t("projects.subtitle")}
         actions={

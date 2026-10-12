@@ -416,7 +416,7 @@ export function NotificationsPage() {
   const settings = useNotificationSettings();
   return (
     <Stack gap="md">
-      <PageHeader title={t("alerts.title")} subtitle={t("alerts.hint")} />
+      <PageHeader help="notifications" title={t("alerts.title")} subtitle={t("alerts.hint")} />
       {settings.isPending && <Loader />}
       {settings.isError && <Alert color="red">{errorMessage(t, settings.error)}</Alert>}
       {settings.data && <SettingsForm settings={settings.data} />}

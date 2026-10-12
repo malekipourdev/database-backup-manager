@@ -73,6 +73,7 @@ export function InstanceDetailPage() {
   return (
     <Stack gap="md">
       <PageHeader
+        help="manual-backup"
         title={data.name}
         back={{ to: "/instances", label: t("nav.instances") }}
         badge={

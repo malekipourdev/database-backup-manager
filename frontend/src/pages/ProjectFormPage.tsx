@@ -430,6 +430,7 @@ export function ProjectFormPage() {
   return (
     <Stack gap={18}>
       <PageHeader
+        help="add-project"
         title={editing ? t("projects.editTitle") : t("projects.newTitle")}
         subtitle={t("projects.formSubtitle")}
       />

@@ -436,3 +436,41 @@ a.cl-card:hover {
   word-break: break-all;
   text-align: start;
 }
+
+/* --- Help page --- */
+.cl-help-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.cl-help-aside {
+  position: sticky;
+  top: 76px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+}
+.cl-help-result {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.cl-help-result:hover {
+  border-color: var(--color-accent);
+}
+.cl-help-body code {
+  font-size: 0.85em;
+}
+@media (max-width: 860px) {
+  .cl-help-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cl-help-aside {
+    position: static;
+    max-height: none;
+  }
+  /* On a phone, an open article comes first; the contents stay on the guide's home. */
+  .cl-help-layout[data-article="yes"] .cl-help-contents {
+    display: none;
+  }
+}

@@ -18,6 +18,7 @@ import {
   Database,
   GearSix,
   HardDrives,
+  Question,
   Robot,
   RocketLaunch,
   ShieldCheck,
@@ -37,6 +38,7 @@ const NAV: { to: string; label: string; icon: Icon }[] = [
   { to: "/bots", label: "nav.bots", icon: Robot },
   { to: "/settings/backups", label: "nav.settings", icon: GearSix },
   { to: "/account", label: "nav.account", icon: ShieldCheck },
+  { to: "/help", label: "nav.help", icon: Question },
 ];
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);

@@ -226,6 +226,7 @@ export function InstanceFormPage() {
   return (
     <Stack gap="md">
       <PageHeader
+        help="db-host"
         title={
           isEdit ? t("instances.editTitle", { name: loaded?.name }) : t("instances.createTitle")
         }

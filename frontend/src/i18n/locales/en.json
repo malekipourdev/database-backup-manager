@@ -20,7 +20,8 @@
     "account": "Account",
     "containers": "Containers",
     "projects": "Projects",
-    "servers": "Servers"
+    "servers": "Servers",
+    "help": "Help"
   },
   "language": {
     "label": "Language",
@@ -1154,5 +1155,20 @@
       "firewall": "Example with ufw (replace <PANEL-IP> with the panel server's IP address):",
       "repoNote": "On connect the panel records the agent's certificate and from then on talks only to that certificate. The token never travels over the network; every request is signed with it."
     }
+  },
+  "help": {
+    "title": "Help and documentation",
+    "subtitle": "Every part of the panel, explained by topic ({{n}} articles)",
+    "intro": "Pick a topic, or search the guide.",
+    "search": "Search the guide",
+    "results": "{{n}} results",
+    "noResults": "Nothing found for “{{query}}”.",
+    "articles_one": "{{n}} article",
+    "articles_other": "{{n}} articles",
+    "openPage": "Go to this page",
+    "notFound": "This article was not found.",
+    "allTopics": "All topics",
+    "loadFailed": "The guide could not be loaded.",
+    "button": "Help for this page"
   }
 }

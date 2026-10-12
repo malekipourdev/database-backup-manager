@@ -82,7 +82,7 @@ export function BackupHistoryPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title={t("history.title")} subtitle={t("history.subtitle")} />
+      <PageHeader help="history" title={t("history.title")} subtitle={t("history.subtitle")} />
 
       <Paper withBorder p="md">
         <Group align="flex-end" wrap="wrap" gap="sm">

@@ -785,7 +785,11 @@ export function ContainersPage() {
   const [server, setServer] = useServerParam();
   return (
     <Stack gap={18}>
-      <PageHeader title={t("containers.title")} subtitle={t("containers.subtitle")} />
+      <PageHeader
+        help="containers-usage"
+        title={t("containers.title")}
+        subtitle={t("containers.subtitle")}
+      />
       <ServerPicker server={server} onChange={setServer} />
       <Tabs defaultValue="containers" keepMounted={false}>
         <Tabs.List mb="md">
