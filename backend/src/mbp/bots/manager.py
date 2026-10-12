@@ -39,6 +39,7 @@ class BotPoller:
             manager.store,
             scheduler=manager.scheduler,
             agent=manager.agent,
+            deploy_runner=manager.deploy_runner,
         )
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, name=f"mbp-bot-{platform}", daemon=True)
@@ -128,6 +129,7 @@ class BotManager:
         *,
         scheduler=None,
         agent=None,
+        deploy_runner=None,
         transport=None,
         threaded: bool = True,
     ) -> None:
@@ -137,6 +139,7 @@ class BotManager:
         self.scheduler = scheduler
         # Returns the current Docker agent client; see mbp.bots.containers.
         self.agent = agent
+        self.deploy_runner = deploy_runner
         self.transport = transport
         self._pollers: dict[str, BotPoller] = {}
         self._lock = threading.Lock()

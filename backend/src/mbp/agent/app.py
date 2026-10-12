@@ -7,11 +7,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from mbp.agent.deploy import DeployManager, DeploySpec
 from mbp.agent.docker import (
     ACTIONS,
+    COMPOSE_PROJECT,
     MAX_LOG_LINES,
     PANEL_LABEL,
     REF_RE,
@@ -36,6 +38,26 @@ class AgentSettings(BaseSettings):
     docker_host: str = "unix:///var/run/docker.sock"
     agent_bind: str = "0.0.0.0"  # noqa: S104 - reachable only on the compose network
     agent_port: int = 8090
+    # Where deployed projects are checked out. Mounted at the same path as on the host, so
+    # relative bind mounts in their compose files point to the right host directories.
+    projects_dir: str = "/opt/mbp-projects"
+    # Transports git may use (GIT_ALLOW_PROTOCOL).
+    git_protocols: str = "https:ssh"
+
+
+class DeployRequest(BaseModel):
+    project: str = Field(max_length=40)
+    repo_url: str = Field(max_length=500)
+    ref: str = Field(max_length=200)
+    compose_file: str = Field(default="docker-compose.yml", max_length=200)
+    env: dict[str, str] = Field(default_factory=dict)
+    auth_type: str = "none"
+    credential: str | None = Field(default=None, max_length=20000)
+
+
+class RemoveRequest(BaseModel):
+    compose_file: str = Field(default="docker-compose.yml", max_length=200)
+    down: bool = True
 
 
 class StatsCache:
@@ -62,9 +84,24 @@ def create_agent_app(
     settings: AgentSettings,
     docker: DockerClient | None = None,
     host: HostProbe | None = None,
+    deployer: DeployManager | None = None,
 ) -> FastAPI:
     docker = docker or DockerClient(settings.docker_host)
     host = host or HostProbe()
+
+    def protected_projects() -> set[str]:
+        """Compose projects of the panel itself: never deployed over or removed."""
+        return {
+            labels_of(item).get(COMPOSE_PROJECT, "")
+            for item in docker.list_raw()
+            if labels_of(item).get(PANEL_LABEL)
+        } - {""}
+
+    deployer = deployer or DeployManager(
+        settings.projects_dir,
+        protected_projects=protected_projects,
+        git_protocols=settings.git_protocols,
+    )
     token = agent_token(settings.encryption_key.get_secret_value())
     cache = StatsCache()
     pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="mbp-agent")
@@ -196,5 +233,25 @@ def create_agent_app(
         logger.info("%s %s", action, inspect.get("Name", ref).lstrip("/"))
         item, inspect = find(inspect["Id"])
         return {"container": summarize(item, inspect)}
+
+    @app.post("/v1/deploy", dependencies=auth)
+    def deploy(body: DeployRequest) -> dict:
+        job = deployer.start(DeploySpec(**body.model_dump()))
+        return {"job_id": job.id}
+
+    @app.get("/v1/deploy/{job_id}", dependencies=auth)
+    def deploy_job(job_id: str, offset: int = Query(default=0, ge=0)) -> dict:
+        job = deployer.get(job_id)
+        if job is None:
+            raise DockerError("job_not_found", 404)
+        return job.view(offset)
+
+    @app.get("/v1/projects/{name}/state", dependencies=auth)
+    def project_state(name: str) -> dict:
+        return deployer.state(name)
+
+    @app.post("/v1/projects/{name}/remove", dependencies=auth)
+    def project_remove(name: str, body: RemoveRequest) -> dict:
+        return deployer.remove(name, body.compose_file, body.down)
 
     return app

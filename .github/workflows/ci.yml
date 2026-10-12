@@ -92,5 +92,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t mbp-backend ./backend
+      - run: docker build --target runtime -t mbp-backend ./backend
+      - run: docker build --target agent -t mbp-agent ./backend
       - run: docker build -t mbp-frontend ./frontend

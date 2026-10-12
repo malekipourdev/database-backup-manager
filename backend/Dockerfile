@@ -21,12 +21,37 @@ RUN uv sync --frozen --no-dev --no-editable
 # libssl3/libz/libstdc++, all present in the runtime image). ---
 FROM mysql:8.4 AS mysqldump
 
-# --- Runtime stage: venv + migrations + dump tools, non-root ---
-FROM python:3.12-slim AS runtime
+# --- Docker CLI with the compose and buildx plugins, for the agent ---
+FROM docker:27.5.1-cli AS dockercli
+
+# --- Common base: venv, non-root user ---
+FROM python:3.12-slim AS base
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    MBP_DATABASE_URL=sqlite:////data/mbp.db \
+    PYTHONUNBUFFERED=1
+RUN groupadd --system --gid 10001 mbp \
+    && useradd --system --uid 10001 --gid mbp --no-create-home --shell /usr/sbin/nologin mbp
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+
+# --- Agent (docker compose target "agent"): the only image with Docker tools.
+# git and ssh fetch deployed projects; the Docker CLI runs docker compose. ---
+FROM base AS agent
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+USER mbp
+EXPOSE 8090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"]
+CMD ["python", "-m", "mbp.agent"]
+
+# --- Runtime (the backend; default target): venv + migrations + dump tools ---
+FROM base AS runtime
+ENV MBP_DATABASE_URL=sqlite:////data/mbp.db \
     MBP_BACKUP_ROOT=/backups
 
 # mariadb-client provides /usr/bin/mariadb-dump for MariaDB servers.
@@ -35,13 +60,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=mysqldump /usr/bin/mysqldump /usr/local/bin/mysqldump
 
-RUN groupadd --system --gid 10001 mbp \
-    && useradd --system --uid 10001 --gid mbp --no-create-home --shell /usr/sbin/nologin mbp \
-    && mkdir -p /data /backups \
-    && chown mbp:mbp /data /backups
-
-WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
+RUN mkdir -p /data /backups && chown mbp:mbp /data /backups
 COPY alembic.ini ./
 COPY migrations ./migrations
 

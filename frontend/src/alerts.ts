@@ -73,6 +73,20 @@ export function renderAlert(item: NotificationLogItem, t: TFunction, lang: strin
         used: formatBytes(num("used"), t, lang),
         total: formatBytes(num("total"), t, lang),
       });
+    case "deploy_succeeded":
+      return t("alerts.events.deploy_succeeded", {
+        project: str("project"),
+        commit: str("commit"),
+        message: str("message"),
+        actor: str("actor"),
+      });
+    case "deploy_failed":
+      return t("alerts.events.deploy_failed", {
+        project: str("project"),
+        error:
+          t(`projects.errors.${str("error")}`, { defaultValue: str("error") }) +
+          (p.detail ? ` (${str("detail")})` : ""),
+      });
     case "agent_unreachable":
       return t("alerts.events.agent_unreachable", {
         code: t(`errors.${str("code")}`, { defaultValue: str("code") }),

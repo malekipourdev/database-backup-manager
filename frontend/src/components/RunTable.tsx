@@ -56,6 +56,11 @@ function StatusCell({ run }: { run: BackupRun }) {
           {t("backups.scheduled")}
         </Text>
       )}
+      {run.trigger === "deploy" && (
+        <Text size="xs" c="dimmed">
+          {t("backups.beforeDeploy")}
+        </Text>
+      )}
       {run.status === "running" && (
         <Text size="xs" c="dimmed">
           {t("backups.progress", {

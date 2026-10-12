@@ -78,3 +78,21 @@ class AgentClient:
 
     def action(self, ref: str, action: str) -> dict:
         return self._call("POST", f"/v1/containers/{ref}/{action}")["container"]
+
+    # --- deploys ---
+
+    def deploy(self, payload: dict) -> str:
+        return self._call("POST", "/v1/deploy", json=payload)["job_id"]
+
+    def deploy_job(self, job_id: str, offset: int) -> dict:
+        return self._call("GET", f"/v1/deploy/{job_id}", params={"offset": offset})
+
+    def project_state(self, name: str) -> dict:
+        return self._call("GET", f"/v1/projects/{name}/state")
+
+    def project_remove(self, name: str, compose_file: str, down: bool) -> dict:
+        return self._call(
+            "POST",
+            f"/v1/projects/{name}/remove",
+            json={"compose_file": compose_file, "down": down},
+        )

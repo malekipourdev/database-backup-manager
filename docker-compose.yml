@@ -2,7 +2,9 @@ name: mysql-backup-panel
 
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     restart: unless-stopped
     environment:
       MBP_ENCRYPTION_KEY: ${MBP_ENCRYPTION_KEY:?Set MBP_ENCRYPTION_KEY in .env}
@@ -52,31 +54,28 @@ services:
   # which is equivalent to root on the host. Turn it on with COMPOSE_PROFILES=containers
   # and MBP_DOCKER_GID (the group of the socket) in .env; see the README.
   agent:
-    build: ./backend
-    command: ["python", "-m", "mbp.agent"]
+    build:
+      context: ./backend
+      target: agent
     profiles: ["containers"]
     restart: unless-stopped
     environment:
       # The backend and the agent derive their shared token from this key.
       MBP_ENCRYPTION_KEY: ${MBP_ENCRYPTION_KEY:?Set MBP_ENCRYPTION_KEY in .env}
+      MBP_PROJECTS_DIR: ${MBP_PROJECTS_DIR:-/opt/mbp-projects}
     group_add:
       - "${MBP_DOCKER_GID:-999}"
     volumes:
       - ${MBP_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      # Deployed projects, at the same path as on the host: relative bind mounts in their
+      # compose files ("./data:/data") then point to the right host directories.
+      - ${MBP_PROJECTS_DIR:-/opt/mbp-projects}:${MBP_PROJECTS_DIR:-/opt/mbp-projects}
+    tmpfs:
+      - /tmp
     read_only: true
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"
-      interval: 30s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
     labels:
       mbp.role: agent
     networks:

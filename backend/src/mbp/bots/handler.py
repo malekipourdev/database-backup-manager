@@ -24,6 +24,7 @@ from mbp.api.schemas import ScheduleIn
 from mbp.backups.store import LocalBackupStore
 from mbp.bots.api import BotApi, BotApiError, Keyboard
 from mbp.bots.containers import ContainerMenu
+from mbp.bots.projects import ProjectMenu
 from mbp.bots.texts import format_duration, format_size, format_time, t
 from mbp.db import utcnow
 from mbp.models import BackupRun, BotAdmin
@@ -70,7 +71,7 @@ def button(text: str, data: str) -> dict[str, str]:
     return {"text": text, "callback_data": data}
 
 
-class BotHandler(ContainerMenu):
+class BotHandler(ContainerMenu, ProjectMenu):
     def __init__(
         self,
         platform: str,
@@ -81,6 +82,7 @@ class BotHandler(ContainerMenu):
         *,
         scheduler=None,
         agent=None,
+        deploy_runner=None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self.platform = platform
@@ -96,6 +98,8 @@ class BotHandler(ContainerMenu):
         self._lock = threading.Lock()
         # `agent` returns the current Docker agent client (or None).
         self._init_containers(agent)
+        # `deploy_runner` returns the app's DeployRunner (or None).
+        self._init_projects(deploy_runner)
 
     # --- entry points ---
 
@@ -249,6 +253,11 @@ class BotHandler(ContainerMenu):
                 db, ctx, args[0] if args else "", args[1] if len(args) > 1 else "", chat_id
             ),
             "cx": lambda: self.cancel_action(db, ctx, args[0] if args else "", chat_id),
+            "pl": lambda: self.projects_list(db, ctx, num(0)),
+            "p": lambda: self.project_view(db, ctx, num(0)),
+            "ph": lambda: self.project_history(db, ctx, num(0)),
+            "pd": lambda: self.ask_deploy(db, ctx, num(0), chat_id),
+            "pdx": lambda: self.cancel_deploy(db, ctx, num(0), chat_id),
         }
         action = routes.get(head)
         if action is None:
@@ -299,8 +308,11 @@ class BotHandler(ContainerMenu):
             [
                 [button(t(lang, "btn_status"), "st"), button(t(lang, "btn_instances"), "il:0")],
                 [button(t(lang, "btn_runs"), "rl:0:0"), button(t(lang, "btn_schedules"), "sl:0")],
-                [button(t(lang, "btn_retention"), "rt"), button(t(lang, "btn_containers"), "cl:0")],
-                [button(t(lang, "btn_settings"), "ns")],
+                [
+                    button(t(lang, "btn_containers"), "cl:0"),
+                    button(t(lang, "btn_projects"), "pl:0"),
+                ],
+                [button(t(lang, "btn_retention"), "rt"), button(t(lang, "btn_settings"), "ns")],
             ],
         )
 

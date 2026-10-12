@@ -1,6 +1,22 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 2.0.0 → 2.1.0
+Bump rationale: MINOR. Materially expanded guidance: the agent may now deploy registered
+projects (git + docker compose), and deployment enters the scope.
+
+Modified principles:
+- I. Security First: deploy credentials and environment values encrypted at rest and masked in
+  logs; bot deploys confirmed with a TOTP code; the panel's own compose project protected.
+- VI. Containerized Deployment: the agent's allow-list gains deploy operations for registered
+  projects, always as fixed argument lists inside the projects directory.
+Modified sections:
+- Project Scope (MVP): adds deploying projects from git with docker compose (phase 2).
+
+Templates: not modified. Deferred TODOs: none.
+
+Previous report (2.0.0)
+-----------------------
 Version change: 1.1.0 → 2.0.0
 Bump rationale: MAJOR. Principle VI no longer forbids docker.sock outright: an optional,
 isolated agent service may use it. Principle IV allows that one additional service.
@@ -104,6 +120,12 @@ automatically delete old backups via retention policies.
   MUST require a fresh TOTP code of a panel account with two-step verification on. Showing
   container logs in a bot copies them to a third party and MUST be off unless an admin
   turns it on.
+- Deploying projects: repository credentials (tokens, SSH keys) and environment values MUST be
+  encrypted at rest, never returned by the API, never passed on a command line, and masked in
+  deploy logs. Deploying from a bot MUST require a fresh TOTP code like other bot actions on
+  containers. A project MUST NOT be deployed or removed under the panel's own compose project
+  name. Whoever can deploy can run any container on the host; deploying is therefore limited
+  to admins, and the panel says so.
 
 Rationale: the panel holds credentials to production databases and copies of their data; a
 single leak compromises every registered instance.
@@ -167,8 +189,11 @@ Rationale: operators choose their own storage; the codebase stays portable and t
 - Only the agent service may mount `docker.sock`, and only when an admin turns it on (compose
   profile, off by default). The agent MUST: listen only on the internal compose network with
   no published port; answer only requests carrying the shared secret; implement only a fixed
-  allow-list of operations (list, inspect, stats, logs, start, stop, restart); never execute
-  commands in containers, create, remove or pull anything; refuse to control the panel's own
+  allow-list of operations (list, inspect, stats, logs, start, stop, restart, and for
+  registered projects: git init/remote/fetch/checkout/log and docker compose config/pull/
+  build/up/ps/down); run these only as fixed argument lists, never through a shell, inside the
+  project's directory under the projects root, with git limited to https and ssh transports;
+  never execute commands in containers; refuse to control or deploy over the panel's own
   containers; and run with a read-only filesystem, no capabilities and no-new-privileges.
 
 Rationale: socket access grants host root; network access is sufficient for backups and far
@@ -238,12 +263,15 @@ In scope:
 - Managing backups from Bale and Telegram bots (inline buttons) for registered admins.
 - Container monitoring and control through the optional agent: list, state, usage, logs,
   start/stop/restart from the panel and the bots, container and host alerts, audit log.
+- Deploying projects from git with docker compose through the agent: registration with
+  encrypted credentials and variables, deploy history with logs, redeploying an earlier
+  commit, a backup of chosen databases before each deploy, deploys from the bots, alerts.
 - Bilingual (Persian/English) UI.
 
 Out of scope for MVP: restore, email notifications, non-S3 remote storage,
 multi-user roles beyond admin, additional infrastructure services (beyond the agent), and,
-for containers, deployment, exec/terminal, and creating, removing or pulling containers and
-images. Introducing any of these
+for containers, exec/terminal and managing images, volumes and networks directly; for
+deployment, automatic deploys from git webhooks and domains/TLS (planned as later phases). Introducing any of these
 requires a scope amendment to this section.
 
 ## Development Workflow & Quality Gates
@@ -269,4 +297,4 @@ requires a scope amendment to this section.
 - Compliance is verified during planning (Constitution Check) and code review. Unjustified
   violations block merge.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-11
+**Version**: 2.1.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-12
