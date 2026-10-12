@@ -8,7 +8,7 @@ export function SchedulesPage() {
   const { t } = useTranslation();
   return (
     <Stack gap="md">
-      <PageHeader title={t("schedules.title")} subtitle={t("schedules.hint")} />
+      <PageHeader help="schedules" title={t("schedules.title")} subtitle={t("schedules.hint")} />
       <Paper withBorder p="lg">
         <ScheduleList />
       </Paper>

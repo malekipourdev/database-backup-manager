@@ -22,7 +22,11 @@ export function BackupSettingsPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title={t("settings.title")} subtitle={t("settings.globalHint")} />
+      <PageHeader
+        help="backup-settings"
+        title={t("settings.title")}
+        subtitle={t("settings.globalHint")}
+      />
       <Tabs
         variant="pills"
         value={tab}

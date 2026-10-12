@@ -481,7 +481,7 @@ export function BotsPage() {
   const bots = useBots();
   return (
     <Stack gap="md">
-      <PageHeader title={t("bots.title")} subtitle={t("bots.hint")} />
+      <PageHeader help="bots-setup" title={t("bots.title")} subtitle={t("bots.hint")} />
       {bots.isPending && <Loader />}
       {bots.isError && <Alert color="red">{errorMessage(t, bots.error)}</Alert>}
       {bots.data && (

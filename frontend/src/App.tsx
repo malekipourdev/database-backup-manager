@@ -18,6 +18,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
 import { ServersPage } from "./pages/ServersPage";
+import { HelpPage } from "./pages/HelpPage";
 import { AccountPage } from "./pages/AccountPage";
 import { BotsPage } from "./pages/BotsPage";
 import { ContainersPage } from "./pages/ContainersPage";
@@ -98,6 +99,8 @@ export function AppRoutes() {
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/projects/:id/edit" element={<ProjectFormPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/help/:articleId" element={<HelpPage />} />
           <Route path="/settings/backups" element={<BackupSettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

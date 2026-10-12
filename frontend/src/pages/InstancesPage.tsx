@@ -154,6 +154,7 @@ export function InstancesPage() {
   return (
     <Stack gap={18}>
       <PageHeader
+        help="add-database"
         title={t("instances.title")}
         subtitle={t("instances.subtitle")}
         actions={

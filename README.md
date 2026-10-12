@@ -22,6 +22,8 @@ The UI is available in Persian (right-to-left) and English.
   or a bot, with a backup of their databases before every deploy and one-click rollback
 - **several servers**: connect other machines to the same panel through a small agent, then
   manage their containers, deploy projects to them and back up their databases from one place
+- **built-in guide**: a **Help** page in the panel (Persian and English) that explains every
+  feature by topic, with search; the "?" next to a page's title opens its article
 
 ## Quick start
 

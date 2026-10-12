@@ -199,6 +199,7 @@ export function ProjectDetailPage() {
   return (
     <Stack gap={18}>
       <PageHeader
+        help="deploy"
         title={p.name}
         subtitle={`${p.repo_url} · ${p.branch}`}
         actions={
