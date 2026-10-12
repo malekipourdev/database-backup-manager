@@ -203,12 +203,14 @@ check `bind-address` in the MySQL/MariaDB configuration.
 
 Two ways:
 
-- **Through that machine's agent (recommended).** [Add the machine under Servers](#servers),
-  then choose it as **Connect from** in the database's form. Its agent tests, lists and dumps
+- **Through that machine's agent (recommended).** [Connect the machine](#servers), choose it
+  as the **current server** (the card at the bottom of the menu), and add the database there.
+  Its agent tests, lists and dumps
   the database on that machine and streams the backup to the panel; the database port never
   has to be open to the outside. The host is then as seen from that machine: `127.0.0.1` for
   a database published on it, or a container's name for one in a container there.
-- **Directly.** Enter its hostname or IP address and port. That machine's firewall must allow
+- **Directly.** Add the database on the panel's own server and enter the other machine's
+  hostname or IP address and port. That machine's firewall must allow
   connections from this server.
 
 ### A dedicated database user for the panel
@@ -682,7 +684,8 @@ and databases are managed from the same panel and bot, and its alerts name it.
 
 ### Add a server
 
-1. In the panel, open **Servers → Add server**: a name, the address the panel reaches it at,
+1. In the panel, press the **current server** card at the bottom of the menu, then **Manage all
+   servers → Add server**: a name, the address the panel reaches it at,
    and the agent's port (`8443` by default).
 2. The panel shows the commands to run on that machine, with a **token made for it, shown only
    once**. They clone this repository, write `.env.agent` and start
@@ -724,15 +727,20 @@ and databases are managed from the same panel and bot, and its alerts name it.
   panel. It stores no database passwords: the panel sends them, over the pinned connection,
   for each operation.
 
-### Using it
+### The current server
 
-- **Containers:** pick the server at the top of the page (or in the bot after
-  **Containers**). Settings such as read-only, hidden and locked names and alert thresholds are
-  per server.
-- **Projects:** choose the server in the project's form. It cannot be changed after the first
-  deploy; delete the project and add it on the other server instead.
-- **Databases:** choose **Connect from** in the database's form (see
-  [A server on another machine](#a-server-on-another-machine)).
+The panel always works on one server, the **current server**, shown on the card at the bottom
+of the side menu (on a phone, the server name at the top). Press it to switch to another
+connected server, or to open **Manage all servers**. The choice is remembered per browser.
+
+- **Per server:** Databases, Backups, Schedules, Containers and Projects show only the current
+  server's items, and what you add is added on it. Its name is shown next to those pages'
+  titles. Container settings (read-only, hidden and locked names, alert limits) are per server.
+- **Shared:** Notifications, Bots, Settings (backups, remote storage, retention), Account and
+  Help apply to all servers.
+- A project cannot move to another server after its first deploy; delete it and add it on the
+  other server instead.
+- In the bot, **Containers** asks which server first.
 - **Alerts:** an unreachable agent, and everything about that server's containers and
   resources, are announced with the server's name.
 

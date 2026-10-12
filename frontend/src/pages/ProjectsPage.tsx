@@ -7,6 +7,7 @@ import { type Project, useProjects } from "../api/projects";
 import { DeployStatusBadge } from "../components/DeployStatusBadge";
 import { Plus, RocketLaunch } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
+import { ServerBadge } from "../components/ServerBadge";
 import { formatDateTime } from "../i18n";
 
 function ProjectCard({ project }: { project: Project }) {
@@ -71,6 +72,7 @@ export function ProjectsPage() {
       <PageHeader
         help="projects-overview"
         title={t("projects.title")}
+        badge={<ServerBadge />}
         subtitle={t("projects.subtitle")}
         actions={
           <Button component={Link} to="/projects/new" leftSection={<Plus size={16} />}>

@@ -16,6 +16,7 @@ from mbp.api.schemas import (
     StartBackupResponse,
     StartSingleRequest,
 )
+from mbp.api.scope import ServerScope, server_scope
 from mbp.backups.remote import RemoteError
 from mbp.backups.runner import BackupRunner
 from mbp.backups.store import LocalBackupStore, StorageError, get_store
@@ -111,9 +112,13 @@ def list_runs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(server_scope),
 ) -> RunPage:
     store = get_store()
     filters = RunFilters(
+        instances=scope.instances() if scope else None,
+        # Backups of deleted databases are listed with the panel's own server.
+        orphans=bool(scope and scope.local),
         instance_id=instance_id,
         database=database or None,
         statuses=list(status) if status else None,

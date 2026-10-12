@@ -159,7 +159,7 @@
     "title": "Databases",
     "add": "Add database",
     "empty": "No databases yet",
-    "emptyHint": "Add a MySQL or MariaDB server to start managing its backups. If it runs on another server, add that server under Servers first.",
+    "emptyHint": "Add a MySQL or MariaDB server on this server to start managing its backups. For another server's databases, choose that server first in the Current server card (bottom of the menu).",
     "columns": {
       "name": "Name",
       "address": "Address",
@@ -209,7 +209,9 @@
     "routeDirect": "Directly from this panel",
     "routeServer": "Through the server “{{name}}”",
     "routeHint": "For a database on another server, that server's agent connects to it and takes the backups; its port does not need to be open to the outside.",
-    "hostHintServer": "The address as seen from that server: 127.0.0.1 for a database published on the server itself, or the container's name for one in a container."
+    "hostHintServer": "The address as seen from that server: 127.0.0.1 for a database published on the server itself, or the container's name for one in a container.",
+    "onLocalServer": "Added on “{{name}}” (this server); the panel connects to it itself.",
+    "onServer": "Added on “{{name}}”; that server's agent connects to it and takes its backups, so its port need not be open to the outside."
   },
   "connection": {
     "title": "Connection",
@@ -966,7 +968,7 @@
     },
     "readOnlyMount": "read-only",
     "server": "Server",
-    "remoteHelp": "This server's agent is not reachable. Its status and setup steps are on the Servers page."
+    "remoteHelp": "This server's agent is not reachable. Its status and setup steps are under “Manage all servers” (the server card in the menu)."
   },
   "projects": {
     "title": "Projects",
@@ -992,7 +994,7 @@
     "deleteDownHint": "docker compose down: volumes and data directories are kept.",
     "deleted": "Project deleted.",
     "saved": "Project saved.",
-    "onServer": "On the server",
+    "onServer": "Deployed on “{{name}}”.",
     "notCheckedOut": "not checked out",
     "services": "Services",
     "allContainers": "All containers",
@@ -1154,7 +1156,12 @@
       "copied": "Copied",
       "firewall": "Example with ufw (replace <PANEL-IP> with the panel server's IP address):",
       "repoNote": "On connect the panel records the agent's certificate and from then on talks only to that certificate. The token never travels over the network; every request is signed with it."
-    }
+    },
+    "current": "Current server",
+    "switch": "Switch server",
+    "manage": "Manage all servers",
+    "selected": "Current server",
+    "select": "Work on this server"
   },
   "help": {
     "title": "Help and documentation",

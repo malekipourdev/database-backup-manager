@@ -11,6 +11,7 @@ from mbp.api.schemas import (
     ProjectOut,
     ProjectState,
 )
+from mbp.api.scope import ServerScope, server_scope
 from mbp.db import get_db
 from mbp.models import AdminAccount, Project, Server
 from mbp.projects.service import ProjectService, env_of
@@ -46,10 +47,13 @@ def _out(project: Project, repo: ProjectRepository, last=None) -> ProjectOut:
 
 
 @router.get("/projects", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
+def list_projects(
+    db: Session = Depends(get_db), scope: ServerScope | None = Depends(server_scope)
+) -> list[ProjectOut]:
     repo = ProjectRepository(db)
     last = repo.last_deployments()
-    return [_out(p, repo, last.get(p.id) or False) for p in repo.list_all()]
+    projects = repo.list_all(scope.server_id if scope else None)
+    return [_out(p, repo, last.get(p.id) or False) for p in projects]
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)

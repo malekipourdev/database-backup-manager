@@ -396,3 +396,40 @@ def test_stopping_a_backup_stops_the_dump_on_the_server(auth_client, app, remote
     while _dump_processes("big_20000_shop"):
         assert time.monotonic() < deadline, "the dump kept running on the server"
         time.sleep(0.1)
+
+
+# --- lists of one server ---
+
+
+def test_lists_show_one_server(auth_client, remote, probe_seen):
+    local_id = auth_client.get("/api/servers").json()[0]["id"]
+    here = auth_client.post("/api/instances", json={**INSTANCE_PAYLOAD, "name": "here"}).json()
+    there = create_remote_instance(auth_client, remote["id"], select=("ok_shop",))
+    for instance_id in (here["id"], there):
+        response = auth_client.post(
+            f"/api/instances/{instance_id}/schedules",
+            json={"name": "n", "cron": "0 2 * * *", "timezone": "UTC", "scope": "all"},
+        )
+        assert response.status_code == 201, response.text
+    run = auth_client.post(f"/api/instances/{there}/backups", json={"scope": "all"}).json()
+    wait_for_run(auth_client, run["created"][0]["id"])
+    auth_client.post(
+        "/api/projects",
+        json={"name": "edge-app", "server_id": remote["id"], "repo_url": "https://x.io/a.git"},
+    )
+    auth_client.post("/api/projects", json={"name": "home-app", "repo_url": "https://x.io/b.git"})
+
+    def names(path, server, key="name"):
+        return sorted(item[key] for item in auth_client.get(f"{path}?server={server}").json())
+
+    assert names("/api/instances", local_id) == ["here"]
+    assert names("/api/instances", remote["id"]) == ["edge-db"]
+    assert len(auth_client.get("/api/instances").json()) == 2  # no parameter: all
+    assert names("/api/schedules", local_id, "instance_id") == [here["id"]]
+    assert names("/api/schedules", remote["id"], "instance_id") == [there]
+    assert names("/api/projects", local_id) == ["home-app"]
+    assert names("/api/projects", remote["id"]) == ["edge-app"]
+    runs = auth_client.get(f"/api/backups/runs?server={remote['id']}").json()
+    assert runs["total"] == 1
+    assert auth_client.get(f"/api/backups/runs?server={local_id}").json()["total"] == 0
+    assert auth_client.get("/api/instances?server=9999").json()["code"] == "server_not_found"

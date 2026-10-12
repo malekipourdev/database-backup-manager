@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useCurrentServer } from "../server/CurrentServer";
 import { apiFetch } from "./client";
 
 export type ScheduleScope = "all" | "single";
@@ -33,15 +34,23 @@ export interface ScheduleInput {
 
 export const scheduleKeys = {
   all: ["schedules"] as const,
-  list: (instanceId?: number) => ["schedules", "list", instanceId ?? "all"] as const,
+  list: (instanceId?: number, server?: number | null) =>
+    ["schedules", "list", instanceId ?? "all", server ?? null] as const,
 };
 
+/** One database's schedules, or (without `instanceId`) the current server's. */
 export function useSchedules(instanceId?: number) {
+  const current = useCurrentServer().id;
+  const server = instanceId === undefined ? current : null;
   return useQuery({
-    queryKey: scheduleKeys.list(instanceId),
+    queryKey: scheduleKeys.list(instanceId, server),
     queryFn: () =>
       apiFetch<Schedule[]>(
-        instanceId === undefined ? "/schedules" : `/instances/${instanceId}/schedules`,
+        instanceId !== undefined
+          ? `/instances/${instanceId}/schedules`
+          : server === null
+            ? "/schedules"
+            : `/schedules?server=${server}`,
       ),
   });
 }

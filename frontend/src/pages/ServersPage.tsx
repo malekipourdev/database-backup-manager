@@ -21,7 +21,7 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { ApiError, errorMessage } from "../api/client";
 import {
@@ -46,6 +46,7 @@ import {
   Trash,
 } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
+import { useCurrentServer } from "../server/CurrentServer";
 import { formatDateTime, formatNumber } from "../i18n";
 
 const HOST_RE = /^[A-Za-z0-9._:-]+$/;
@@ -90,6 +91,9 @@ function ServerCard(props: {
   server: Server;
   onConnect: () => void;
   connecting: boolean;
+  /** The server the panel is working on now. */
+  current: boolean;
+  onSelect: () => void;
   onEdit: () => void;
   onToken: () => void;
   onDelete: () => void;
@@ -199,15 +203,16 @@ function ServerCard(props: {
           >
             {s.paired ? t("servers.check") : t("servers.connect")}
           </Button>
-          {s.paired && (
-            <Button
-              size="xs"
-              variant="subtle"
-              component={Link}
-              to={local ? "/containers" : `/containers?server=${s.id}`}
-            >
-              {t("servers.openContainers")}
-            </Button>
+          {props.current ? (
+            <Badge color="teal" variant="outline">
+              {t("servers.selected")}
+            </Badge>
+          ) : (
+            s.paired && (
+              <Button size="xs" variant="subtle" onClick={props.onSelect}>
+                {t("servers.select")}
+              </Button>
+            )
           )}
         </Group>
       </Stack>
@@ -371,6 +376,8 @@ function ServerForm({
 
 export function ServersPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const currentServer = useCurrentServer();
   const servers = useServers();
   const create = useCreateServer();
   const update = useUpdateServer();
@@ -437,6 +444,11 @@ export function ServersPage() {
               server={server}
               connecting={connectingId === server.id}
               onConnect={() => runConnect(server)}
+              current={server.id === currentServer.id}
+              onSelect={() => {
+                currentServer.select(server.id);
+                navigate("/instances");
+              }}
               onEdit={() => {
                 update.reset();
                 setEditing(server);

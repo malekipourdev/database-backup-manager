@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { ContainersPage } from "../src/pages/ContainersPage";
+import { CurrentServerContext } from "../src/server/CurrentServer";
+import { EDGE, currentOn } from "./servers";
 import { mockFetch, renderWithProviders } from "./render";
 
 const base = {
@@ -241,16 +243,8 @@ describe("ContainersPage", () => {
     expect(saved).toMatchObject({ read_only: true, bot_logs: true, cpu_percent: 90 });
   });
 
-  it("switches between servers", async () => {
+  it("shows the selected server's containers", async () => {
     const fetchMock = api({
-      "GET /servers": () => ({
-        status: 200,
-        body: [
-          { id: 1, name: "main", kind: "local", paired: true },
-          { id: 4, name: "edge", kind: "remote", paired: true },
-          { id: 5, name: "new", kind: "remote", paired: false },
-        ],
-      }),
       "GET /containers?server=4": () => ({
         status: 200,
         body: {
@@ -261,16 +255,14 @@ describe("ContainersPage", () => {
       "GET /containers/-/info?server=4": () => ({ status: 200, body: INFO }),
       "GET /containers/-/stats?server=4": () => ({ status: 200, body: { stats: {} } }),
     });
-    renderWithProviders(<ContainersPage />);
-    expect(await screen.findByText("shop-web-1")).toBeInTheDocument();
-    const picker = await screen.findByRole("textbox", { name: "Server" });
-    await userEvent.click(picker);
-    // Only servers whose agent can be used are offered.
-    expect(screen.queryByRole("option", { name: "new" })).toBeNull();
-    await userEvent.click(await screen.findByRole("option", { name: "edge" }));
-    expect(await screen.findByText("edge-api-1")).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/containers?server=4")).toBe(
-      true,
+    renderWithProviders(
+      <CurrentServerContext.Provider value={currentOn(EDGE)}>
+        <ContainersPage />
+      </CurrentServerContext.Provider>,
     );
+    expect(await screen.findByText("edge-api-1")).toBeInTheDocument();
+    expect(screen.queryByText("shop-web-1")).toBeNull();
+    expect(screen.getByTestId("server-badge")).toHaveTextContent("edge");
+    expect(fetchMock.mock.calls.every(([url]) => String(url).includes("server=4"))).toBe(true);
   });
 });

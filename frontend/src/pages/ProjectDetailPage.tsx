@@ -38,16 +38,28 @@ import { PencilSimple, RocketLaunch, Trash } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
 import { formatDuration } from "../format";
 import { formatDateTime } from "../i18n";
+import { useCurrentServer } from "../server/CurrentServer";
 
 function Services({ project }: { project: Project }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { select } = useCurrentServer();
   const containers = useContainers(project.server_id);
   const mine = (containers.data?.containers ?? []).filter((c) => c.project === project.name);
   return (
     <Paper withBorder p="lg">
       <Group justify="space-between" mb="sm">
         <Title order={4}>{t("projects.services")}</Title>
-        <Anchor component={Link} to={`/containers?server=${project.server_id}`} size="sm">
+        <Anchor
+          component="button"
+          type="button"
+          size="sm"
+          onClick={() => {
+            // The containers page shows the selected server's: this project's.
+            select(project.server_id);
+            navigate("/containers");
+          }}
+        >
           {t("projects.allContainers")}
         </Anchor>
       </Group>

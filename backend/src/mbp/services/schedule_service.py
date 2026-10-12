@@ -40,10 +40,10 @@ class ScheduleService:
         self.db = db
         self.repo = ScheduleRepository(db)
 
-    def list_all(self, instance_id: int | None = None) -> list[BackupSchedule]:
+    def list_all(self, instance_id: int | None = None, instances=None) -> list[BackupSchedule]:
         if instance_id is not None:
             InstanceService(self.db).get(instance_id)
-        return self.repo.list_all(instance_id)
+        return self.repo.list_all(instance_id, instances)
 
     def get(self, schedule_id: int) -> BackupSchedule:
         schedule = self.repo.get(schedule_id)

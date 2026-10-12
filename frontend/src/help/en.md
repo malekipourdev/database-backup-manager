@@ -5,20 +5,24 @@
 @summary What the panel is for, and what each menu item does.
 The panel backs up **MySQL** and **MariaDB** databases, verifies and keeps the backups, and can also manage servers, Docker containers and your own applications. Everything runs on your own server; nothing is sent anywhere else unless you choose to (remote storage, bots).
 
+## The current server
+
+The panel can manage several servers. At the bottom of the side menu (at the top on a phone) is the **Current server** card: whichever server is chosen there, Databases, Backups, Schedules, Containers and Projects show **only that server's**. Notifications, Bots, Settings, Account and Help are shared by all servers. ([About the current server](#current-server))
+
 ## The menu
 
-| Item          | Used for                                                                  |
-| ------------- | ------------------------------------------------------------------------- |
-| Databases     | Add MySQL/MariaDB servers, test connections, pick databases, take backups |
-| Backups       | The history of every backup: download, delete, retry uploads              |
-| Schedules     | Automatic backups at set times                                            |
-| Servers       | Connect other machines to this panel                                      |
-| Containers    | See and control the Docker containers of each server                      |
-| Projects      | Deploy applications from git with docker compose                          |
-| Notifications | Alerts to Bale, Telegram and a webhook                                    |
-| Bots          | Manage everything from Bale and Telegram                                  |
-| Settings      | Backup settings, remote storage (S3) and retention                        |
-| Account       | Two-step verification and recovery codes                                  |
+| Item                | Used for                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| Databases           | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
+| Backups             | (current server) Backup history: download, delete, retry uploads                   |
+| Schedules           | (current server) Automatic backups at set times                                    |
+| Containers          | (current server) See and control Docker containers                                 |
+| Projects            | (current server) Deploy applications from git with docker compose                  |
+| Notifications       | Alerts to Bale, Telegram and a webhook                                             |
+| Bots                | Manage everything from Bale and Telegram                                           |
+| Settings            | Backup settings, remote storage (S3) and retention                                 |
+| Account             | Two-step verification and recovery codes                                           |
+| Current server card | Switch server, and "Manage all servers" (add and connect servers)                  |
 
 ## Where to begin?
 
@@ -99,6 +103,7 @@ Then open `http://localhost:8080`. If port 8080 is taken on your computer, use f
 @title Language, layout and mobile
 @summary Switching language, using the panel on a phone, and searching this guide.
 
+- **Current server:** the card at the bottom of the side menu (on a phone, the server name button at the top). [More](#current-server)
 - **Language:** the "فارسی / English" switch at the top. Your choice is remembered in this browser. Each bot admin picks the bot's language in the bot itself.
 - **Mobile:** on small screens the menu moves to a scrollable bar at the bottom.
 - **Session:** after 30 minutes of inactivity you sign in again.
@@ -109,15 +114,17 @@ Then open `http://localhost:8080`. If port 8080 is taken on your computer, use f
 @@article add-database /instances/new
 @title Adding a database
 @summary Register a MySQL or MariaDB server and test the connection.
-Under **Databases → Add database**:
+First choose the server the database is on in the **Current server** card, then **Databases → Add database**. The database is added on that server (the form shows its name):
 
-| Field                 | Meaning                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| Name                  | Any display name, e.g. `prod` (also used in backup folder and file names)                    |
-| Connect from          | Shown once another server is connected: "Directly from this panel" or "Through the server …" |
-| Host and port         | Where the database is; see [which address to use](#db-host)                                  |
-| Username and password | Preferably a [dedicated backup user](#backup-user)                                           |
-| Notes                 | Optional                                                                                     |
+- On **the panel's own server**, the panel connects to the database itself.
+- On **another server**, that server's agent tests, lists and backs up the database; its port need not be open to the outside.
+
+| Field                 | Meaning                                                                   |
+| --------------------- | ------------------------------------------------------------------------- |
+| Name                  | Any display name, e.g. `prod` (also used in backup folder and file names) |
+| Host and port         | Where the database is; see [which address to use](#db-host)               |
+| Username and password | Preferably a [dedicated backup user](#backup-user)                        |
+| Notes                 | Optional                                                                  |
 
 Press **Test connection** before saving. The panel detects the type (MySQL or MariaDB) and version. If it fails, see [Connection errors](#connection-errors).
 
@@ -155,8 +162,8 @@ Host = `host.docker.internal` and the server's port. The database must listen on
 
 ## A database on another server
 
-- **Recommended:** add that server under [Servers](#add-server), then choose it as **Connect from** in the database form. The host is then as seen from that server: `127.0.0.1` for a database published on it, or the **container name** for one in a container. The database port never has to be open to the outside.
-- **Directly:** enter its IP address or domain and port; that server's firewall must allow connections from this one.
+- **Recommended:** [connect that server](#add-server), choose it in the Current server card, and add the database there. The host is then as seen from that server: `127.0.0.1` for a database published on it, or the **container name** for one in a container. The database port never has to be open to the outside.
+- **Directly:** add a database on the panel's own server and enter the other server's IP address or domain and port; that server's firewall must allow connections from this one.
 
 @@article backup-user
 @title A dedicated backup user
@@ -198,7 +205,7 @@ On each database server's page, **Databases to back up** lists the server's data
 | Connection refused   | Wrong port, or nothing listening there                              | Use the container's internal port (3306), not the published one; check `bind-address` |
 | Timed out            | Firewall or routing                                                 | The database server's firewall, and access from the panel's server                    |
 | Credentials rejected | Username/password, or the user may not connect from this address    | Create the user with `'%'` ([guide](#backup-user))                                    |
-| Agent unreachable    | For databases "through a server": that server's agent is down       | See [Server troubleshooting](#server-troubleshoot)                                    |
+| Agent unreachable    | For databases on other servers: that server's agent is down         | See [Server troubleshooting](#server-troubleshoot)                                    |
 
 > When editing, if you changed the host or user, enter the password again to test.
 
@@ -227,7 +234,7 @@ Backups can also be started from the bot; see [Using the bot](#bots-usage).
 5. The file is **verified**: SHA-256 checksum, full decompression, and the dump's `-- Dump completed` marker.
 6. Only then does it get its final name. A failed or interrupted backup leaves no file, and its reason is shown.
 
-For databases reached "through a server", step 2 runs on that server by its agent; the output is streamed to the panel, and compressed and verified here.
+For databases on another server, step 2 runs on that server by its agent; the output is streamed to the panel, and compressed and verified here.
 
 @@article history /backups
 @title History, download and delete
@@ -460,15 +467,40 @@ The bot connects out to the messenger (long polling), so the panel needs no publ
 
 @@category servers servers Servers
 
+@@article current-server
+@title The current server, and switching
+@summary The panel always works on one server; switch it from the card at the bottom of the menu.
+The panel always works on **one server**: the "current server". Its name and state are on the card at the bottom of the side menu (on a phone, the server name button at the top). Press the card to:
+
+- **Choose another server.** Servers that are not connected yet cannot be chosen.
+- Open **Manage all servers**: add, connect, edit and remove servers.
+
+## What depends on the current server?
+
+| Current server only | Shared by all servers                         |
+| ------------------- | --------------------------------------------- |
+| Databases           | Notifications and alerts                      |
+| Backups (history)   | Bale and Telegram bots                        |
+| Schedules           | Settings (backups, remote storage, retention) |
+| Containers          | Account                                       |
+| Projects            | Help                                          |
+
+- The current server's name is also shown next to the title of the pages that depend on it.
+- Whatever you add (a database, a project) is added on the current server.
+- Your choice is remembered in this browser. If that server is removed or disconnected, the panel goes back to its own server.
+- Example: to work with the second server's containers, choose it in the Current server card first, then open [Containers](/containers).
+
 @@article servers-overview /servers
 @title Managing several servers
 @summary One panel for several machines: their containers, projects and databases.
-The panel always has **its own server** (marked "this server"). Any other server connects through a small **agent**. Once connected:
+The panel always has **its own server** (marked "this server"). Any other server connects through a small **agent**. Once connected, choose it in the [Current server card](#current-server) and:
 
-- **Containers:** pick the server at the top of the Containers page. Settings and alerts are per server.
-- **Projects:** pick the target server in the project form.
-- **Databases:** with **Connect from**, that server's agent tests, lists and backs up the database; its port never has to be open to the outside.
+- **Containers** are that server's. Settings and alerts are per server.
+- **Projects** are deployed on that server.
+- **Databases** are tested, listed and backed up by that server's agent; their port never has to be open to the outside.
 - **Alerts and bot:** alerts name the server, and the bot asks which server first.
+
+**Manage all servers** opens from the Current server card.
 
 Each server's card shows its state (connected, unreachable, not connected), host name, Docker version, last contact, certificate fingerprint, and how many projects and databases use it.
 
@@ -477,7 +509,7 @@ Each server's card shows its state (connected, unreachable, not connected), host
 @summary Install the agent on another server and connect it.
 The new server needs **Docker** with **Compose v2**.
 
-1. Under [Servers](/servers), press **Add server**: a name, the IP address or domain the panel reaches it at, and the agent port (default `8443`).
+1. Press the Current server card (bottom of the menu), then **Manage all servers**, then **Add server**: a name, the IP address or domain the panel reaches it at, and the agent port (default `8443`).
 2. The panel shows the install commands with a **token made for this server. The token is shown only this once.** Copy the commands and run them on the new server:
 
 ```bash
@@ -498,6 +530,7 @@ sudo ufw allow from <PANEL-IP> to any port 8443 proto tcp
 ```
 
 4. Press **Connect** in the panel. On success the state becomes "Connected".
+5. To work on the new server, press **Work on this server** on its card, or choose it in the Current server card.
 
 > For a private repository, clone it on the new server with your own access, as for the panel. If you lose the token, use "New token".
 
@@ -582,7 +615,7 @@ docker compose up -d --build
 @title Working with containers
 @summary State, usage and logs, and controlling containers.
 
-- **Server:** with several servers, pick one at the top.
+- **Server:** the [current server](#current-server)'s containers are shown; for another server, choose it in the Current server card first.
 - **Containers tab:** every container grouped by compose project, problems first: state, health, uptime or exit code, CPU, RAM and restarts, refreshed every 5 seconds. The server's CPU, RAM and Docker disk are at the top.
 - **Filters and search:** all, running, problems, stopped.
 - **Details (click a container):** image, ports, networks, volumes, restart policy, the last health check output, and the **names** of environment variables (values are never shown).
@@ -645,7 +678,7 @@ Requirements: the [agent is on](#containers-enable) (on the panel's server), or 
 **Projects → New project**:
 
 - **Name:** lowercase letters, digits, `-` and `_`. It is also the compose project name on the server, and cannot change after the first deploy.
-- **Server:** with several servers, the target. It cannot change after the first deploy.
+- **Server:** the project is built and deployed on the [current server](#current-server) (the form shows its name). It cannot change after the first deploy.
 - **Repository, branch, compose file:** `https://…` or `git@host:owner/repo.git`, the branch to deploy, and the compose file's path in the repository (default `docker-compose.yml`).
 - **Access to a private repository:**
   - **SSH deploy key (recommended):** create one with `ssh-keygen -t ed25519 -N "" -f deploy_key`, add `deploy_key.pub` to the repository as a read-only deploy key (GitHub: Settings → Deploy keys), and paste the private key into the panel.
@@ -884,6 +917,14 @@ The database user cannot see it; check its [privileges](#backup-user).
 ## A backup failed with "missing privileges".
 
 Grant the user `SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES`.
+
+## How do I work on another server?
+
+Press the **Current server** card at the bottom of the menu and choose the server ([guide](#current-server)).
+
+## A database or project I added is not shown.
+
+Another server is probably current. Choose the server you added it on in the Current server card.
 
 ## The bot does not answer.
 

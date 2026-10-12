@@ -123,6 +123,44 @@
   box-shadow: var(--shadow-sm);
   font-size: 12px;
 }
+.cl-server-card {
+  width: 100%;
+  cursor: pointer;
+  text-align: start;
+  color: inherit;
+  transition: box-shadow 120ms ease;
+}
+.cl-server-card:hover {
+  box-shadow:
+    0 0 0 1px var(--color-accent),
+    var(--shadow-sm);
+}
+.cl-server-card-label {
+  font-size: 11px;
+  color: var(--color-neutral-400);
+}
+.cl-server-card-name,
+.cl-server-chip-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cl-server-card-name {
+  font-size: 14px;
+}
+.cl-server-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 150px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--mantine-color-default-border);
+  font-size: 12px;
+  color: inherit;
+}
 .cl-access code {
   font-size: 11px;
   color: var(--color-neutral-400);

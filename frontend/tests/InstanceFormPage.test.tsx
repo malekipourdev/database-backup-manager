@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import type { Instance } from "../src/api/instances";
 import { InstanceFormPage } from "../src/pages/InstanceFormPage";
+import { CurrentServerContext } from "../src/server/CurrentServer";
+import { EDGE, LOCAL, currentOn } from "./servers";
 import { mockFetch, renderWithProviders } from "./render";
 
 const instance: Instance = {
@@ -92,21 +94,15 @@ describe("InstanceFormPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("backs up a database on another server through its agent", async () => {
-    const servers = [
-      { id: 1, name: "main", kind: "local", paired: true },
-      { id: 4, name: "edge", kind: "remote", paired: true },
-    ];
-    const fetchMock = mockFetch((url) =>
-      url.endsWith("/api/servers")
-        ? { status: 200, body: servers }
-        : { status: 201, body: { ...instance, server_id: 4 } },
+  it("adds a database on the selected server", async () => {
+    const fetchMock = mockFetch(() => ({ status: 201, body: { ...instance, server_id: 4 } }));
+    renderWithProviders(
+      <CurrentServerContext.Provider value={currentOn(EDGE)}>
+        <InstanceFormPage />
+      </CurrentServerContext.Provider>,
+      { path: "/instances/new", route: "/instances/new" },
     );
-    renderWithProviders(<InstanceFormPage />, { path: "/instances/new", route: "/instances/new" });
-
-    const route = await screen.findByRole("textbox", { name: /Connect from/ });
-    await userEvent.click(route);
-    await userEvent.click(await screen.findByText("Through the server “edge”"));
+    expect(screen.getByTestId("instance-server")).toHaveTextContent("Added on “edge”");
     expect(screen.getByText(/as seen from that server/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/^Name/), "prod");
     await userEvent.type(screen.getByLabelText(/^Host/), "shop-db");
@@ -118,5 +114,28 @@ describe("InstanceFormPage", () => {
     );
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
     expect(JSON.parse(String(post[1]!.body))).toMatchObject({ host: "shop-db", server_id: 4 });
+  });
+
+  it("adds a database on the panel's own server without an agent", async () => {
+    const fetchMock = mockFetch(() => ({ status: 201, body: instance }));
+    renderWithProviders(
+      <CurrentServerContext.Provider value={currentOn(LOCAL)}>
+        <InstanceFormPage />
+      </CurrentServerContext.Provider>,
+      { path: "/instances/new", route: "/instances/new" },
+    );
+    expect(screen.getByTestId("instance-server")).toHaveTextContent(
+      "Added on “main” (this server)",
+    );
+    await userEvent.type(screen.getByLabelText(/^Name/), "prod");
+    await userEvent.type(screen.getByLabelText(/^Host/), "db");
+    await userEvent.type(screen.getByLabelText(/^Username/), "backup");
+    await userEvent.type(screen.getByLabelText(/^Password/), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true),
+    );
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(post[1]!.body)).server_id).toBeNull();
   });
 });

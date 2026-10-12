@@ -10,6 +10,7 @@ from mbp.api.schemas import (
     InstanceUpdate,
     SelectionUpdate,
 )
+from mbp.api.scope import ServerScope, server_scope
 from mbp.db import get_db
 from mbp.servers import db_access
 from mbp.services.instance_service import InstanceService, check_server
@@ -24,8 +25,11 @@ def _result(result: ProbeResult) -> ConnectionTestResult:
 
 
 @router.get("/instances", response_model=list[Instance])
-def list_instances(db: Session = Depends(get_db)) -> list[Instance]:
-    return [Instance.model_validate(i) for i in InstanceService(db).list()]
+def list_instances(
+    db: Session = Depends(get_db), scope: ServerScope | None = Depends(server_scope)
+) -> list[Instance]:
+    where = scope.instances() if scope else None
+    return [Instance.model_validate(i) for i in InstanceService(db).list(where)]
 
 
 @router.post("/instances", response_model=Instance, status_code=201)

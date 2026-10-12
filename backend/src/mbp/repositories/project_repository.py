@@ -10,8 +10,11 @@ class ProjectRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_all(self) -> list[Project]:
-        return list(self.db.scalars(select(Project).order_by(Project.name)))
+    def list_all(self, server_id: int | None = None) -> list[Project]:
+        stmt = select(Project).order_by(Project.name)
+        if server_id is not None:
+            stmt = stmt.where(Project.server_id == server_id)
+        return list(self.db.scalars(stmt))
 
     def get(self, project_id: int) -> Project | None:
         return self.db.get(Project, project_id)

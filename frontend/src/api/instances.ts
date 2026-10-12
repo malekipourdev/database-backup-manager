@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useCurrentServer } from "../server/CurrentServer";
 import { apiFetch } from "./client";
 
 export type ServerType = "mysql" | "mariadb";
@@ -74,10 +75,14 @@ export const instanceKeys = {
   databases: (id: number) => ["instances", id, "databases"] as const,
 };
 
-export function useInstances() {
+/** The current server's databases, or every server's with `all`. */
+export function useInstances({ all = false }: { all?: boolean } = {}) {
+  const current = useCurrentServer().id;
+  const server = all ? null : current;
   return useQuery({
-    queryKey: instanceKeys.all,
-    queryFn: () => apiFetch<Instance[]>("/instances"),
+    queryKey: [...instanceKeys.all, "list", server] as const,
+    queryFn: () =>
+      apiFetch<Instance[]>(server === null ? "/instances" : `/instances?server=${server}`),
   });
 }
 
