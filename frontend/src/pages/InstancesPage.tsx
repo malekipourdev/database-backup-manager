@@ -8,7 +8,8 @@ import { type Instance, useInstances } from "../api/instances";
 import { useRemoteStorage } from "../api/storage";
 import { CloudArrowUp, CloudCheck, Database, HardDrives, Plus } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
-import { RouteLabel } from "../components/RouteLabel";
+import { ServerBadge } from "../components/ServerBadge";
+import { useCurrentServer } from "../server/CurrentServer";
 import { formatDateTime, formatNumber } from "../i18n";
 
 function startOfToday(): string {
@@ -32,7 +33,8 @@ function Stat(props: { icon: React.ReactNode; label: string; value: string; note
 function Stats({ instances }: { instances: Instance[] }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const today = useRunHistory({ from: startOfToday(), page: 1, pageSize: 200 });
+  const server = useCurrentServer().id;
+  const today = useRunHistory({ server, from: startOfToday(), page: 1, pageSize: 200 });
   const remote = useRemoteStorage();
   const runs = today.data?.items ?? [];
   const count = (status: string) => runs.filter((r) => r.status === status).length;
@@ -116,14 +118,6 @@ function InstanceCard({ instance }: { instance: Instance }) {
           <span>{t("instances.columns.username")}</span>
           <code dir="ltr">{instance.username}</code>
         </div>
-        {instance.server_id !== null && (
-          <div className="cl-kv">
-            <span>{t("instances.columns.route")}</span>
-            <span>
-              <RouteLabel serverId={instance.server_id} />
-            </span>
-          </div>
-        )}
       </div>
       <div className="cl-card-foot">
         {instance.last_test_at ? (
@@ -156,6 +150,7 @@ export function InstancesPage() {
       <PageHeader
         help="add-database"
         title={t("instances.title")}
+        badge={<ServerBadge />}
         subtitle={t("instances.subtitle")}
         actions={
           <Button component={Link} to="/instances/new" leftSection={<Plus size={16} />}>

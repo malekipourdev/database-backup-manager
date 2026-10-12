@@ -23,7 +23,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, errorMessage } from "../api/client";
 import { useDatabases, useInstances } from "../api/instances";
-import { useServers } from "../api/servers";
+import { useCurrentServer } from "../server/CurrentServer";
 import {
   type AuthType,
   type Project,
@@ -48,10 +48,13 @@ const KEY_PLACEHOLDER = "-----BEGIN OPENSSH PRIVATE KEY-----";
 let nextKey = 1;
 const row = (name = "", stored = false): EnvRow => ({ key: nextKey++, name, value: "", stored });
 
-function initial(project?: Project): ProjectInput & { rows: EnvRow[] } {
+function initial(
+  project?: Project,
+  serverId: number | null = null,
+): ProjectInput & { rows: EnvRow[] } {
   return {
     name: project?.name ?? "",
-    server_id: project?.server_id ?? null,
+    server_id: project?.server_id ?? serverId,
     repo_url: project?.repo_url ?? "",
     branch: project?.branch ?? "main",
     compose_file: project?.compose_file ?? "docker-compose.yml",
@@ -117,42 +120,26 @@ function BackupFields(props: {
   );
 }
 
-/** The server to deploy on; shown once there is more than one. */
-function ServerField(props: {
-  value: number | null;
-  disabled: boolean;
-  error: string | null;
-  onChange: (value: number | null) => void;
-}) {
+/** The server the project is deployed on: the selected one for a new project. */
+function ServerNote({ serverId, deployed }: { serverId: number | null; deployed: boolean }) {
   const { t } = useTranslation();
-  const servers = useServers().data ?? [];
-  const local = servers.find((s) => s.kind === "local");
-  if (servers.length < 2) return null;
+  const { servers } = useCurrentServer();
+  const server = servers.find((s) => s.id === serverId);
+  if (!server) return null;
   return (
-    <Select
-      label={t("projects.fields.server")}
-      description={
-        props.disabled ? t("projects.fields.serverLocked") : t("projects.fields.serverHint")
-      }
-      allowDeselect={false}
-      disabled={props.disabled}
-      data={servers.map((s) => ({
-        value: String(s.id),
-        label: s.kind === "local" ? `${s.name} (${t("servers.local")})` : s.name,
-        disabled: !s.paired,
-      }))}
-      value={String(props.value ?? local?.id ?? "")}
-      onChange={(v) => v && props.onChange(Number(v))}
-      error={props.error}
-    />
+    <Text size="sm" c="dimmed" data-testid="project-server">
+      {t("projects.onServer", { name: server.name })}
+      {deployed ? ` ${t("projects.fields.serverLocked")}` : ""}
+    </Text>
   );
 }
 
 function Form({ project }: { project?: Project }) {
   const { t } = useTranslation();
+  const currentId = useCurrentServer().id;
   const navigate = useNavigate();
   const save = useSaveProject(project?.id);
-  const [values, setValues] = useState(() => initial(project));
+  const [values, setValues] = useState(() => initial(project, currentId));
   const set = <K extends keyof typeof values>(key: K, value: (typeof values)[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
   const fields = save.error instanceof ApiError ? (save.error.fields ?? {}) : {};
@@ -207,12 +194,7 @@ function Form({ project }: { project?: Project }) {
               onChange={(e) => set("name", e.currentTarget.value.toLowerCase())}
               error={fieldError("name")}
             />
-            <ServerField
-              value={values.server_id}
-              disabled={deployed}
-              error={fieldError("server_id")}
-              onChange={(v) => set("server_id", v)}
-            />
+            <ServerNote serverId={values.server_id} deployed={deployed} />
             <TextInput
               label={t("projects.fields.repoUrl")}
               description={t("projects.fields.repoUrlHint")}

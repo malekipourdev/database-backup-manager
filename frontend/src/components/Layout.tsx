@@ -1,10 +1,13 @@
-import { Button, SegmentedControl, UnstyledButton } from "@mantine/core";
+import { Alert, Button, Loader, SegmentedControl, UnstyledButton } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { ME_KEY, logout, useMe } from "../api/auth";
+import { errorMessage } from "../api/client";
+import { CurrentServerProvider, useCurrentServer } from "../server/CurrentServer";
+import { ServerSwitcher } from "./ServerSwitcher";
 import { LANGUAGES } from "../i18n";
 import {
   Archive,
@@ -17,7 +20,6 @@ import {
   Cube,
   Database,
   GearSix,
-  HardDrives,
   Question,
   Robot,
   RocketLaunch,
@@ -31,7 +33,6 @@ const NAV: { to: string; label: string; icon: Icon }[] = [
   { to: "/instances", label: "nav.instances", icon: Database },
   { to: "/backups", label: "nav.backups", icon: Archive },
   { to: "/schedules", label: "nav.schedules", icon: ClockCountdown },
-  { to: "/servers", label: "nav.servers", icon: HardDrives },
   { to: "/containers", label: "nav.containers", icon: Cube },
   { to: "/projects", label: "nav.projects", icon: RocketLaunch },
   { to: "/notifications", label: "nav.notifications", icon: Bell },
@@ -41,28 +42,15 @@ const NAV: { to: string; label: string; icon: Icon }[] = [
   { to: "/help", label: "nav.help", icon: Question },
 ];
 
+// Pages reached outside the menu (from the server card), for the header's title.
+const OTHER_PAGES = [{ to: "/servers", label: "nav.servers" }];
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 /** Where the panel is being opened from: locally (e.g. through an SSH tunnel) or not. */
 export function accessInfo(): { local: boolean; host: string } {
   const { hostname, host } = window.location;
   return { local: LOCAL_HOSTS.has(hostname), host };
-}
-
-function AccessCard() {
-  const { t } = useTranslation();
-  const { local, host } = accessInfo();
-  return (
-    <div className="cl-access">
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span className="cl-dot" data-tone={local ? "ok" : "warn"} />
-        {local ? t("layout.accessLocal") : t("layout.accessNetwork")}
-      </div>
-      <code dir="ltr" style={{ textAlign: "start" }}>
-        {host}
-      </code>
-    </div>
-  );
 }
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -112,13 +100,22 @@ export function LanguageSeg({ short = false }: { short?: boolean }) {
 }
 
 export function Layout() {
+  return (
+    <CurrentServerProvider>
+      <PanelLayout />
+    </CurrentServerProvider>
+  );
+}
+
+function PanelLayout() {
   const { t, i18n } = useTranslation();
+  const currentServer = useCurrentServer();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { pathname } = useLocation();
   const me = useMe();
   const rtl = i18n.dir(i18n.language) === "rtl";
-  const current = NAV.find((item) => pathname.startsWith(item.to));
+  const current = [...NAV, ...OTHER_PAGES].find((item) => pathname.startsWith(item.to));
   const Caret = rtl ? CaretLeft : CaretRight;
 
   const signOut = useMutation({
@@ -149,7 +146,9 @@ export function Layout() {
             </Link>
           ))}
         </nav>
-        <AccessCard />
+        <div style={{ marginTop: "auto" }}>
+          <ServerSwitcher />
+        </div>
       </aside>
 
       <div className="cl-main">
@@ -168,6 +167,9 @@ export function Layout() {
           <div className="cl-header-actions">
             <span className="cl-desktop-only">
               <LanguageSeg />
+            </span>
+            <span className="cl-mobile-only">
+              <ServerSwitcher compact />
             </span>
             <span className="cl-mobile-only">
               <LanguageSeg short />
@@ -204,7 +206,13 @@ export function Layout() {
         </header>
         <main className="cl-content">
           <div className="cl-content-inner">
-            <Outlet />
+            {currentServer.ready ? (
+              <Outlet />
+            ) : currentServer.error ? (
+              <Alert color="red">{errorMessage(t, currentServer.error)}</Alert>
+            ) : (
+              <Loader />
+            )}
           </div>
         </main>
       </div>

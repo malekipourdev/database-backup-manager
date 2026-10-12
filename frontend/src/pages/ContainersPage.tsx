@@ -12,7 +12,6 @@ import {
   Paper,
   Progress,
   SegmentedControl,
-  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -28,7 +27,7 @@ import { notifications } from "@mantine/notifications";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { ApiError, errorMessage, isApiError } from "../api/client";
 import {
@@ -45,7 +44,7 @@ import {
   useServerInfo,
   type ServerRef,
 } from "../api/containers";
-import { usableServers, useServers } from "../api/servers";
+import { useCurrentServer } from "../server/CurrentServer";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ContainerDrawer } from "../components/ContainerDrawer";
 import { ContainerStateBadge } from "../components/ContainerStateBadge";
@@ -60,6 +59,7 @@ import {
   Stop,
 } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
+import { ServerBadge } from "../components/ServerBadge";
 import { formatBytes, formatDuration } from "../format";
 import { formatDateTime, formatNumber, formatPercent } from "../i18n";
 
@@ -395,6 +395,8 @@ function Group_(props: {
 
 function ContainersTab({ server }: { server: ServerRef }) {
   const { t } = useTranslation();
+  const current = useCurrentServer().server;
+  const local = !current || current.kind === "local";
   const list = useContainers(server);
   const available = list.isSuccess;
   const stats = useContainerStats(server, available);
@@ -453,11 +455,7 @@ function ContainersTab({ server }: { server: ServerRef }) {
   if (list.isPending) return <Loader />;
   if (list.isError) {
     if (isApiError(list.error) && AGENT_CODES.has(list.error.code)) {
-      return server === null ? (
-        <AgentHelp error={list.error} />
-      ) : (
-        <RemoteAgentHelp error={list.error} />
-      );
+      return local ? <AgentHelp error={list.error} /> : <RemoteAgentHelp error={list.error} />;
     }
     return <Alert color="red">{errorMessage(t, list.error)}</Alert>;
   }
@@ -722,47 +720,6 @@ function SettingsTab({ server }: { server: ServerRef }) {
   );
 }
 
-/** Which server's containers are shown: the `server` URL parameter (none: the panel's own). */
-function useServerParam(): [ServerRef, (server: ServerRef) => void] {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get("server");
-  const server = raw && /^\d+$/.test(raw) ? Number(raw) : null;
-  const set = (next: ServerRef) => setParams(next === null ? {} : { server: String(next) });
-  return [server, set];
-}
-
-function ServerPicker({
-  server,
-  onChange,
-}: {
-  server: ServerRef;
-  onChange: (s: ServerRef) => void;
-}) {
-  const { t } = useTranslation();
-  const servers = usableServers(useServers().data);
-  if (servers.length < 2) return null;
-  const local = servers.find((s) => s.kind === "local");
-  const value = server === null ? String(local?.id ?? "") : String(server);
-  return (
-    <Select
-      label={t("containers.server")}
-      leftSection={<HardDrives size={16} />}
-      allowDeselect={false}
-      maw={320}
-      data={servers.map((s) => ({
-        value: String(s.id),
-        label: s.kind === "local" ? `${s.name} (${t("servers.local")})` : s.name,
-      }))}
-      value={value}
-      onChange={(v) => {
-        if (!v) return;
-        const picked = servers.find((s) => String(s.id) === v);
-        onChange(picked?.kind === "local" ? null : Number(v));
-      }}
-    />
-  );
-}
-
 function RemoteAgentHelp({ error }: { error: unknown }) {
   const { t } = useTranslation();
   return (
@@ -782,15 +739,16 @@ function RemoteAgentHelp({ error }: { error: unknown }) {
 
 export function ContainersPage() {
   const { t } = useTranslation();
-  const [server, setServer] = useServerParam();
+  // The selected server (null outside the panel's layout: the panel's own).
+  const server = useCurrentServer().id;
   return (
     <Stack gap={18}>
       <PageHeader
         help="containers-usage"
         title={t("containers.title")}
+        badge={<ServerBadge />}
         subtitle={t("containers.subtitle")}
       />
-      <ServerPicker server={server} onChange={setServer} />
       <Tabs defaultValue="containers" keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="containers" leftSection={<HardDrives size={16} />}>

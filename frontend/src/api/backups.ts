@@ -63,6 +63,8 @@ export interface RunPage {
 }
 
 export interface RunQuery {
+  /** Only backups of this server's databases. */
+  server?: number | null;
   instanceId?: number;
   database?: string;
   statuses?: RunStatus[];
@@ -117,6 +119,9 @@ export function pollInterval(runs: BackupRun[] | undefined): number | false {
 
 export function runQueryString(query: RunQuery): string {
   const params = new URLSearchParams();
+  if (query.server !== undefined && query.server !== null) {
+    params.set("server", String(query.server));
+  }
   if (query.instanceId !== undefined) params.set("instance_id", String(query.instanceId));
   if (query.database) params.set("database", query.database);
   for (const status of query.statuses ?? []) params.append("status", status);

@@ -6,7 +6,6 @@ import {
   NumberInput,
   Paper,
   PasswordInput,
-  Select,
   Stack,
   Text,
   TextInput,
@@ -31,7 +30,7 @@ import {
   useTestInstance,
   useUpdateInstance,
 } from "../api/instances";
-import { useServers } from "../api/servers";
+import { useCurrentServer } from "../server/CurrentServer";
 import { PageHeader } from "../components/PageHeader";
 import { ConnectionResult } from "../components/ConnectionResult";
 
@@ -45,8 +44,6 @@ interface FormValues {
   username: string;
   password: string;
   notes: string;
-  /** "" for the panel itself, else a server id. */
-  server: string;
 }
 
 function buildSchema(t: TFunction, requirePassword: boolean) {
@@ -70,7 +67,6 @@ function buildSchema(t: TFunction, requirePassword: boolean) {
       ? z.string().min(1, required).max(1024, tooLong(1024))
       : z.string().max(1024, tooLong(1024)),
     notes: z.string().max(NOTES_MAX, tooLong(NOTES_MAX)),
-    server: z.string(),
   });
 }
 
@@ -82,7 +78,6 @@ function toFormValues(instance?: Instance): FormValues {
     username: instance?.username ?? "",
     password: "",
     notes: instance?.notes ?? "",
-    server: instance?.server_id ? String(instance.server_id) : "",
   };
 }
 
@@ -100,8 +95,7 @@ export function InstanceFormPage() {
   const testSaved = useTestInstance(instanceId ?? 0);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
-  const servers = useServers();
-  const remoteServers = (servers.data ?? []).filter((s) => s.kind === "remote");
+  const { server: current, servers } = useCurrentServer();
 
   const form = useForm<FormValues>({
     initialValues: toFormValues(),
@@ -127,6 +121,18 @@ export function InstanceFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded?.id]);
 
+  // A database belongs to a server: a new one to the selected server, a saved one to its own.
+  // null: the panel's own server, which connects to it itself.
+  const serverId = isEdit
+    ? (loaded?.server_id ?? null)
+    : current && current.kind === "remote"
+      ? current.id
+      : null;
+  const serverName =
+    serverId === null
+      ? (servers.find((s) => s.kind === "local")?.name ?? current?.name ?? "")
+      : (servers.find((s) => s.id === serverId)?.name ?? `#${serverId}`);
+
   const applyServerErrors = (error: unknown) => {
     if (!(error instanceof ApiError)) return;
     if (error.code === "name_taken") {
@@ -147,7 +153,6 @@ export function InstanceFormPage() {
       port: Number(values.port),
       username: values.username,
       notes: values.notes,
-      server_id: values.server ? Number(values.server) : null,
     };
     if (isEdit) {
       const patch: InstanceUpdate = { ...body };
@@ -162,7 +167,7 @@ export function InstanceFormPage() {
       });
     } else {
       create.mutate(
-        { ...body, password: values.password },
+        { ...body, password: values.password, server_id: serverId },
         {
           onSuccess: (instance) => {
             notifications.show({ color: "green", message: t("instances.created") });
@@ -193,8 +198,7 @@ export function InstanceFormPage() {
         loaded !== undefined &&
         values.host.trim() === loaded.host &&
         Number(values.port) === loaded.port &&
-        values.username === loaded.username &&
-        (values.server ? Number(values.server) : null) === loaded.server_id;
+        values.username === loaded.username;
       if (!unchanged) {
         form.setFieldError("password", t("connection.passwordNeeded"));
         return;
@@ -208,7 +212,7 @@ export function InstanceFormPage() {
         port: Number(values.port),
         username: values.username,
         password: values.password,
-        server_id: values.server ? Number(values.server) : null,
+        server_id: serverId,
       },
       handlers,
     );
@@ -248,30 +252,18 @@ export function InstanceFormPage() {
               maxLength={100}
               {...form.getInputProps("name")}
             />
-            {remoteServers.length > 0 && (
-              <Select
-                label={t("instances.fields.route")}
-                description={t("instances.routeHint")}
-                allowDeselect={false}
-                data={[
-                  { value: "", label: t("instances.routeDirect") },
-                  ...remoteServers.map((s) => ({
-                    value: String(s.id),
-                    label: s.paired
-                      ? t("instances.routeServer", { name: s.name })
-                      : `${t("instances.routeServer", { name: s.name })} (${t("servers.notConnected")})`,
-                  })),
-                ]}
-                {...form.getInputProps("server")}
-              />
-            )}
+            <Text size="sm" c="dimmed" data-testid="instance-server">
+              {serverId === null
+                ? t("instances.onLocalServer", { name: serverName })
+                : t("instances.onServer", { name: serverName })}
+            </Text>
             <Group grow align="flex-start">
               <TextInput
                 label={t("instances.fields.host")}
                 required
                 dir="ltr"
                 description={
-                  form.values.server ? t("instances.hostHintServer") : t("instances.hostHint")
+                  serverId === null ? t("instances.hostHint") : t("instances.hostHintServer")
                 }
                 {...form.getInputProps("host")}
               />

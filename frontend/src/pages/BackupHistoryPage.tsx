@@ -17,6 +17,8 @@ import { useSearchParams } from "react-router-dom";
 import { type RunQuery, type RunStatus, type SortColumn, useRunHistory } from "../api/backups";
 import { errorMessage } from "../api/client";
 import { useInstances } from "../api/instances";
+import { useCurrentServer } from "../server/CurrentServer";
+import { ServerBadge } from "../components/ServerBadge";
 import { PageHeader } from "../components/PageHeader";
 import { RunTable, type SortState } from "../components/RunTable";
 import { formatNumber } from "../i18n";
@@ -62,7 +64,8 @@ export function queryFromParams(params: URLSearchParams): RunQuery {
 export function BackupHistoryPage() {
   const { t, i18n } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const query = queryFromParams(params);
+  const server = useCurrentServer().id;
+  const query = { ...queryFromParams(params), server };
   const history = useRunHistory(query);
   const instances = useInstances();
 
@@ -82,7 +85,12 @@ export function BackupHistoryPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader help="history" title={t("history.title")} subtitle={t("history.subtitle")} />
+      <PageHeader
+        help="history"
+        title={t("history.title")}
+        badge={<ServerBadge />}
+        subtitle={t("history.subtitle")}
+      />
 
       <Paper withBorder p="md">
         <Group align="flex-end" wrap="wrap" gap="sm">

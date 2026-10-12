@@ -51,8 +51,8 @@ class InstanceService:
         self.db = db
         self.repo = InstanceRepository(db)
 
-    def list(self) -> list[DbInstance]:
-        return self.repo.list_ordered_by_name()
+    def list(self, where=None) -> list[DbInstance]:
+        return self.repo.list_ordered_by_name(where)
 
     def get(self, instance_id: int) -> DbInstance:
         instance = self.repo.get(instance_id)

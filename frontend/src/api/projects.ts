@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useCurrentServer } from "../server/CurrentServer";
 import { apiFetch } from "./client";
 
 export type AuthType = "none" | "token" | "ssh_key";
@@ -87,10 +88,13 @@ export const projectKeys = {
 export const isActive = (d: DeploymentSummary | null | undefined) =>
   d?.status === "queued" || d?.status === "running";
 
+/** The current server's projects. */
 export function useProjects() {
+  const server = useCurrentServer().id;
   return useQuery({
-    queryKey: projectKeys.list,
-    queryFn: () => apiFetch<Project[]>("/projects"),
+    queryKey: [...projectKeys.list, server] as const,
+    queryFn: () =>
+      apiFetch<Project[]>(server === null ? "/projects" : `/projects?server=${server}`),
     refetchInterval: (query) =>
       query.state.data?.some((p) => isActive(p.last_deployment)) ? 3000 : false,
   });

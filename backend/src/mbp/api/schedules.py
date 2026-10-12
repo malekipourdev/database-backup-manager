@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from mbp.api.errors import ApiError
 from mbp.api.schemas import ScheduleIn, ScheduleOut, SchedulePreview, SchedulePreviewRequest
+from mbp.api.scope import ServerScope, server_scope
 from mbp.backups.scheduler import BackupScheduler, next_fire_times
 from mbp.db import get_db
 from mbp.models import BackupSchedule, DbInstance
@@ -42,8 +43,11 @@ def _sync(scheduler: BackupScheduler | None, schedule_id: int) -> None:
 
 
 @router.get("/schedules", response_model=list[ScheduleOut])
-def list_schedules(db: Session = Depends(get_db)) -> list[ScheduleOut]:
-    return [schedule_out(db, s) for s in ScheduleService(db).list_all()]
+def list_schedules(
+    db: Session = Depends(get_db), scope: ServerScope | None = Depends(server_scope)
+) -> list[ScheduleOut]:
+    instances = scope.instances() if scope else None
+    return [schedule_out(db, s) for s in ScheduleService(db).list_all(None, instances)]
 
 
 @router.post("/schedules/preview", response_model=SchedulePreview)

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -26,6 +27,10 @@ class RunFilters:
     statuses: list[str] | None = None
     requested_from: datetime | None = None
     requested_to: datetime | None = None
+    # A condition on DbInstance: only backups of those databases. With `orphans`, also the
+    # backups of databases deleted since (they belong to no server any more).
+    instances: Any = None
+    orphans: bool = False
 
 
 def active_key(instance_id: int, database_name: str) -> str:
@@ -148,6 +153,11 @@ class BackupRunRepository:
         return list(self.db.scalars(stmt))
 
     def _filtered(self, stmt: Select, filters: RunFilters) -> Select:
+        if filters.instances is not None:
+            mine = BackupRun.instance_id.in_(select(DbInstance.id).where(filters.instances))
+            stmt = stmt.where(
+                or_(mine, BackupRun.instance_id.is_(None)) if filters.orphans else mine
+            )
         if filters.instance_id is not None:
             stmt = stmt.where(BackupRun.instance_id == filters.instance_id)
         if filters.database:
