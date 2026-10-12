@@ -12,7 +12,7 @@ from mbp.api.schemas import (
     ProjectState,
 )
 from mbp.db import get_db
-from mbp.models import AdminAccount, Project
+from mbp.models import AdminAccount, Project, Server
 from mbp.projects.service import ProjectService, env_of
 from mbp.repositories.project_repository import ProjectRepository
 from mbp.security.sessions import require_session
@@ -23,9 +23,12 @@ router = APIRouter(tags=["projects"])
 def _out(project: Project, repo: ProjectRepository, last=None) -> ProjectOut:
     last = last if last is not None else repo.last_deployments().get(project.id)
     success = repo.last_success(project.id)
+    server = repo.db.get(Server, project.server_id)
     return ProjectOut(
         id=project.id,
         name=project.name,
+        server_id=project.server_id,
+        server_name=server.name if server else "",
         repo_url=project.repo_url,
         branch=project.branch,
         compose_file=project.compose_file,
@@ -64,10 +67,14 @@ def get_project(project_id: int, db: Session = Depends(get_db)) -> ProjectOut:
 def update_project(project_id: int, body: ProjectIn, db: Session = Depends(get_db)) -> ProjectOut:
     service = ProjectService(db)
     project = service.get(project_id)
-    if project.name != body.name and service.repo.last_deployments().get(project.id):
+    deployed = service.repo.last_deployments().get(project.id)
+    if project.name != body.name and deployed:
         # The name is the compose project and directory on the server: renaming would
         # leave the deployed containers behind.
         raise ApiError(422, "validation_error", fields={"name": "rename_after_deploy"})
+    if body.server_id is not None and body.server_id != project.server_id and deployed:
+        # Same for moving it: delete it (with its containers) and add it on the other server.
+        raise ApiError(422, "validation_error", fields={"server_id": "move_after_deploy"})
     return _out(service.save(body.to_data(), project), service.repo)
 
 
@@ -85,7 +92,8 @@ def delete_project(
     if service.repo.last_deployments().get(project.id):
         # Stop and remove its containers (down) and the checkout on the server.
         try:
-            request.app.state.agent.project_remove(project.name, project.compose_file, down)
+            agent = request.app.state.agents.get(project.server_id)
+            agent.project_remove(project.name, project.compose_file, down)
         except ApiError:
             if down:
                 raise
@@ -131,7 +139,7 @@ def list_deployments(
 def project_state(project_id: int, request: Request, db: Session = Depends(get_db)) -> ProjectState:
     project = ProjectService(db).get(project_id)
     try:
-        state = request.app.state.agent.project_state(project.name)
+        state = request.app.state.agents.get(project.server_id).project_state(project.name)
     except ApiError as exc:
         return ProjectState(available=False, error_code=exc.code)
     return ProjectState(available=True, **state)

@@ -96,7 +96,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
         # (database names can be 64 characters, i.e. up to 256 bytes).
         self._tokens: dict[str, tuple[float, tuple]] = {}
         self._lock = threading.Lock()
-        # `agent` returns the current Docker agent client (or None).
+        # `agent` returns the app's AgentRegistry (or None).
         self._init_containers(agent)
         # `deploy_runner` returns the app's DeployRunner (or None).
         self._init_projects(deploy_runner)
@@ -245,8 +245,9 @@ class BotHandler(ContainerMenu, ProjectMenu):
             "ns": lambda: self.settings(db, ctx),
             "nl": lambda: self.set_level(db, ctx, args[0] if args else ""),
             "lg": lambda: self.toggle_language(db, ctx),
-            "cl": lambda: self.containers_list(db, ctx, num(0)),
-            "cs": lambda: self.server_status(db, ctx),
+            "sv": lambda: self.servers_list(db, ctx),
+            "cl": lambda: self.containers_entry(db, ctx, num(0), num(1) if len(args) > 1 else None),
+            "cs": lambda: self.server_status(db, ctx, num(0)),
             "c": lambda: self.container_view(db, ctx, args[0] if args else ""),
             "cg": lambda: self.container_logs(db, ctx, args[0] if args else ""),
             "ca": lambda: self.ask_action(

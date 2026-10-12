@@ -1,6 +1,25 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 2.1.0 → 3.0.0
+Bump rationale: MAJOR. A rule is redefined: an agent on another server than the panel's
+publishes a port (HTTPS) instead of listening only on the internal compose network, and may
+dump databases on the panel's behalf.
+
+Modified principles:
+- I. Security First: remote agents are trusted only through a pinned certificate and
+  per-server tokens that never travel (signed requests); tokens are encrypted at rest and
+  shown once.
+- VI. Containerized Deployment: the agent rule now has a local mode (unchanged) and a remote
+  mode (HTTPS on the host's network, pinned certificate, signed requests); the allow-list
+  gains database connection tests, database lists and dumps with the same fixed tool options.
+Modified sections:
+- Project Scope (MVP): adds managing several servers from one panel.
+
+Templates: not modified. Deferred TODOs: none.
+
+Previous report (2.1.0)
+-----------------------
 Version change: 2.0.0 → 2.1.0
 Bump rationale: MINOR. Materially expanded guidance: the agent may now deploy registered
 projects (git + docker compose), and deployment enters the scope.
@@ -120,6 +139,13 @@ automatically delete old backups via retention policies.
   MUST require a fresh TOTP code of a panel account with two-step verification on. Showing
   container logs in a bot copies them to a third party and MUST be off unless an admin
   turns it on.
+- Other servers: the panel MUST trust an agent on another server only through the certificate
+  it pinned when the server was connected, after the agent proved it holds that server's
+  token. Every request MUST be signed with the token, bound to the time and to the pinned
+  certificate; the token MUST NOT be sent over the network, MUST be encrypted at rest, and
+  MUST be shown only once (a new token replaces it). Database credentials MAY be sent to a
+  server's agent only over that pinned connection, for one operation, and the agent MUST NOT
+  store them.
 - Deploying projects: repository credentials (tokens, SSH keys) and environment values MUST be
   encrypted at rest, never returned by the API, never passed on a command line, and masked in
   deploy logs. Deploying from a bot MUST require a fresh TOTP code like other bot actions on
@@ -187,13 +213,18 @@ Rationale: operators choose their own storage; the codebase stays portable and t
 - Target databases MUST be reached over the network only. The backend and frontend MUST
   NEVER mount or use the Docker/Podman socket (`docker.sock`).
 - Only the agent service may mount `docker.sock`, and only when an admin turns it on (compose
-  profile, off by default). The agent MUST: listen only on the internal compose network with
-  no published port; answer only requests carrying the shared secret; implement only a fixed
-  allow-list of operations (list, inspect, stats, logs, start, stop, restart, and for
-  registered projects: git init/remote/fetch/checkout/log and docker compose config/pull/
-  build/up/ps/down); run these only as fixed argument lists, never through a shell, inside the
-  project's directory under the projects root, with git limited to https and ssh transports;
-  never execute commands in containers; refuse to control or deploy over the panel's own
+  profile, off by default, on the panel's server; `docker-compose.agent.yml` on another
+  server). On the panel's server the agent MUST listen only on the internal compose network
+  with no published port and answer only requests carrying the shared secret. On another
+  server it MAY publish one port, and MUST serve only HTTPS with its own certificate and
+  answer only requests signed with that server's token (see I). Every agent MUST implement
+  only a fixed allow-list of operations (list, inspect, stats, logs, start, stop, restart;
+  for registered projects: git init/remote/fetch/checkout/log and docker compose config/pull/
+  build/up/ps/down; for databases on its server: connection test, database list, and dump
+  with the panel's fixed dump options); run these only as fixed argument lists, never through
+  a shell, inside the project's directory under the projects root, with git limited to https
+  and ssh transports and dump passwords only in a private option file; never execute
+  commands in containers; refuse to control or deploy over the panel's or its own
   containers; and run with a read-only filesystem, no capabilities and no-new-privileges.
 
 Rationale: socket access grants host root; network access is sufficient for backups and far
@@ -266,6 +297,9 @@ In scope:
 - Deploying projects from git with docker compose through the agent: registration with
   encrypted credentials and variables, deploy history with logs, redeploying an earlier
   commit, a backup of chosen databases before each deploy, deploys from the bots, alerts.
+- Several servers managed by one panel through their agents: adding and connecting servers,
+  their containers, projects deployed on them, and backups of databases on them taken by
+  their agent.
 - Bilingual (Persian/English) UI.
 
 Out of scope for MVP: restore, email notifications, non-S3 remote storage,
@@ -297,4 +331,4 @@ requires a scope amendment to this section.
 - Compliance is verified during planning (Constitution Check) and code review. Unjustified
   violations block merge.
 
-**Version**: 2.1.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-12
+**Version**: 3.0.0 | **Ratified**: 2026-10-11 | **Last Amended**: 2026-10-12

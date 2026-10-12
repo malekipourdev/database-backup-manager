@@ -33,6 +33,10 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div className="cl-kv">
+          <span>{t("projects.fields.server")}</span>
+          <span>{project.server_name}</span>
+        </div>
+        <div className="cl-kv">
           <span>{t("projects.fields.branch")}</span>
           <code dir="ltr">{project.branch}</code>
         </div>

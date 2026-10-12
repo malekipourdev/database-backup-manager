@@ -11,7 +11,7 @@ from mbp.agent.docker import ACTIONS, REF_RE
 from mbp.api.errors import ApiError
 from mbp.containers.agent_client import AgentClient
 from mbp.db import utcnow
-from mbp.models import ContainerAction, ContainerSettings
+from mbp.models import ContainerAction, ContainerSettings, Server
 from mbp.repositories.container_repository import ContainerRepository
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,10 @@ def problem(container: dict) -> str | None:
 
 
 class ExpectedStops:
-    """Containers the panel itself just stopped or restarted, so the monitor stays quiet."""
+    """Containers the panel itself just stopped or restarted, so the monitor stays quiet.
+
+    Keyed by "server id/container name".
+    """
 
     def __init__(self, ttl_seconds: float = 300) -> None:
         self.ttl = ttl_seconds
@@ -61,15 +64,23 @@ class ExpectedStops:
 expected_stops = ExpectedStops()
 
 
+def stop_key(server_id: int, name: str) -> str:
+    return f"{server_id}/{name}"
+
+
 class ContainerService:
-    def __init__(self, db: Session, agent: AgentClient) -> None:
+    """One server's containers, through its agent."""
+
+    def __init__(self, db: Session, agent: AgentClient, server: Server) -> None:
         self.db = db
         self.agent = agent
+        self.server_id = server.id
+        self.server_name = server.name
         self.repo = ContainerRepository(db)
 
     @property
     def settings(self) -> ContainerSettings:
-        return self.repo.get_settings()
+        return self.repo.get_settings(self.server_id)
 
     def hidden(self, name: str) -> bool:
         return matches(name, self.settings.hidden)
@@ -131,13 +142,20 @@ class ContainerService:
             if self.locked(found):
                 raise ApiError(403, "container_locked")
             if action != "start":
-                expected_stops.mark(name)
+                expected_stops.mark(stop_key(self.server_id, name))
             result = self._decorate(self.agent.action(name, action))
         except ApiError as exc:
             self._audit(actor, source, name, action, exc.code, exc.detail)
             raise
         self._audit(actor, source, name, action, "ok", None)
-        logger.info("%s (%s) asked to %s container %s", actor, source, action, name)
+        logger.info(
+            "%s (%s) asked to %s container %s on %s",
+            actor,
+            source,
+            action,
+            name,
+            self.server_name,
+        )
         return result
 
     def _audit(
@@ -148,6 +166,8 @@ class ContainerService:
                 created_at=utcnow(),
                 actor=actor[:100],
                 source=source,
+                server_id=self.server_id,
+                server_name=self.server_name[:60],
                 container=name[:128],
                 action=action,
                 result=result[:64],

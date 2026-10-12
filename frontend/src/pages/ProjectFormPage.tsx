@@ -23,6 +23,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, errorMessage } from "../api/client";
 import { useDatabases, useInstances } from "../api/instances";
+import { useServers } from "../api/servers";
 import {
   type AuthType,
   type Project,
@@ -50,6 +51,7 @@ const row = (name = "", stored = false): EnvRow => ({ key: nextKey++, name, valu
 function initial(project?: Project): ProjectInput & { rows: EnvRow[] } {
   return {
     name: project?.name ?? "",
+    server_id: project?.server_id ?? null,
     repo_url: project?.repo_url ?? "",
     branch: project?.branch ?? "main",
     compose_file: project?.compose_file ?? "docker-compose.yml",
@@ -115,6 +117,37 @@ function BackupFields(props: {
   );
 }
 
+/** The server to deploy on; shown once there is more than one. */
+function ServerField(props: {
+  value: number | null;
+  disabled: boolean;
+  error: string | null;
+  onChange: (value: number | null) => void;
+}) {
+  const { t } = useTranslation();
+  const servers = useServers().data ?? [];
+  const local = servers.find((s) => s.kind === "local");
+  if (servers.length < 2) return null;
+  return (
+    <Select
+      label={t("projects.fields.server")}
+      description={
+        props.disabled ? t("projects.fields.serverLocked") : t("projects.fields.serverHint")
+      }
+      allowDeselect={false}
+      disabled={props.disabled}
+      data={servers.map((s) => ({
+        value: String(s.id),
+        label: s.kind === "local" ? `${s.name} (${t("servers.local")})` : s.name,
+        disabled: !s.paired,
+      }))}
+      value={String(props.value ?? local?.id ?? "")}
+      onChange={(v) => v && props.onChange(Number(v))}
+      error={props.error}
+    />
+  );
+}
+
 function Form({ project }: { project?: Project }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -173,6 +206,12 @@ function Form({ project }: { project?: Project }) {
               disabled={deployed}
               onChange={(e) => set("name", e.currentTarget.value.toLowerCase())}
               error={fieldError("name")}
+            />
+            <ServerField
+              value={values.server_id}
+              disabled={deployed}
+              error={fieldError("server_id")}
+              onChange={(v) => set("server_id", v)}
             />
             <TextInput
               label={t("projects.fields.repoUrl")}

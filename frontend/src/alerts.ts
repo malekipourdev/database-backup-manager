@@ -16,6 +16,13 @@ const RECOVERED_KINDS = new Set([
 
 /** The alert's message in the selected language, from its event type and parameters. */
 export function renderAlert(item: NotificationLogItem, t: TFunction, lang: string): string {
+  const text = renderBody(item, t, lang);
+  // Alerts about another server than the panel's own name it first.
+  const server = (item.params as Record<string, unknown>).server;
+  return typeof server === "string" && server ? `${server}: ${text}` : text;
+}
+
+function renderBody(item: NotificationLogItem, t: TFunction, lang: string): string {
   const p = item.params as Record<string, unknown>;
   const str = (key: string) => String(p[key] ?? "");
   const num = (key: string) => (typeof p[key] === "number" ? (p[key] as number) : null);

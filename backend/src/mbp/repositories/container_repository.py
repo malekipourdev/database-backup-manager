@@ -3,19 +3,17 @@ from sqlalchemy.orm import Session
 
 from mbp.models import ContainerAction, ContainerSettings
 
-SETTINGS_ID = 1
-
 
 class ContainerRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_settings(self) -> ContainerSettings:
-        """The settings row, or unsaved defaults if it is missing (reads never insert)."""
-        row = self.db.get(ContainerSettings, SETTINGS_ID)
+    def get_settings(self, server_id: int) -> ContainerSettings:
+        """A server's settings (row id = server id), or unsaved defaults (reads never insert)."""
+        row = self.db.get(ContainerSettings, server_id)
         if row is None:
             return ContainerSettings(
-                id=SETTINGS_ID,
+                id=server_id,
                 read_only=False,
                 hidden=[],
                 locked=[],
@@ -31,10 +29,10 @@ class ContainerRepository:
             )
         return row
 
-    def get_settings_for_update(self) -> ContainerSettings:
-        row = self.db.get(ContainerSettings, SETTINGS_ID)
+    def get_settings_for_update(self, server_id: int) -> ContainerSettings:
+        row = self.db.get(ContainerSettings, server_id)
         if row is None:
-            row = self.get_settings()
+            row = self.get_settings(server_id)
             self.db.add(row)
         return row
 
@@ -42,10 +40,17 @@ class ContainerRepository:
         self.db.add(entry)
 
     def actions_page(
-        self, page: int, page_size: int, container: str | None = None
+        self,
+        page: int,
+        page_size: int,
+        container: str | None = None,
+        server_id: int | None = None,
     ) -> tuple[list[ContainerAction], int]:
         stmt = select(ContainerAction)
         count = select(func.count()).select_from(ContainerAction)
+        if server_id is not None:
+            stmt = stmt.where(ContainerAction.server_id == server_id)
+            count = count.where(ContainerAction.server_id == server_id)
         if container:
             stmt = stmt.where(ContainerAction.container == container)
             count = count.where(ContainerAction.container == container)

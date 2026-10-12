@@ -1,7 +1,8 @@
 """Container and host alerts: crashes, restart loops, failing health checks, high usage.
 
 Each condition is an AlertState while it lasts, so it is announced once and its recovery
-once, across panel restarts too.
+once, across panel restarts too. Every connected server is checked; the keys of another
+server than the panel's own end with "@<server id>".
 """
 
 import logging
@@ -13,12 +14,20 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.agent.docker import parse_time
 from mbp.api.errors import ApiError
-from mbp.containers.agent_client import AgentClient
-from mbp.containers.service import ContainerService, ExpectedStops, expected_stops, problem
+from mbp.containers.service import (
+    ContainerService,
+    ExpectedStops,
+    expected_stops,
+    problem,
+    stop_key,
+)
 from mbp.db import utcnow
+from mbp.models import Server
 from mbp.notifications.events import Event
 from mbp.repositories.container_repository import ContainerRepository
 from mbp.repositories.notification_repository import NotificationRepository
+from mbp.repositories.server_repository import ServerRepository
+from mbp.servers.service import record_contact
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +40,30 @@ RECENT_CRASH = timedelta(hours=1)
 HIGH_USAGE_CHECKS = 2
 
 
-def _key(kind: str, name: str) -> str:
-    return f"container:{kind}:{name}"
+def suffix_of(server: Server) -> str:
+    """Alert keys of the panel's own server keep their single-server form."""
+    return "" if server.is_local else f"@{server.id}"
+
+
+def _owned(key: str, suffix: str) -> bool:
+    return key.endswith(suffix) if suffix else "@" not in key
+
+
+class _Server:
+    """What one check needs about a server, outside the session that loaded it."""
+
+    def __init__(self, server: Server) -> None:
+        self.id = server.id
+        self.name = server.name
+        self.local = server.is_local
+        self.suffix = suffix_of(server)
+        self.row = server
+
+    def key(self, kind: str, name: str) -> str:
+        return f"container:{kind}:{name}{self.suffix}"
+
+    def params(self) -> dict:
+        return {} if self.local else {"server": self.name, "server_id": self.id}
 
 
 class ContainerMonitor:
@@ -40,18 +71,19 @@ class ContainerMonitor:
         self,
         session_factory: sessionmaker[Session],
         notifier,
-        agent: AgentClient,
+        agents,
         *,
         clock: Callable[[], datetime] = utcnow,
         expected: ExpectedStops = expected_stops,
     ) -> None:
         self.session_factory = session_factory
         self.notifier = notifier
-        self.agent = agent
+        # mbp.servers.registry.AgentRegistry
+        self.agents = agents
         self.clock = clock
         self.expected = expected
-        self._first = True
-        self._agent_seen = False
+        self._checked: set[int] = set()
+        self._agent_seen: set[int] = set()
         self._restarts: dict[str, deque[tuple[datetime, int]]] = {}
         self._high: dict[str, int] = {}
 
@@ -66,61 +98,108 @@ class ContainerMonitor:
         return events
 
     def _check(self) -> list[Event]:
-        now = self.clock()
         events: list[Event] = []
         with self.session_factory() as db:
-            states = NotificationRepository(db)
-            svc = ContainerService(db, self.agent)
+            repo = ServerRepository(db)
+            repo.local()
+            servers = [_Server(s) for s in repo.list_all() if s.paired]
+            db.expunge_all()
+        for server in servers:
             try:
+                events.extend(self._check_server(server))
+            except Exception:
+                logger.exception("Container check of server %s failed", server.name)
+        return events
+
+    def _check_server(self, server: _Server) -> list[Event]:
+        now = self.clock()
+        events: list[Event] = []
+        agent_key = AGENT_KEY + server.suffix
+        with self.session_factory() as db:
+            states = NotificationRepository(db)
+            try:
+                agent = self.agents.for_server(server.row)
+                svc = ContainerService(db, agent, server.row)
                 containers = svc.containers()
             except ApiError as exc:
-                active = states.active_states(AGENT_KEY)
-                # Without the agent installed the feature is simply off: no alert. Only an
-                # agent that worked and then stopped answering is worth one.
-                if self._agent_seen and AGENT_KEY not in active:
-                    states.activate(AGENT_KEY, now)
-                    events.append(Event("agent_unreachable", AGENT_KEY, {"code": exc.code}))
+                record_contact(db, server.id, False, exc.code)
+                active = states.active_states(agent_key)
+                # Without the local agent installed the feature is simply off: no alert. Only
+                # an agent that worked and then stopped answering is worth one; another
+                # server's agent was set up on purpose, so it always is.
+                seen = server.id in self._agent_seen or not server.local
+                if seen and agent_key not in active:
+                    states.activate(agent_key, now)
+                    events.append(
+                        Event(
+                            "agent_unreachable",
+                            agent_key,
+                            {"code": exc.code, **server.params()},
+                        )
+                    )
                     db.commit()
                 return events
-            self._agent_seen = True
-            active = states.active_states(AGENT_KEY)
-            if AGENT_KEY in active:
-                states.deactivate(active[AGENT_KEY])
-                events.append(Event("recovered", AGENT_KEY, {"kind": "agent"}))
-            settings = ContainerRepository(db).get_settings()
+            self._agent_seen.add(server.id)
+            active = states.active_states(agent_key)
+            if agent_key in active:
+                states.deactivate(active[agent_key])
+                events.append(Event("recovered", agent_key, {"kind": "agent", **server.params()}))
+            settings = ContainerRepository(db).get_settings(server.id)
             watched = [c for c in containers if c["monitored"]]
-            stats = self._stats(settings, watched)
+            stats = self._stats(agent, settings, watched)
             current: set[str] = set()
-            container_states = states.active_states("container:")
+            container_states = {
+                key: state
+                for key, state in states.active_states("container:").items()
+                if _owned(key, server.suffix)
+            }
+            first = server.id not in self._checked
             for container in watched:
                 events.extend(
-                    self._container(states, container_states, container, stats, settings, now)
+                    self._container(
+                        server, states, container_states, container, stats, settings, now, first
+                    )
                 )
                 current.update(
-                    _key(k, container["name"]) for k in ("down", "loop", "health", "res")
+                    server.key(k, container["name"]) for k in ("down", "loop", "health", "res")
                 )
             for key, state in container_states.items():
                 if key not in current:  # removed, hidden or no longer watched: forget quietly
                     states.deactivate(state)
-            events.extend(self._host(states, settings, now))
+            info = self._info(agent)
+            events.extend(self._host(server, states, settings, info, now))
             db.commit()
-        self._first = False
+            record_contact(db, server.id, True, None, info)
+        self._checked.add(server.id)
         return events
 
-    def _stats(self, settings, watched: list[dict]) -> dict:
+    @staticmethod
+    def _info(agent) -> dict | None:
+        try:
+            return agent.info()
+        except ApiError:
+            return None
+
+    def _stats(self, agent, settings, watched: list[dict]) -> dict:
         if not (settings.cpu_percent or settings.memory_percent):
             return {}
         if not any(c["state"] == "running" for c in watched):
             return {}
         try:
-            return self.agent.stats()
+            return agent.stats()
         except ApiError:
             return {}
 
-    def _container(self, states, active, c: dict, stats: dict, settings, now) -> list[Event]:
+    def _container(
+        self, server: _Server, states, active, c: dict, stats: dict, settings, now, first: bool
+    ) -> list[Event]:
         name = c["name"]
-        base = {"name": name, "project": c.get("project")}
+        base = {"name": name, "project": c.get("project"), **server.params()}
         events: list[Event] = []
+        ident = stop_key(server.id, name)
+
+        def _key(kind: str, name: str) -> str:
+            return server.key(kind, name)
 
         def turn(kind: str, on: bool, event: Event | None, recovered_kind: str) -> None:
             key = _key(kind, name)
@@ -133,10 +212,10 @@ class ContainerMonitor:
                 events.append(Event("recovered", key, {**base, "kind": recovered_kind}))
 
         # Crashed (exited with an error or killed for memory), unless the panel stopped it.
-        crashed = problem(c) == "crashed" and not self.expected.expected(name)
+        crashed = problem(c) == "crashed" and not self.expected.expected(ident)
         if crashed or c["state"] == "running":
             announce = crashed
-            if crashed and self._first:
+            if crashed and first:
                 finished = parse_time(c.get("finished_at"))
                 announce = finished is not None and now - finished <= RECENT_CRASH
             event = Event(
@@ -148,7 +227,7 @@ class ContainerMonitor:
 
         # Restart loop: the restart policy restarted it N times within the window.
         window = timedelta(minutes=settings.restart_window_minutes)
-        history = self._restarts.setdefault(name, deque())
+        history = self._restarts.setdefault(ident, deque())
         history.append((now, int(c.get("restart_count") or 0)))
         while history and now - history[0][0] > window:
             history.popleft()
@@ -182,8 +261,8 @@ class ContainerMonitor:
                 and memory is not None
                 and memory >= settings.memory_percent
             )
-            count = self._high.get(name, 0) + 1 if high_cpu or high_mem else 0
-            self._high[name] = count
+            count = self._high.get(ident, 0) + 1 if high_cpu or high_mem else 0
+            self._high[ident] = count
             event = Event(
                 "container_resources",
                 _key("res", name),
@@ -201,14 +280,17 @@ class ContainerMonitor:
                 turn("res", count >= HIGH_USAGE_CHECKS, event, "container_resources")
         return events
 
-    def _host(self, states, settings, now) -> list[Event]:
+    def _host(self, server: _Server, states, settings, info: dict | None, now) -> list[Event]:
         if not (settings.host_memory_percent or settings.host_disk_percent):
             return []
-        try:
-            host = self.agent.info()["host"]
-        except (ApiError, KeyError):
+        host = (info or {}).get("host")
+        if not host:
             return []
-        active = states.active_states("host:")
+        active = {
+            key: state
+            for key, state in states.active_states("host:").items()
+            if _owned(key, server.suffix)
+        }
         events: list[Event] = []
         checks = {
             "memory": (
@@ -223,7 +305,7 @@ class ContainerMonitor:
                 continue
             used = total - free
             percent = used * 100 / total
-            key = HOST_KEYS[kind]
+            key = HOST_KEYS[kind] + server.suffix
             high = percent >= threshold
             if high and key not in active:
                 states.activate(key, now)
@@ -237,6 +319,7 @@ class ContainerMonitor:
                             "used": used,
                             "total": total,
                             "threshold": threshold,
+                            **server.params(),
                         },
                         severity="error" if percent >= 98 else "warning",
                     )
@@ -244,6 +327,10 @@ class ContainerMonitor:
             elif not high and key in active:
                 states.deactivate(active[key])
                 events.append(
-                    Event("recovered", key, {"kind": f"host_{kind}", "percent": round(percent, 1)})
+                    Event(
+                        "recovered",
+                        key,
+                        {"kind": f"host_{kind}", "percent": round(percent, 1), **server.params()},
+                    )
                 )
         return events

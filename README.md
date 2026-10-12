@@ -20,6 +20,8 @@ The UI is available in Persian (right-to-left) and English.
   stop and restart them from the panel or a bot, and get alerts when one goes down
 - **projects** (optional): deploy applications from git with docker compose, from the panel
   or a bot, with a backup of their databases before every deploy and one-click rollback
+- **several servers**: connect other machines to the same panel through a small agent, then
+  manage their containers, deploy projects to them and back up their databases from one place
 
 ## Quick start
 
@@ -130,6 +132,7 @@ a trusted private network sits in front of the panel.
 | `MBP_DOCKER_SOCKET` | `/var/run/docker.sock` | The Docker socket on the server, e.g. for rootless Docker or Podman (`/run/user/1000/podman/podman.sock`). |
 | `MBP_PROJECTS_DIR` | `/opt/mbp-projects` | Where the agent checks out [projects](#projects-deploy-from-git) on the server. It is mounted at the same path in the agent, so relative bind mounts in their compose files work. Must be writable by uid 10001. |
 | `MBP_CONTAINER_MONITOR_SECONDS` | `60` | How often containers and server resources are checked for alerts. `0` turns these checks off. |
+| `MBP_AGENT_REPO_URL` | this repository | The git URL shown in the commands that install the agent on [another server](#servers). |
 | `MBP_COOKIE_SECURE` | `true` | Send the session cookie over HTTPS only. This works over an SSH tunnel, because the browser sees `http://localhost`. Set it to `false` only if you open the panel over plain HTTP using a non-localhost address, or sign-in will silently fail. |
 
 ## Connecting to your database servers
@@ -196,8 +199,15 @@ check `bind-address` in the MySQL/MariaDB configuration.
 
 ### A server on another machine
 
-Enter its hostname or IP address and port. That machine's firewall must allow connections from
-this server.
+Two ways:
+
+- **Through that machine's agent (recommended).** [Add the machine under Servers](#servers),
+  then choose it as **Connect from** in the database's form. Its agent tests, lists and dumps
+  the database on that machine and streams the backup to the panel; the database port never
+  has to be open to the outside. The host is then as seen from that machine: `127.0.0.1` for
+  a database published on it, or a container's name for one in a container there.
+- **Directly.** Enter its hostname or IP address and port. That machine's firewall must allow
+  connections from this server.
 
 ### A dedicated database user for the panel
 
@@ -661,6 +671,83 @@ for Docker on the server (`/etc/docker/daemon.json`, `"registry-mirrors": [...]`
 `systemctl restart docker`), or use images from a registry you can reach. Builds that
 download packages (npm, pip, apt) may need mirrors set in the project's own Dockerfile.
 
+## Servers
+
+One panel can manage several machines. The panel's own server is always there; any other
+machine runs a small **agent** (the same one as for [containers](#containers)) that the panel
+talks to over HTTPS. Once connected, that machine's containers, [projects](#projects-deploy-from-git)
+and databases are managed from the same panel and bot, and its alerts name it.
+
+### Add a server
+
+1. In the panel, open **Servers → Add server**: a name, the address the panel reaches it at,
+   and the agent's port (`8443` by default).
+2. The panel shows the commands to run on that machine, with a **token made for it, shown only
+   once**. They clone this repository, write `.env.agent` and start
+   `docker-compose.agent.yml`:
+
+   ```bash
+   git clone https://github.com/malekipourdev/database-backup-manager.git mbp-agent && cd mbp-agent
+   cat > .env.agent <<EOF
+   MBP_AGENT_TOKEN=<the token from the panel>
+   MBP_AGENT_PORT=8443
+   MBP_DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+   EOF
+   sudo mkdir -p /opt/mbp-projects && sudo chown 10001:10001 /opt/mbp-projects
+   docker compose -f docker-compose.agent.yml --env-file .env.agent up -d --build
+   ```
+
+   The machine needs Docker with Compose v2. For a private repository, clone it with your own
+   access, as for the panel.
+3. Open the agent's port **only to the panel's IP address**, for example
+   `sudo ufw allow from <panel-ip> to any port 8443 proto tcp`. The agent uses the host's
+   network, so the host firewall applies to it.
+4. Press **Connect**. The panel checks that the agent holds the token and records its
+   certificate.
+
+### How the connection is protected
+
+- The agent creates its own TLS certificate on first start (kept in the `mbp-agent-data`
+  volume). On **Connect**, the agent proves it holds the server's token, and the panel pins
+  its certificate: from then on it talks to that certificate only. A different certificate
+  (the agent was reinstalled, or someone is in between) is refused until you connect again.
+- The token never travels over the network. Every request is signed with it (HMAC), together
+  with the time and the pinned certificate, so a signature cannot be reused elsewhere. The
+  panel and the server's clocks must agree within 5 minutes (use NTP).
+- The token is stored encrypted in the panel. **New token** replaces it: put the new one in
+  `.env.agent` on the server, run the `docker compose ... up -d` command again, then connect
+  again.
+- The agent has the same limits as the local one (fixed operations, never returns environment
+  values, read-only filesystem, no capabilities), plus database tests, lists and dumps for the
+  panel. It stores no database passwords: the panel sends them, over the pinned connection,
+  for each operation.
+
+### Using it
+
+- **Containers:** pick the server at the top of the page (or in the bot after
+  **Containers**). Settings such as read-only, hidden and locked names and alert thresholds are
+  per server.
+- **Projects:** choose the server in the project's form. It cannot be changed after the first
+  deploy; delete the project and add it on the other server instead.
+- **Databases:** choose **Connect from** in the database's form (see
+  [A server on another machine](#a-server-on-another-machine)).
+- **Alerts:** an unreachable agent, and everything about that server's containers and
+  resources, are announced with the server's name.
+
+### Updating or removing an agent
+
+On that machine, in the `mbp-agent` folder:
+
+```bash
+git pull
+docker compose -f docker-compose.agent.yml --env-file .env.agent up -d --build
+```
+
+The certificate stays in its volume, so the panel keeps trusting it. To remove the agent, run
+`docker compose -f docker-compose.agent.yml down -v` there (with `-v`, a new certificate is
+made next time: connect again), and delete the server in the panel once it has no projects or
+databases.
+
 ## Two-step verification (Google Authenticator)
 
 Sign-in can also ask for a 6-digit code from an authenticator app on your phone (Google
@@ -710,7 +797,8 @@ docker image prune -f   # optional: remove the old images
 Database migrations run automatically when the backend starts; your settings, servers,
 schedules and backups are kept. Take a [backup of the panel](#backing-up-the-panel-itself)
 first if the update is large. If the agent is on (`COMPOSE_PROFILES=containers`), it is
-updated by the same command.
+updated by the same command. Agents on [other servers](#servers) are updated on those
+machines.
 
 ### Backing up the panel itself
 
@@ -792,7 +880,8 @@ longer need them. Then remove the panel's folder.
 - Optional two-step verification with an authenticator app (see
   [Two-step verification](#two-step-verification-google-authenticator)).
 - `docker.sock` is never given to the backend. Only the optional agent has it; see
-  [Containers](#containers) for its limits.
+  [Containers](#containers) for its limits. Agents on other servers are reached over HTTPS
+  with a pinned certificate and signed requests; see [Servers](#servers).
 - Deploy credentials and environment variables of [projects](#projects-deploy-from-git) are
   stored encrypted, never returned, never put on a command line, and masked in deploy logs.
 - Stored database passwords and the S3 secret key are encrypted and are never returned by the API

@@ -21,6 +21,13 @@ def _result(lang: str, code: str | None) -> str:
 
 
 def render(event: Event, lang: str, zone: ZoneInfo) -> str:
+    text = _render(event, lang, zone)
+    # Alerts about another server than the panel's own name it first.
+    server = event.params.get("server")
+    return f"🖥 {server}: {text}" if server else text
+
+
+def _render(event: Event, lang: str, zone: ZoneInfo) -> str:
     p = dict(event.params)
     kind = event.type
     if kind == "backup_succeeded":

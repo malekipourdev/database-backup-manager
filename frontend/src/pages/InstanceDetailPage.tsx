@@ -31,6 +31,7 @@ import { InstanceBackupSettingsPanel, InstanceBackups } from "../components/Inst
 import { InstanceStoragePolicyPanel } from "../components/InstanceStoragePolicyPanel";
 import { ScheduleList } from "../components/ScheduleList";
 import { formatDateTime } from "../i18n";
+import { RouteLabel } from "../components/RouteLabel";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -106,7 +107,7 @@ export function InstanceDetailPage() {
         <Title order={4} mb="sm">
           {t("instances.details")}
         </Title>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }}>
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 5 }}>
           <Field label={t("instances.columns.address")}>
             <code dir="ltr">
               {data.host}:{data.port}
@@ -114,6 +115,9 @@ export function InstanceDetailPage() {
           </Field>
           <Field label={t("instances.fields.username")}>
             <code dir="ltr">{data.username}</code>
+          </Field>
+          <Field label={t("instances.fields.route")}>
+            <RouteLabel serverId={data.server_id} />
           </Field>
           <Field label={t("instances.columns.server")}>
             {data.server_type ? (

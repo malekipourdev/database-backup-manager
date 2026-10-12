@@ -10,6 +10,7 @@ from mbp.models.project import Deployment, Project
 from mbp.models.remote_storage import RemoteStorageSettings
 from mbp.models.schedule import BackupSchedule
 from mbp.models.selection import DbSelection
+from mbp.models.server import Server
 from mbp.models.session import AuthSession
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "NotificationSettings",
     "Project",
     "RemoteStorageSettings",
+    "Server",
 ]

@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.orm import Session
 
+from mbp.api.errors import ApiError
 from mbp.api.schemas import (
     ContainerActionItem,
     ContainerActionPage,
@@ -16,23 +17,32 @@ from mbp.api.schemas import (
     ContainerStatsOne,
     ServerInfo,
 )
-from mbp.containers.agent_client import AgentClient
 from mbp.containers.service import ContainerService
 from mbp.db import get_db
-from mbp.models import AdminAccount
+from mbp.models import AdminAccount, Server
 from mbp.repositories.container_repository import ContainerRepository
+from mbp.repositories.server_repository import ServerRepository
 from mbp.security.sessions import require_session
 
 router = APIRouter(tags=["containers"])
 Ref = Path(pattern=ContainerRefPattern)
 
 
-def get_agent(request: Request) -> AgentClient:
-    return request.app.state.agent
+def get_server(
+    server: int | None = Query(default=None, ge=1), db: Session = Depends(get_db)
+) -> Server:
+    """The `server` query parameter; the panel's own server when it is omitted."""
+    repo = ServerRepository(db)
+    row = repo.local() if server is None else repo.get(server)
+    if row is None:
+        raise ApiError(404, "server_not_found")
+    return row
 
 
-def service(db: Session = Depends(get_db), agent: AgentClient = Depends(get_agent)):
-    return ContainerService(db, agent)
+def service(
+    request: Request, db: Session = Depends(get_db), server: Server = Depends(get_server)
+) -> ContainerService:
+    return ContainerService(db, request.app.state.agents.for_server(server), server)
 
 
 @router.get("/containers", response_model=ContainerList)
@@ -51,15 +61,17 @@ def all_stats(svc: ContainerService = Depends(service)) -> dict:
 
 
 @router.get("/containers/-/settings", response_model=ContainerSettingsIO)
-def get_container_settings(db: Session = Depends(get_db)) -> ContainerSettingsIO:
-    return _settings_out(ContainerRepository(db).get_settings())
+def get_container_settings(
+    db: Session = Depends(get_db), server: Server = Depends(get_server)
+) -> ContainerSettingsIO:
+    return _settings_out(ContainerRepository(db).get_settings(server.id))
 
 
 @router.put("/containers/-/settings", response_model=ContainerSettingsIO)
 def put_container_settings(
-    body: ContainerSettingsIO, db: Session = Depends(get_db)
+    body: ContainerSettingsIO, db: Session = Depends(get_db), server: Server = Depends(get_server)
 ) -> ContainerSettingsIO:
-    row = ContainerRepository(db).get_settings_for_update()
+    row = ContainerRepository(db).get_settings_for_update(server.id)
     for field, value in body.model_dump().items():
         setattr(row, field, value)
     db.commit()
@@ -77,9 +89,11 @@ def list_actions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     container: str | None = Query(default=None, max_length=128),
+    server: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
 ) -> ContainerActionPage:
-    items, total = ContainerRepository(db).actions_page(page, page_size, container)
+    """The audit log of every server, or of one (`server`)."""
+    items, total = ContainerRepository(db).actions_page(page, page_size, container, server)
     return ContainerActionPage(
         items=[ContainerActionItem.model_validate(i) for i in items],
         total=total,

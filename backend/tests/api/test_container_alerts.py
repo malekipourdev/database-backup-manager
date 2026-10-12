@@ -5,13 +5,16 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from mbp.config import get_settings
 from mbp.containers.monitor import ContainerMonitor
-from mbp.containers.service import ExpectedStops
+from mbp.containers.service import ExpectedStops, stop_key
 from mbp.db import get_sessionmaker
 from mbp.models import ContainerSettings, NotificationLog
 from mbp.notifications.events import EVENTS, Event
 from mbp.notifications.notifier import Notifier
 from mbp.notifications.render import render
+from mbp.repositories.server_repository import ServerRepository
+from mbp.servers.registry import AgentRegistry
 
 
 class Clock:
@@ -36,9 +39,15 @@ def expected():
 
 
 @pytest.fixture
+def local_id(db):
+    return ServerRepository(db).local().id
+
+
+@pytest.fixture
 def monitor(agent, clock, expected):
     notifier = Notifier(get_sessionmaker(), background=False, clock=clock)
-    return ContainerMonitor(get_sessionmaker(), notifier, agent, clock=clock, expected=expected)
+    registry = AgentRegistry(get_settings(), get_sessionmaker(), local=lambda: agent)
+    return ContainerMonitor(get_sessionmaker(), notifier, registry, clock=clock, expected=expected)
 
 
 def kinds(events):
@@ -49,8 +58,9 @@ def kinds(events):
 
 
 def set_settings(db, **values):
-    row = db.get(ContainerSettings, 1) or ContainerSettings(
-        id=1,
+    server_id = ServerRepository(db).local().id
+    row = db.get(ContainerSettings, server_id) or ContainerSettings(
+        id=server_id,
         read_only=False,
         hidden=[],
         locked=[],
@@ -118,11 +128,11 @@ def test_parse_docker_times():
     assert parse_time("garbage") is None
 
 
-def test_stops_by_the_panel_or_on_purpose_are_quiet(monitor, docker, expected):
+def test_stops_by_the_panel_or_on_purpose_are_quiet(monitor, docker, expected, local_id):
     a, b = docker.add("a"), docker.add("b")
     monitor.check()
     a.state, a.exit_code = "exited", 143  # docker stop
-    expected.mark("b")
+    expected.mark(stop_key(local_id, "b"))
     b.state, b.exit_code = "exited", 137
     assert monitor.check() == []
 
@@ -257,3 +267,12 @@ def test_every_container_event_renders(lang):
         assert event.type in EVENTS
         text = render(event, lang, zone)
         assert "event_" not in text and "{" not in text, text
+
+
+def test_alerts_of_another_server_name_it():
+    event = Event(
+        "container_unhealthy", "container:health:web@4", {"name": "web", "server": "edge"}
+    )
+    assert render(event, "en", ZoneInfo("UTC")).startswith("🖥 edge: ")
+    local = Event("container_unhealthy", "container:health:web", {"name": "web"})
+    assert not render(local, "en", ZoneInfo("UTC")).startswith("🖥")

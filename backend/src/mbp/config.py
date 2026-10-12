@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # The Docker agent (compose profile "containers"); unreachable means the feature is off.
     agent_url: str = "http://agent:8090"
     agent_timeout_seconds: float = Field(default=40.0, gt=0)
+    # Where other servers get the agent from (shown in the "add server" instructions).
+    agent_repo_url: str = "https://github.com/malekipourdev/database-backup-manager.git"
     # How often containers and host resources are checked for alerts (0 = never).
     container_monitor_seconds: int = Field(default=60, ge=0)
     # Master switch for the Bale/Telegram bots (e.g. off on a standby copy of the panel).

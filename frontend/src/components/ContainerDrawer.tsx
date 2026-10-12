@@ -18,7 +18,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessage } from "../api/client";
-import { type ContainerDetails, useContainer, useContainerLogs } from "../api/containers";
+import {
+  type ContainerDetails,
+  type ServerRef,
+  useContainer,
+  useContainerLogs,
+} from "../api/containers";
 import { formatDateTime, formatNumber } from "../i18n";
 import { DownloadSimple } from "./Icons";
 import { ContainerStateBadge } from "./ContainerStateBadge";
@@ -134,12 +139,12 @@ function Overview({ c }: { c: ContainerDetails }) {
   );
 }
 
-function Logs({ name }: { name: string }) {
+function Logs({ server, name }: { server: ServerRef; name: string }) {
   const { t, i18n } = useTranslation();
   const [tail, setTail] = useState("500");
   const [follow, setFollow] = useState(false);
   const [filter, setFilter] = useState("");
-  const logs = useContainerLogs(name, Number(tail), follow);
+  const logs = useContainerLogs(server, name, Number(tail), follow);
   const box = useRef<HTMLDivElement>(null);
   const lines = useMemo(() => {
     const all = logs.data?.lines ?? [];
@@ -248,9 +253,17 @@ function Logs({ name }: { name: string }) {
   );
 }
 
-export function ContainerDrawer({ name, onClose }: { name: string | null; onClose: () => void }) {
+export function ContainerDrawer({
+  server,
+  name,
+  onClose,
+}: {
+  server: ServerRef;
+  name: string | null;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
-  const container = useContainer(name);
+  const container = useContainer(server, name);
   return (
     <Drawer
       opened={Boolean(name)}
@@ -275,7 +288,7 @@ export function ContainerDrawer({ name, onClose }: { name: string | null; onClos
             <Overview c={container.data} />
           </Tabs.Panel>
           <Tabs.Panel value="logs">
-            <Logs name={name} />
+            <Logs server={server} name={name} />
           </Tabs.Panel>
         </Tabs>
       )}

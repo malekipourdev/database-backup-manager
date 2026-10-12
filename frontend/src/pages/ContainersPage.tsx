@@ -12,6 +12,7 @@ import {
   Paper,
   Progress,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -27,6 +28,7 @@ import { notifications } from "@mantine/notifications";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError, errorMessage, isApiError } from "../api/client";
 import {
@@ -41,7 +43,9 @@ import {
   useContainers,
   useSaveContainerSettings,
   useServerInfo,
+  type ServerRef,
 } from "../api/containers";
+import { usableServers, useServers } from "../api/servers";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ContainerDrawer } from "../components/ContainerDrawer";
 import { ContainerStateBadge } from "../components/ContainerStateBadge";
@@ -150,10 +154,16 @@ function Meter(props: { label: string; value: string; note: string; percent: num
   );
 }
 
-function ServerSummary({ containers }: { containers: ContainerSummary[] }) {
+function ServerSummary({
+  containers,
+  server,
+}: {
+  containers: ContainerSummary[];
+  server: ServerRef;
+}) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
-  const info = useServerInfo();
+  const info = useServerInfo(server);
   const host = info.data?.host;
   const docker = info.data?.docker;
   const running = containers.filter((c) => c.state === "running").length;
@@ -383,12 +393,12 @@ function Group_(props: {
   );
 }
 
-function ContainersTab() {
+function ContainersTab({ server }: { server: ServerRef }) {
   const { t } = useTranslation();
-  const list = useContainers();
+  const list = useContainers(server);
   const available = list.isSuccess;
-  const stats = useContainerStats(available);
-  const act = useContainerAction();
+  const stats = useContainerStats(server, available);
+  const act = useContainerAction(server);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<string | null>(null);
@@ -443,7 +453,11 @@ function ContainersTab() {
   if (list.isPending) return <Loader />;
   if (list.isError) {
     if (isApiError(list.error) && AGENT_CODES.has(list.error.code)) {
-      return <AgentHelp error={list.error} />;
+      return server === null ? (
+        <AgentHelp error={list.error} />
+      ) : (
+        <RemoteAgentHelp error={list.error} />
+      );
     }
     return <Alert color="red">{errorMessage(t, list.error)}</Alert>;
   }
@@ -452,7 +466,7 @@ function ContainersTab() {
 
   return (
     <Stack gap="md">
-      <ServerSummary containers={containers} />
+      <ServerSummary containers={containers} server={server} />
       {readOnly && (
         <Alert color="blue" variant="light">
           {t("containers.readOnlyBanner")}
@@ -495,7 +509,7 @@ function ContainersTab() {
           }
         />
       ))}
-      <ContainerDrawer name={open} onClose={() => setOpen(null)} />
+      <ContainerDrawer server={server} name={open} onClose={() => setOpen(null)} />
       <ConfirmDialog
         opened={confirm !== null}
         title={confirm ? t(`containers.confirm.${confirm.action}Title`) : ""}
@@ -509,11 +523,11 @@ function ContainersTab() {
   );
 }
 
-function ActivityTab() {
+function ActivityTab({ server }: { server: ServerRef }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [page, setPage] = useState(1);
-  const actions = useContainerActions(page);
+  const actions = useContainerActions(server, page);
   if (actions.isPending) return <Loader />;
   if (actions.isError) return <Alert color="red">{errorMessage(t, actions.error)}</Alert>;
   const { items, total, page_size } = actions.data;
@@ -587,11 +601,11 @@ function ActivityTab() {
   );
 }
 
-function SettingsTab() {
+function SettingsTab({ server }: { server: ServerRef }) {
   const { t } = useTranslation();
-  const settings = useContainerSettings();
-  const list = useContainers();
-  const save = useSaveContainerSettings();
+  const settings = useContainerSettings(server);
+  const list = useContainers(server);
+  const save = useSaveContainerSettings(server);
   const [values, setValues] = useState<ContainerSettings | null>(null);
   useEffect(() => {
     if (settings.data && values === null) setValues(settings.data);
@@ -708,11 +722,71 @@ function SettingsTab() {
   );
 }
 
+/** Which server's containers are shown: the `server` URL parameter (none: the panel's own). */
+function useServerParam(): [ServerRef, (server: ServerRef) => void] {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("server");
+  const server = raw && /^\d+$/.test(raw) ? Number(raw) : null;
+  const set = (next: ServerRef) => setParams(next === null ? {} : { server: String(next) });
+  return [server, set];
+}
+
+function ServerPicker({
+  server,
+  onChange,
+}: {
+  server: ServerRef;
+  onChange: (s: ServerRef) => void;
+}) {
+  const { t } = useTranslation();
+  const servers = usableServers(useServers().data);
+  if (servers.length < 2) return null;
+  const local = servers.find((s) => s.kind === "local");
+  const value = server === null ? String(local?.id ?? "") : String(server);
+  return (
+    <Select
+      label={t("containers.server")}
+      leftSection={<HardDrives size={16} />}
+      allowDeselect={false}
+      maw={320}
+      data={servers.map((s) => ({
+        value: String(s.id),
+        label: s.kind === "local" ? `${s.name} (${t("servers.local")})` : s.name,
+      }))}
+      value={value}
+      onChange={(v) => {
+        if (!v) return;
+        const picked = servers.find((s) => String(s.id) === v);
+        onChange(picked?.kind === "local" ? null : Number(v));
+      }}
+    />
+  );
+}
+
+function RemoteAgentHelp({ error }: { error: unknown }) {
+  const { t } = useTranslation();
+  return (
+    <Paper withBorder p="lg">
+      <Stack gap="sm">
+        <Text c="red.4">{errorMessage(t, error)}</Text>
+        <Text size="sm">{t("containers.remoteHelp")}</Text>
+        <Group>
+          <Button component={Link} to="/servers" variant="light">
+            {t("nav.servers")}
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+}
+
 export function ContainersPage() {
   const { t } = useTranslation();
+  const [server, setServer] = useServerParam();
   return (
     <Stack gap={18}>
       <PageHeader title={t("containers.title")} subtitle={t("containers.subtitle")} />
+      <ServerPicker server={server} onChange={setServer} />
       <Tabs defaultValue="containers" keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="containers" leftSection={<HardDrives size={16} />}>
@@ -726,13 +800,13 @@ export function ContainersPage() {
           </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="containers">
-          <ContainersTab />
+          <ContainersTab key={server ?? 0} server={server} />
         </Tabs.Panel>
         <Tabs.Panel value="activity">
-          <ActivityTab />
+          <ActivityTab key={server ?? 0} server={server} />
         </Tabs.Panel>
         <Tabs.Panel value="settings">
-          <SettingsTab />
+          <SettingsTab key={server ?? 0} server={server} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

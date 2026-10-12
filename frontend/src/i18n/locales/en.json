@@ -11,7 +11,7 @@
     "notAvailable": "—"
   },
   "nav": {
-    "instances": "Instances",
+    "instances": "Databases",
     "backups": "Backups",
     "settings": "Settings",
     "schedules": "Schedules",
@@ -19,7 +19,8 @@
     "notifications": "Notifications",
     "account": "Account",
     "containers": "Containers",
-    "projects": "Projects"
+    "projects": "Projects",
+    "servers": "Servers"
   },
   "language": {
     "label": "Language",
@@ -135,7 +136,16 @@
     "invalid_env_name": "A variable name is not valid.",
     "invalid_auth": "The access settings are incomplete.",
     "down_failed": "Stopping the project's containers failed.",
-    "job_not_found": "The agent no longer knows this deploy."
+    "job_not_found": "The agent no longer knows this deploy.",
+    "agent_cert_mismatch": "This server's agent has another certificate than the one on record (it was reinstalled, or someone is in between). If you reinstalled the agent yourself, connect the server again.",
+    "agent_clock_skew": "The clocks of the panel and this server differ by more than 5 minutes; set the servers' time (NTP).",
+    "agent_proof_invalid": "This server's agent does not hold the right token.",
+    "agent_outdated": "This server's agent is outdated; update it (git pull, then up --build again).",
+    "agent_stream_broken": "The connection to the server's agent was cut off.",
+    "server_not_found": "Server not found.",
+    "server_not_connected": "This server is not connected to the panel yet.",
+    "server_is_local": "Not possible for the panel's own server.",
+    "server_in_use": "This server still has projects or databases."
   },
   "validation": {
     "required": "This field is required.",
@@ -145,16 +155,18 @@
     "invalid": "This value is invalid."
   },
   "instances": {
-    "title": "Database instances",
-    "add": "Add instance",
-    "empty": "No instances yet",
-    "emptyHint": "Add a MySQL or MariaDB server to start managing its backups.",
+    "title": "Databases",
+    "add": "Add database",
+    "empty": "No databases yet",
+    "emptyHint": "Add a MySQL or MariaDB server to start managing its backups. If it runs on another server, add that server under Servers first.",
     "columns": {
       "name": "Name",
       "address": "Address",
       "username": "Username",
-      "server": "Server",
-      "lastTest": "Last connection test"
+      "server": "Engine",
+      "lastTest": "Last connection test",
+      "route": "Route",
+      "routeDirect": "Directly from the panel"
     },
     "fields": {
       "name": "Name",
@@ -162,26 +174,27 @@
       "port": "Port",
       "username": "Username",
       "password": "Password",
-      "notes": "Notes"
+      "notes": "Notes",
+      "route": "Connect from"
     },
     "hostHint": "Inside the panel's container, “localhost” is the panel itself. For a server on the host machine use host.docker.internal; for a server in another container on a shared network use its container name.",
     "passwordStored": "A password is stored. Leave empty to keep it.",
     "notesCount": "{{count}} / {{max}}",
-    "createTitle": "Add instance",
+    "createTitle": "Add database",
     "editTitle": "Edit “{{name}}”",
-    "created": "Instance added.",
-    "updated": "Instance saved.",
-    "deleted": "Instance deleted.",
-    "deleteTitle": "Delete instance",
+    "created": "Database added.",
+    "updated": "Database saved.",
+    "deleted": "Database deleted.",
+    "deleteTitle": "Delete database",
     "deleteConfirm": "Delete “{{name}}”? Its database selection will also be removed. This cannot be undone.",
     "notTested": "Not tested yet",
     "testOk": "Succeeded",
     "testFailed": "Failed",
     "details": "Details",
     "noNotes": "No notes",
-    "subtitle": "MySQL and MariaDB servers connected to the panel",
+    "subtitle": "MySQL and MariaDB servers the panel backs up",
     "stats": {
-      "servers": "Servers",
+      "servers": "Databases",
       "serversNote": "{{ok}} connected · {{bad}} failed",
       "today": "Backups today",
       "todayNote": "{{failed}} failed · {{running}} running",
@@ -191,7 +204,11 @@
       "aws": "AWS S3",
       "uploadOn": "upload on",
       "uploadOff": "upload off"
-    }
+    },
+    "routeDirect": "Directly from this panel",
+    "routeServer": "Through the server “{{name}}”",
+    "routeHint": "For a database on another server, that server's agent connects to it and takes the backups; its port does not need to be open to the outside.",
+    "hostHintServer": "The address as seen from that server: 127.0.0.1 for a database published on the server itself, or the container's name for one in a container."
   },
   "connection": {
     "title": "Connection",
@@ -210,7 +227,15 @@
       "connection_refused": "The host was reached but nothing accepted the connection on this port. Check the port and that the server is running and listening on the network.",
       "timeout": "The server did not answer within 10 seconds. Check the address, firewalls, and that the panel can reach this network.",
       "auth_rejected": "The server rejected the credentials. Check the username and password, and that this user may connect from the panel's address.",
-      "server_error": "The server reported an error. See the details below."
+      "server_error": "The server reported an error. See the details below.",
+      "agent_unreachable": "The server's agent is not reachable. Check that it is running and its port is open to the panel.",
+      "agent_timeout": "The server's agent did not answer.",
+      "agent_unauthorized": "The server's agent refused the panel's token.",
+      "agent_cert_mismatch": "This server's agent has another certificate than the one on record (it was reinstalled, or someone is in between). If you reinstalled the agent yourself, connect the server again.",
+      "agent_clock_skew": "The clocks of the panel and this server differ by more than 5 minutes; set the servers' time (NTP).",
+      "server_not_connected": "This server is not connected to the panel yet.",
+      "server_not_found": "Server not found.",
+      "agent_error": "The server's agent reported an error."
     }
   },
   "databases": {
@@ -938,7 +963,9 @@
       "zeroOff": "0 turns a check off. High usage must last two checks in a row.",
       "saved": "Container settings saved."
     },
-    "readOnlyMount": "read-only"
+    "readOnlyMount": "read-only",
+    "server": "Server",
+    "remoteHelp": "This server's agent is not reachable. Its status and setup steps are on the Servers page."
   },
   "projects": {
     "title": "Projects",
@@ -1033,7 +1060,10 @@
       "noBackup": "No backup",
       "backupDatabases": "Databases",
       "backupRequired": "Stop the deploy if the backup fails",
-      "backupRequiredHint": "Recommended: nothing is deployed without a fresh backup."
+      "backupRequiredHint": "Recommended: nothing is deployed without a fresh backup.",
+      "server": "Server",
+      "serverHint": "The server the project is built and run on.",
+      "serverLocked": "Cannot change after the first deploy; to move it, delete the project and add it on the other server."
     },
     "validation": {
       "invalid_project_name": "Lowercase letters, digits, - and _, starting with a letter or digit (not the panel's own name).",
@@ -1048,7 +1078,9 @@
       "duplicate_env_name": "A variable name is used twice.",
       "env_value_required": "A new variable needs a value.",
       "env_value_too_long": "A value is too long.",
-      "too_many": "Too many variables."
+      "too_many": "Too many variables.",
+      "move_after_deploy": "Cannot change after the first deploy; to move it, delete the project and add it on the other server.",
+      "server_not_found": "Server not found."
     },
     "errors": {
       "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
@@ -1073,6 +1105,54 @@
       "down_failed": "Stopping the project's containers failed.",
       "job_not_found": "The agent no longer knows this deploy.",
       "agent_error": "The agent hit an unexpected error."
+    }
+  },
+  "servers": {
+    "title": "Servers",
+    "subtitle": "The machines this panel manages: its own server and others",
+    "add": "Add server",
+    "local": "this server",
+    "localAddress": "The panel's own server",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "unreachable": "Unreachable",
+    "unknown": "Not checked",
+    "hostname": "Host name",
+    "docker": "Docker",
+    "fingerprint": "Certificate fingerprint",
+    "lastSeen": "Last contact",
+    "usage": "In use by",
+    "usageValue": "{{projects}} projects · {{databases}} databases",
+    "check": "Check connection",
+    "connect": "Connect",
+    "connectedNote": "The server “{{name}}” is connected.",
+    "openContainers": "Containers",
+    "newToken": "New token",
+    "newTokenConfirm": "Create a new token for “{{name}}”? The current one stops working at once: start that server's agent again with the new token, then connect the server again.",
+    "editTitle": "Edit “{{name}}”",
+    "deleteTitle": "Delete server",
+    "deleteConfirm": "Remove “{{name}}” from the panel? The agent stays on that server (remove it there with docker compose -f docker-compose.agent.yml down).",
+    "deleted": "Server deleted.",
+    "inUse": "This server still has projects or databases; delete or move them first.",
+    "onlyLocal": "Only this server is managed so far. Add a server to manage another machine's containers, projects and databases from here too.",
+    "fields": {
+      "name": "Name",
+      "host": "Server address",
+      "hostHint": "The IP address or domain name the panel reaches the server at.",
+      "port": "Agent port",
+      "notes": "Notes"
+    },
+    "setup": {
+      "title": "Set up the agent on “{{name}}”",
+      "once": "The token is shown only this once. If it is lost, use “New token”.",
+      "intro": "On the new server (with Docker installed):",
+      "step1": "Run the commands below as a user in the docker group (or root). The agent is built and started, and creates its own HTTPS certificate.",
+      "step2": "If the repository is private, clone it with your own access (as when installing the panel).",
+      "step3": "Open port {{port}} in the firewall for this panel's IP address only, then press Connect.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "firewall": "Example with ufw (replace <PANEL-IP> with the panel server's IP address):",
+      "repoNote": "On connect the panel records the agent's certificate and from then on talks only to that certificate. The token never travels over the network; every request is signed with it."
     }
   }
 }

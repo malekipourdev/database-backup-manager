@@ -9,7 +9,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -58,6 +58,34 @@ def _compressor(writer: HashingWriter, compression: str):
     return writer
 
 
+def write_stream(
+    chunks: Iterable[bytes],
+    temp_path: Path,
+    compression: str,
+    on_progress: Callable[[int], None],
+    interval: float,
+) -> dict:
+    """Compress and hash a dump's bytes into a new file; its sha256, size and input size."""
+    processed = 0
+    with open(temp_path, "xb") as raw:
+        writer = HashingWriter(raw)
+        compressor = _compressor(writer, compression)
+        last_report = time.monotonic()
+        for chunk in chunks:
+            compressor.write(chunk)
+            processed += len(chunk)
+            now = time.monotonic()
+            if now - last_report >= interval:
+                on_progress(processed)
+                last_report = now
+        if compressor is not writer:
+            compressor.close()  # flushes the trailer; does not close `raw`
+        raw.flush()
+        os.fsync(raw.fileno())
+    on_progress(processed)
+    return {"sha256": writer.sha256.hexdigest(), "size": writer.size, "bytes_processed": processed}
+
+
 class DumpProcess:
     def __init__(self, args: list[str], home: Path) -> None:
         self.args = args
@@ -91,26 +119,17 @@ class DumpProcess:
             )
             if self.terminated:
                 self.terminate()
-            processed = 0
+            stdout = self.process.stdout
+            if stdout is None:
+                raise RuntimeError("dump process has no stdout pipe")
             try:
-                with open(temp_path, "xb") as raw:
-                    writer = HashingWriter(raw)
-                    compressor = _compressor(writer, compression)
-                    last_report = time.monotonic()
-                    stdout = self.process.stdout
-                    if stdout is None:
-                        raise RuntimeError("dump process has no stdout pipe")
-                    while chunk := stdout.read(CHUNK_SIZE):
-                        compressor.write(chunk)
-                        processed += len(chunk)
-                        now = time.monotonic()
-                        if now - last_report >= interval:
-                            on_progress(processed)
-                            last_report = now
-                    if compressor is not writer:
-                        compressor.close()  # flushes the trailer; does not close `raw`
-                    raw.flush()
-                    os.fsync(raw.fileno())
+                written = write_stream(
+                    iter(lambda: stdout.read(CHUNK_SIZE), b""),
+                    temp_path,
+                    compression,
+                    on_progress,
+                    interval,
+                )
                 returncode = self.process.wait()
             except BaseException:
                 self.terminate()
@@ -119,14 +138,7 @@ class DumpProcess:
             finally:
                 if self.process.stdout is not None:
                     self.process.stdout.close()
-            on_progress(processed)
             stderr_file.seek(0, os.SEEK_END)
             stderr_file.seek(max(0, stderr_file.tell() - STDERR_TAIL_BYTES))
             stderr_tail = stderr_file.read().decode("utf-8", errors="replace")
-        return PipelineResult(
-            returncode=returncode,
-            sha256=writer.sha256.hexdigest(),
-            size=writer.size,
-            bytes_processed=processed,
-            stderr_tail=stderr_tail,
-        )
+        return PipelineResult(returncode=returncode, stderr_tail=stderr_tail, **written)

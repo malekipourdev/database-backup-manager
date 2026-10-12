@@ -1,13 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Integer, String
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mbp.db import Base, UTCDateTime, utcnow
 
 
 class ContainerSettings(Base):
-    """How the panel shows, controls and watches the server's containers; one row, id 1."""
+    """How the panel shows, controls and watches a server's containers.
+
+    One row per server, with the server's id as its own (so the local server's row is the
+    one that existed before there were several servers).
+    """
 
     __tablename__ = "container_settings"
 
@@ -49,6 +53,11 @@ class ContainerAction(Base):
     actor: Mapped[str] = mapped_column(String(100), nullable=False)
     # panel | bale | telegram
     source: Mapped[str] = mapped_column(String(16), nullable=False)
+    server_id: Mapped[int | None] = mapped_column(
+        ForeignKey("servers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Kept when the server is deleted.
+    server_name: Mapped[str] = mapped_column(String(60), nullable=False, default="")
     container: Mapped[str] = mapped_column(String(128), nullable=False)
     # start | stop | restart
     action: Mapped[str] = mapped_column(String(16), nullable=False)
