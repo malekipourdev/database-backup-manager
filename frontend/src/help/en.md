@@ -1,28 +1,34 @@
 @@category start start Getting started
 
-@@article overview /instances
-@title What the panel does
-@summary What the panel is for, and what each menu item does.
-The panel backs up **MySQL** and **MariaDB** databases, verifies and keeps the backups, and can also manage servers, Docker containers and your own applications. Everything runs on your own server; nothing is sent anywhere else unless you choose to (remote storage, bots).
+@@article overview /overview
+@title What DevOps Manager does
+@summary What the panel is for, and what each part of the menu does.
+DevOps Manager backs up **MySQL** and **MariaDB** databases, verifies and keeps the backups, deploys your applications from git, and watches and controls Docker containers, on one server or several. Everything runs on your own server; nothing is sent anywhere else unless you choose to (remote storage, bots).
 
 ## The current server
 
-The panel can manage several servers. At the bottom of the side menu (at the top on a phone) is the **Current server** card: whichever server is chosen there, Databases, Backups, Schedules, Containers and Projects show **only that server's**. Notifications, Bots, Settings, Account and Help are shared by all servers. ([About the current server](#current-server))
+The panel can manage several servers. At the top of the side menu (on a phone, the server name button at the top of the screen) is the **Current server** card: whichever server is chosen there, the Overview, Databases, Backup history, Schedules, Projects and Containers show **only that server's**. Everything else is shared by all servers. ([About the current server](#current-server))
 
 ## The menu
 
-| Item                | Used for                                                                           |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| Databases           | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
-| Backups             | (current server) Backup history: download, delete, retry uploads                   |
-| Schedules           | (current server) Automatic backups at set times                                    |
-| Containers          | (current server) See and control Docker containers                                 |
-| Projects            | (current server) Deploy applications from git with docker compose                  |
-| Notifications       | Alerts to Bale, Telegram and a webhook                                             |
-| Bots                | Manage everything from Bale and Telegram                                           |
-| Settings            | Backup settings, remote storage (S3) and retention                                 |
-| Account             | Two-step verification and recovery codes                                           |
-| Current server card | Switch server, and "Manage all servers" (add and connect servers)                  |
+The menu is grouped by what you are working on:
+
+| Section              | Item                 | Used for                                                                           |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+|                      | Overview             | (current server) Health, the last day's backups, containers, deploys, and problems |
+| Databases & backups  | Databases            | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
+|                      | Backup history       | (current server) Download, delete, retry uploads                                   |
+|                      | Schedules            | (current server) Automatic backups at set times                                    |
+|                      | Storage & retention  | Backup settings, remote storage (S3) and retention                                 |
+| Applications         | Projects             | (current server) Deploy applications from git with docker compose                  |
+|                      | Containers           | (current server) See and control Docker containers                                 |
+| Infrastructure       | Servers              | Add, connect and check the servers the panel manages                               |
+| Alerts & chat access | Alerts               | Alerts to Bale, Telegram and a webhook                                             |
+|                      | Bale & Telegram bots | Manage everything from Bale and Telegram                                           |
+| System               | Account security     | Two-step verification and recovery codes                                           |
+|                      | Help                 | This guide                                                                         |
+
+**Go to…** (bottom of the side menu, or `Ctrl+K`, or `/`) finds any page or switches server by typing a few letters.
 
 ## Where to begin?
 
@@ -103,9 +109,11 @@ Then open `http://localhost:8080`. If port 8080 is taken on your computer, use f
 @title Language, layout and mobile
 @summary Switching language, using the panel on a phone, and searching this guide.
 
-- **Current server:** the card at the bottom of the side menu (on a phone, the server name button at the top). [More](#current-server)
+- **Current server:** the card at the top of the side menu (on a phone, the server name button at the top). [More](#current-server)
+- **Go to…:** press Ctrl+K (or /) anywhere, type part of a page or server name and press Enter.
+- **Keyboard:** Tab first reaches "Skip to content"; after opening a page, the focus is on its title.
 - **Language:** the "فارسی / English" switch at the top. Your choice is remembered in this browser. Each bot admin picks the bot's language in the bot itself.
-- **Mobile:** on small screens the menu moves to a scrollable bar at the bottom.
+- **Mobile:** on small screens the bottom bar holds Overview, Databases, Projects and Containers; **Menu** opens every other page, the language and sign out.
 - **Session:** after 30 minutes of inactivity you sign in again.
 - **Help:** most pages have a "?" button next to their title that opens the guide for that page. This page can also be searched.
 
@@ -250,7 +258,7 @@ The [Backups](/backups) page lists every run: status, size, duration, checksum, 
 @@article backup-settings /settings/backups
 @title Folder, file name and compression
 @summary Global backup settings, and per-database overrides.
-Under **Settings → Backup settings**:
+Under **Storage & retention → Backup settings**:
 
 - **Storage directory:** relative to the backup storage (the `mbp-backups` volume).
 - **File name pattern:** default `{instance}/{database}_{date}_{time}`. Placeholders: `{instance}` `{database}` `{date}` `{time}` `{datetime}` `{server_type}`. `/` makes subfolders, times are UTC, and the extension is added automatically.
@@ -306,7 +314,7 @@ gunzip -c shop_2026-10-11_140804.sql.gz | mariadb -h HOST -u root -p shop   # Ma
 @@article remote-storage /settings/backups
 @title Connecting remote storage (S3)
 @summary Upload backups automatically to AWS S3 or any compatible service.
-Under **Settings → Remote storage**:
+Under **Storage & retention → Remote storage**:
 
 | Field        | Meaning                                                                                |
 | ------------ | -------------------------------------------------------------------------------------- |
@@ -334,7 +342,7 @@ For least privilege, give the key only `s3:PutObject`, `s3:GetObject`, `s3:Delet
 1. In the ArvanCloud console, open **Object Storage** and create a **private** bucket (e.g. `airplus`).
 2. Under **Access keys**, create a key pair and copy the access key and secret key. The secret is shown once.
 3. Note your region's endpoint in the console, e.g. `https://s3.ir-thr-at1.arvanstorage.ir` (Tehran). The region is its middle part: `ir-thr-at1`.
-4. In the panel, **Settings → Remote storage**:
+4. In the panel, **Storage & retention → Remote storage**:
 
 | Field        | Value                                   |
 | ------------ | --------------------------------------- |
@@ -366,7 +374,7 @@ The panel never deletes a remote copy until **7 days after it was uploaded**, ne
 @@article retention /settings/backups
 @title Retention (automatic cleanup)
 @summary Delete old backups automatically so the disk and the bucket do not fill up.
-Under **Settings → Retention**, separately for **local files** and **remote copies**:
+Under **Storage & retention → Retention**, separately for **local files** and **remote copies**:
 
 - **Keep the last N** backups of each database.
 - **Delete after N days**.
@@ -444,16 +452,20 @@ The bot connects out to the messenger (long polling), so the panel needs no publ
 @@article bots-usage
 @title Using the bot
 @summary What you can do from Bale and Telegram.
-`/start` opens the bot's menu with inline buttons:
+`/start` (or `/menu`) opens the bot's menu, grouped like the panel's:
 
-- **Status:** servers, running backups, the last 24 hours, disk space and the next run.
-- **Servers (databases):** details, test the connection, back up all (with confirmation) or one database.
-- **Backups:** history, details, retry upload, delete (with confirmation), and receive the file if allowed.
-- **Schedules:** enable, disable, run now.
-- **Retention:** preview, then apply.
-- **Containers:** state, usage, server status, logs (if allowed), and start/stop/restart with a Google Authenticator code. With several servers, you pick the server first.
-- **Projects:** recent deploys, and deploys with a Google Authenticator code.
-- **Settings:** your own alert level (everything, warnings and errors, errors only, off) and language.
+- **📊 Overview:** databases, running backups, the last 24 hours, disk space, the next run, connected servers and failed deploys.
+- **🗄 Databases & backups → Databases:** details, test the connection, back up all (with confirmation) or one database.
+- **🗄 Databases & backups → Latest backups:** history, details, retry upload, delete (with confirmation), and receive the file if allowed.
+- **🗄 Databases & backups → Schedules:** enable, disable, run now.
+- **🗄 Databases & backups → Retention:** preview, then apply.
+- **🚀 Projects:** recent deploys, and deploys with a Google Authenticator code.
+- **🐳 Containers:** state, usage, logs (if allowed), and start/stop/restart with a Google Authenticator code. With several servers, you pick the server first.
+- **🖥 Servers:** each server's state, with its containers, resources (CPU, RAM, disk), projects and databases.
+- **⚙️ Alerts & language:** your own alert level (everything, warnings and errors, errors only, off) and language.
+- **❓ Help:** what each section does, and the commands.
+
+Commands, also listed in the messenger's command menu: `/menu`, `/status`, `/backups`, `/projects`, `/containers`, `/servers`, `/settings`, `/help`.
 
 @@article bots-security
 @title Bot security
@@ -469,8 +481,8 @@ The bot connects out to the messenger (long polling), so the panel needs no publ
 
 @@article current-server
 @title The current server, and switching
-@summary The panel always works on one server; switch it from the card at the bottom of the menu.
-The panel always works on **one server**: the "current server". Its name and state are on the card at the bottom of the side menu (on a phone, the server name button at the top). Press the card to:
+@summary The panel always works on one server; switch it from the card at the top of the menu.
+The panel always works on **one server**: the "current server". Its name and state are on the card at the top of the side menu (on a phone, the server name button at the top). Press the card to:
 
 - **Choose another server.** Servers that are not connected yet cannot be chosen.
 - Open **Manage all servers**: add, connect, edit and remove servers.
@@ -509,7 +521,7 @@ Each server's card shows its state (connected, unreachable, not connected), host
 @summary Install the agent on another server and connect it.
 The new server needs **Docker** with **Compose v2**.
 
-1. Press the Current server card (bottom of the menu), then **Manage all servers**, then **Add server**: a name, the IP address or domain the panel reaches it at, and the agent port (default `8443`).
+1. Open **Servers** in the menu (or press the Current server card, then **Manage all servers**), then, then **Add server**: a name, the IP address or domain the panel reaches it at, and the agent port (default `8443`).
 2. The panel shows the install commands with a **token made for this server. The token is shown only this once.** Copy the commands and run them on the new server:
 
 ```bash
@@ -920,7 +932,7 @@ Grant the user `SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES`.
 
 ## How do I work on another server?
 
-Press the **Current server** card at the bottom of the menu and choose the server ([guide](#current-server)).
+Press the **Current server** card at the top of the menu and choose the server ([guide](#current-server)).
 
 ## A database or project I added is not shown.
 

@@ -159,7 +159,7 @@ def test_link_code_registers_the_sender(auth_client, bale_bot):
     ]
     # Two answers: "linked", then the menu.
     screen = say(bale_bot, f"/start {code}", user_id=555, messages=2)
-    assert "منو" in screen["text"] or "MySQL" in screen["text"]
+    assert "DevOps Manager" in screen["text"]
     admins = {a["user_id"]: a for a in auth_client.get("/api/bot-admins").json()}
     assert admins[555]["display_name"] == "Reza"
     # Codes work once.
@@ -171,10 +171,61 @@ def test_link_code_registers_the_sender(auth_client, bale_bot):
 def test_menu_and_status(bale_bot, auth_client):
     create_instance(auth_client)
     screen = say(bale_bot, "/start")
+    assert "DevOps Manager" in screen["text"]
     data = {b["callback_data"] for b in buttons(screen)}
-    assert {"st", "il:0", "rl:0:0", "sl:0", "rt", "ns"} <= data
+    # By area: overview, databases & backups, projects, containers, servers, settings, help.
+    assert data == {"st", "bk", "pl:0", "cl:0", "sv", "ns", "h"}
     status = press(bale_bot, "st")
-    assert "سرورها: ۱" in status["text"]
+    assert "پایگاه‌های داده: ۱" in status["text"]
+    assert "سرورهای متصل: ۱" in status["text"]
+    assert "پروژه‌ها: ۰" in status["text"]
+
+    section = press(bale_bot, "bk")
+    assert "پایگاه‌های داده: ۱" in section["text"]
+    assert {"il:0", "rl:0:0", "sl:0", "rt", "m"} == {b["callback_data"] for b in buttons(section)}
+    # The lists of the section lead back to it.
+    for data in ("il:0", "rl:0:0", "sl:0", "rt"):
+        assert "bk" in {b["callback_data"] for b in buttons(press(bale_bot, data))}, data
+
+
+def test_commands(bale_bot, auth_client):
+    create_instance(auth_client)
+    # The command menu is registered in both languages.
+    registered = wait_until(lambda: bale_bot.calls("setMyCommands")[1:] or None, message="menu")
+    commands = bale_bot.calls("setMyCommands")
+    assert [c["command"] for c in commands[0]["commands"]][:3] == ["menu", "status", "backups"]
+    assert "language_code" not in commands[0]
+    assert registered[0]["language_code"] == "en"
+
+    assert "پایگاه‌های داده: ۱" in say(bale_bot, "/status@mbp_test_bot")["text"]
+    assert "bk" not in {b["callback_data"] for b in buttons(say(bale_bot, "/backups"))}
+    assert "/containers" in say(bale_bot, "/help")["text"]
+    assert "ns" in {b["callback_data"] for b in buttons(say(bale_bot, "/whatever"))}
+
+
+def test_servers_and_a_server_hub(bale_bot, auth_client):
+    create_instance(auth_client)
+    local = auth_client.get("/api/servers").json()[0]
+    servers = press(bale_bot, "sv")
+    hub_data = f"sh:{local['id']}"
+    assert hub_data in {b["callback_data"] for b in buttons(servers)}
+    hub = press(bale_bot, hub_data)
+    assert local["name"] in hub["text"]
+    assert "پایگاه‌های داده: ۱" in hub["text"]
+    data = {b["callback_data"] for b in buttons(hub)}
+    assert {
+        f"cl:0:{local['id']}",
+        f"cs:{local['id']}",
+        f"pl:0:{local['id']}",
+        f"il:0:{local['id']}",
+        "sv",
+    } <= data
+    databases = press(bale_bot, f"il:0:{local['id']}")
+    assert local["name"] in databases["text"]
+    assert hub_data in {b["callback_data"] for b in buttons(databases)}
+    projects = press(bale_bot, f"pl:0:{local['id']}")
+    assert hub_data in {b["callback_data"] for b in buttons(projects)}
+    assert "خطا" in press(bale_bot, "sh:9999")["text"]
 
 
 def test_disabled_admin_is_refused(bale_bot, auth_client):

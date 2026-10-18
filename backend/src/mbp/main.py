@@ -108,7 +108,7 @@ def create_app() -> FastAPI:
     crypto.validate_key()
 
     app = FastAPI(
-        title="MySQL Backup Panel",
+        title="DevOps Manager",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,

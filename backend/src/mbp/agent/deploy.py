@@ -33,7 +33,12 @@ REPO_URL_RE = re.compile(
     r"(https://[^\s@/]+(:\d+)?/\S+|ssh://[^\s/]+/\S+|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:\S+)"
 )
 AUTH_TYPES = ("none", "token", "ssh_key")
-ENV_MARKER = "# Written by MySQL Backup Panel on every deploy; edit the variables in the panel.\n"
+ENV_MARKER = "# Written by DevOps Manager on every deploy; edit the variables in the panel.\n"
+# Files written before the rename are still recognized as the panel's own.
+ENV_MARKERS = (
+    ENV_MARKER,
+    "# Written by MySQL Backup Panel on every deploy; edit the variables in the panel.\n",
+)
 MASK = "***"
 MAX_LOG_LINES = 20000
 MAX_LINE_CHARS = 2000
@@ -468,7 +473,7 @@ class DeployManager:
                 handle.write(content)
             target.chmod(0o600)
             self._log(job, [], f"→ wrote {len(spec.env)} variable(s) to .env (values hidden)")
-        elif target.exists() and target.read_text(errors="replace").startswith(ENV_MARKER):
+        elif target.exists() and target.read_text(errors="replace").startswith(ENV_MARKERS):
             target.unlink()  # every variable was removed in the panel
 
     def _check(

@@ -26,6 +26,7 @@ const ICONS = new Set([
 ]);
 // Panel routes an article may link to (see App.tsx).
 const PAGES = [
+  /^\/overview$/,
   /^\/instances(\/new)?$/,
   /^\/backups$/,
   /^\/schedules$/,

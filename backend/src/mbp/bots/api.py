@@ -120,6 +120,15 @@ class BotApi:
             if "not modified" not in (exc.message or ""):
                 raise
 
+    def set_commands(self, commands: list[tuple[str, str]], language: str | None = None) -> None:
+        """The command menu shown next to the message box; `language`: for users of it only."""
+        data: dict[str, Any] = {
+            "commands": [{"command": name, "description": text} for name, text in commands]
+        }
+        if language:
+            data["language_code"] = language
+        self.call("setMyCommands", data)
+
     def answer_callback(self, callback_id: str, text: str | None = None) -> None:
         data: dict[str, Any] = {"callback_query_id": callback_id}
         if text:

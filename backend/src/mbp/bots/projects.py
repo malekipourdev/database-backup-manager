@@ -36,12 +36,14 @@ class ProjectMenu:
             line += f" ({t(ctx.lang, f'step_{d.step}')})"
         return line
 
-    def projects_list(self, db: Session, ctx, page: int):
+    def projects_list(self, db: Session, ctx, page: int, server_id: int = 0):
+        """The projects, of every server or (with `server_id`) of one."""
         from mbp.bots.handler import Screen, button
 
         lang = ctx.lang
         repo = ProjectRepository(db)
-        projects = repo.list_all()
+        server = self._server(db, server_id) if server_id else None
+        projects = repo.list_all(server.id if server else None)
         last = repo.last_deployments()
         keyboard: Keyboard = []
         for project in projects[page * PROJECT_PAGE_SIZE : (page + 1) * PROJECT_PAGE_SIZE]:
@@ -50,9 +52,17 @@ class ProjectMenu:
             keyboard.append([button(f"{icon} {project.name}", f"p:{project.id}")])
         pager = self._pager(ctx, "pl", page, len(projects), PROJECT_PAGE_SIZE)
         if pager:
+            for item in pager:
+                item["callback_data"] += f":{server_id}"
             keyboard.append(pager)
-        keyboard.append([button(t(lang, "btn_menu"), "m")])
-        text = t(lang, "projects_title", n=len(projects))
+        if server:
+            keyboard.append(
+                [button(t(lang, "btn_back"), f"sh:{server.id}"), button(t(lang, "btn_menu"), "m")]
+            )
+            text = t(lang, "projects_title_server", server=server.name, n=len(projects))
+        else:
+            keyboard.append([button(t(lang, "btn_menu"), "m")])
+            text = t(lang, "projects_title", n=len(projects))
         if not projects:
             text += "\n\n" + t(lang, "projects_empty")
         return Screen(text, keyboard)

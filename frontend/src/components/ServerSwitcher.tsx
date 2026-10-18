@@ -13,6 +13,20 @@ export function serverTone(server: Server): string {
   return server.last_seen_at ? "ok" : "warn";
 }
 
+const TONE_LABELS: Record<string, string> = {
+  ok: "servers.connected",
+  bad: "servers.unreachable",
+  warn: "servers.unknown",
+  off: "servers.notConnected",
+};
+
+/** The status dot, with its meaning for screen readers (color alone says nothing to them). */
+export function ServerDot({ server }: { server: Server }) {
+  const { t } = useTranslation();
+  const tone = serverTone(server);
+  return <span className="cl-dot" data-tone={tone} role="img" aria-label={t(TONE_LABELS[tone])} />;
+}
+
 // Detail pages of one item belong to the server they were opened on.
 const DETAIL = /^\/(instances|projects)\/[^/]+/;
 
@@ -37,21 +51,27 @@ export function ServerSwitcher({ compact = false }: { compact?: boolean }) {
   const label = server.kind === "local" ? t("servers.local") : `${server.host}:${server.port}`;
 
   return (
-    <Menu position={compact ? "bottom-end" : "top-start"} width={260} withinPortal shadow="md">
+    <Menu position={compact ? "bottom-end" : "bottom-start"} width={260} withinPortal shadow="md">
       <Menu.Target>
         {compact ? (
-          <UnstyledButton className="cl-server-chip" aria-label={t("servers.switch")}>
-            <span className="cl-dot" data-tone={serverTone(server)} />
+          <UnstyledButton
+            className="cl-server-chip"
+            aria-label={`${t("servers.current")}: ${server.name}. ${t("servers.switch")}`}
+          >
+            <span className="cl-dot" data-tone={serverTone(server)} aria-hidden />
             <span className="cl-server-chip-name">{server.name}</span>
-            <CaretDown size={12} />
+            <CaretDown size={12} aria-hidden />
           </UnstyledButton>
         ) : (
-          <UnstyledButton className="cl-access cl-server-card" aria-label={t("servers.switch")}>
+          <UnstyledButton
+            className="cl-access cl-server-card"
+            aria-label={`${t("servers.current")}: ${server.name}. ${t("servers.switch")}`}
+          >
             <span className="cl-server-card-label">{t("servers.current")}</span>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="cl-dot" data-tone={serverTone(server)} />
+              <ServerDot server={server} />
               <span className="cl-server-card-name">{server.name}</span>
-              <CaretDown size={12} style={{ marginInlineStart: "auto" }} />
+              <CaretDown size={12} style={{ marginInlineStart: "auto" }} aria-hidden />
             </span>
             <code dir="ltr" style={{ textAlign: "start" }}>
               {label}
@@ -66,8 +86,9 @@ export function ServerSwitcher({ compact = false }: { compact?: boolean }) {
             key={s.id}
             disabled={!s.paired}
             onClick={() => choose(s.id)}
-            leftSection={<span className="cl-dot" data-tone={serverTone(s)} />}
-            rightSection={s.id === server.id ? <Check size={14} /> : null}
+            leftSection={<ServerDot server={s} />}
+            rightSection={s.id === server.id ? <Check size={14} aria-hidden /> : null}
+            aria-current={s.id === server.id ? "true" : undefined}
           >
             <Text size="sm" fw={s.id === server.id ? 600 : 400}>
               {s.name}
@@ -82,7 +103,10 @@ export function ServerSwitcher({ compact = false }: { compact?: boolean }) {
           </Menu.Item>
         ))}
         <Menu.Divider />
-        <Menu.Item leftSection={<HardDrives size={16} />} onClick={() => navigate("/servers")}>
+        <Menu.Item
+          leftSection={<HardDrives size={16} aria-hidden />}
+          onClick={() => navigate("/servers")}
+        >
           {t("servers.manage")}
         </Menu.Item>
       </Menu.Dropdown>

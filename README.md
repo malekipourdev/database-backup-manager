@@ -1,7 +1,9 @@
-# MySQL Backup Panel
+# DevOps Manager
 
-A self-hosted web panel for managing backups of MySQL and MariaDB databases.
-The UI is available in Persian (right-to-left) and English.
+A self-hosted DevOps panel for one server or several: database backups, Docker containers,
+deploys from git, alerts, and control from Bale and Telegram. It started as a backup panel for
+MySQL and MariaDB, which is still at its core. The UI is available in Persian (right-to-left)
+and English.
 
 **Current status:**
 
@@ -22,6 +24,10 @@ The UI is available in Persian (right-to-left) and English.
   or a bot, with a backup of their databases before every deploy and one-click rollback
 - **several servers**: connect other machines to the same panel through a small agent, then
   manage their containers, deploy projects to them and back up their databases from one place
+- **overview**: a home page with the current server's health, the last day's backups, its
+  containers and deploys, and everything that needs attention
+- **organized menu**: grouped by area (databases & backups, applications, infrastructure, alerts
+  & chat access, system), a **Go to…** search (`Ctrl+K`), keyboard and screen-reader friendly
 - **built-in guide**: a **Help** page in the panel (Persian and English) that explains every
   feature by topic, with search; the "?" next to a page's title opens its article
 
@@ -204,7 +210,7 @@ check `bind-address` in the MySQL/MariaDB configuration.
 Two ways:
 
 - **Through that machine's agent (recommended).** [Connect the machine](#servers), choose it
-  as the **current server** (the card at the bottom of the menu), and add the database there.
+  as the **current server** (the card at the top of the menu), and add the database there.
   Its agent tests, lists and dumps
   the database on that machine and streams the backup to the panel; the database port never
   has to be open to the outside. The host is then as seen from that machine: `127.0.0.1` for
@@ -290,7 +296,7 @@ mkdir -p backups && sudo chown 10001:10001 backups
 
 ### Settings
 
-Change these under **Settings**. Each instance can override any of them on its own page:
+Change these under **Storage & retention**. Each instance can override any of them on its own page:
 
 - **Storage directory**: relative to the backup volume.
 - **File name pattern**: the default is `{instance}/{database}_{date}_{time}`.
@@ -322,7 +328,7 @@ The scheduler runs inside the backend process, so the backend must stay a single
 
 ### Remote storage (S3)
 
-Under **Settings → Remote storage**, enter the endpoint, bucket, key prefix and access keys,
+Under **Storage & retention → Remote storage**, enter the endpoint, bucket, key prefix and access keys,
 then use **Test connection**. The test checks that the panel can write to and delete from the
 bucket.
 
@@ -366,7 +372,7 @@ To use an access key with minimal permissions, allow `s3:PutObject`, `s3:GetObje
 3. Note the **endpoint** of the bucket's region, shown in the console, for example
    `https://s3.ir-thr-at1.arvanstorage.ir` (Tehran). The region name is the middle part, for
    example `ir-thr-at1`.
-4. In the panel, open **Settings → Remote storage** and fill in:
+4. In the panel, open **Storage & retention → Remote storage** and fill in:
 
    | Field | Value |
    |-------|-------|
@@ -384,14 +390,14 @@ To use an access key with minimal permissions, allow `s3:PutObject`, `s3:GetObje
    stay local only, even when the connection test succeeds.
 7. Run a backup. Its row shows the remote status ("Stored remotely" when done), and the file
    appears in the bucket under the prefix, with the same path and name as on the server (see
-   **Settings → Backups** for the naming pattern).
+   **Storage & retention → Backup settings** for the naming pattern).
 
 If the test succeeds but nothing is uploaded, check step 6 and the server's own setting
 (**Always / Never / Global setting**) on its page.
 
 ### Retention
 
-Under **Settings → Retention**, set separate rules for local files and remote copies:
+Under **Storage & retention → Retention**, set separate rules for local files and remote copies:
 
 - **Keep the last N** backups of each database.
 - **Delete after N days**.
@@ -411,7 +417,7 @@ unreachable), the error is shown on the run and the deletion is retried on the n
 
 ### Notifications and alerts
 
-Under **Notifications**, choose which events raise an alert and where each one goes: Bale,
+Under **Alerts**, choose which events raise an alert and where each one goes: Bale,
 Telegram and/or a webhook.
 
 | Event | Severity | When |
@@ -459,22 +465,31 @@ needs no public address, domain or open port.
    - Use **Create link code**. The person sends the one-time code to the bot (valid for 15
      minutes) and is registered automatically.
 
-**What the bot can do** (inline buttons, Persian or English per admin):
+**What the bot can do** (inline buttons, Persian or English per admin). The menu is grouped like
+the panel's:
 
-- **Status:** servers, running backups, the last 24 hours, the last successful backup, free disk
-  space, remote storage and the next scheduled run.
-- **Servers:** details, test the connection, back up all marked databases (asks for
-  confirmation) or pick one database.
-- **Backups:** history, details, retry an upload, delete (asks for confirmation), and receive
-  the file, if you allow it.
-- **Schedules:** enable, disable, run now.
-- **Retention:** preview what would be deleted, then apply.
-- **Containers:** state, usage and server status; logs (if you allow it); start, stop and
-  restart, each confirmed with a Google Authenticator code (see [Containers](#containers)).
+- **Overview:** databases, running backups, the last 24 hours, the last successful backup, free
+  disk space, remote storage, the next scheduled run, connected servers and failed deploys.
+- **Databases & backups:**
+  - **Databases:** details, test the connection, back up all marked databases (asks for
+    confirmation) or pick one database.
+  - **Latest backups:** history, details, retry an upload, delete (asks for confirmation), and
+    receive the file, if you allow it.
+  - **Schedules:** enable, disable, run now.
+  - **Retention:** preview what would be deleted, then apply.
 - **Projects:** last deploys, and deploys confirmed with a Google Authenticator code (see
   [Projects](#projects-deploy-from-git)).
-- **Notifications and language:** each admin picks their alert level (everything, warnings and
-  errors, errors only, off) and their language.
+- **Containers:** state, usage and logs (if you allow it); start, stop and restart, each
+  confirmed with a Google Authenticator code (see [Containers](#containers)).
+- **Servers:** each connected server's state, with its containers, resources (CPU, RAM, disk),
+  projects and databases.
+- **Alerts and language:** each admin picks their alert level (everything, warnings and errors,
+  errors only, off) and their language.
+- **Help:** what each section does.
+
+**Commands:** `/menu`, `/status`, `/backups`, `/projects`, `/containers`, `/servers`,
+`/settings` and `/help`. The bot registers them in the messenger's command menu (Persian, and
+English for users whose app is in English).
 
 **Security:**
 
@@ -684,8 +699,7 @@ and databases are managed from the same panel and bot, and its alerts name it.
 
 ### Add a server
 
-1. In the panel, press the **current server** card at the bottom of the menu, then **Manage all
-   servers → Add server**: a name, the address the panel reaches it at,
+1. In the panel, open **Servers** (under Infrastructure in the menu), then **Add server**: a name, the address the panel reaches it at,
    and the agent's port (`8443` by default).
 2. The panel shows the commands to run on that machine, with a **token made for it, shown only
    once**. They clone this repository, write `.env.agent` and start
@@ -729,15 +743,15 @@ and databases are managed from the same panel and bot, and its alerts name it.
 
 ### The current server
 
-The panel always works on one server, the **current server**, shown on the card at the bottom
+The panel always works on one server, the **current server**, shown on the card at the top
 of the side menu (on a phone, the server name at the top). Press it to switch to another
 connected server, or to open **Manage all servers**. The choice is remembered per browser.
 
-- **Per server:** Databases, Backups, Schedules, Containers and Projects show only the current
-  server's items, and what you add is added on it. Its name is shown next to those pages'
+- **Per server:** Overview, Databases, Backup history, Schedules, Containers and Projects show
+  only the current server's items, and what you add is added on it. Its name is shown next to those pages'
   titles. Container settings (read-only, hidden and locked names, alert limits) are per server.
-- **Shared:** Notifications, Bots, Settings (backups, remote storage, retention), Account and
-  Help apply to all servers.
+- **Shared:** Servers, Alerts, Bots, Storage & retention (backup settings, remote storage,
+  retention), Account security and Help apply to all servers.
 - A project cannot move to another server after its first deploy; delete it and add it on the
   other server instead.
 - In the bot, **Containers** asks which server first.
@@ -763,7 +777,7 @@ databases.
 Sign-in can also ask for a 6-digit code from an authenticator app on your phone (Google
 Authenticator, Microsoft Authenticator, Aegis, 2FAS, or any other TOTP app). It is off by default.
 
-**Turn it on:** open **Account** (in the menu, or click your name at the top) → **Turn on**,
+**Turn it on:** open **Account security** (in the menu, or click your name at the top) → **Turn on**,
 confirm your password, scan the QR code with the app (or type the key by hand), and enter the code
 the app shows. The panel then shows 8 **recovery codes** once. Save them somewhere safe, away from
 your phone. If you lose the phone, each code lets you sign in once. To sign in with one, choose

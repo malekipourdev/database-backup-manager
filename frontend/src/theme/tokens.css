@@ -63,7 +63,7 @@
   --mantine-color-default-hover: color-mix(in srgb, var(--color-text) 7%, var(--color-surface));
   --mantine-color-default-color: var(--color-text);
   --mantine-color-default-border: var(--color-divider);
-  --mantine-color-placeholder: var(--color-neutral-600);
+  --mantine-color-placeholder: var(--color-neutral-500);
   --mantine-color-anchor: var(--color-accent-300);
   --mantine-color-error: var(--color-danger);
 }

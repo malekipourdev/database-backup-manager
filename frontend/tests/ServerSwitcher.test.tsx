@@ -32,7 +32,9 @@ describe("the current server", () => {
       </CurrentServerProvider>,
     );
     await waitFor(() => expect(screen.getByTestId("current")).toHaveTextContent("main"));
-    await userEvent.click(screen.getByRole("button", { name: "Switch server" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Current server: main. Switch server" }),
+    );
     // A server that is not connected cannot be picked.
     const unconnected = await screen.findByRole("menuitem", { name: /new/ });
     expect(unconnected).toHaveAttribute("data-disabled");

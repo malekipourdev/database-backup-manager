@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.backups.store import LocalBackupStore
 from mbp.bots.api import BotApi, BotApiError
-from mbp.bots.handler import BotHandler, button
+from mbp.bots.handler import COMMANDS, BotHandler, button
 from mbp.bots.texts import t
 from mbp.db import utcnow
 from mbp.models.bot import PLATFORMS
@@ -84,6 +84,16 @@ class BotPoller:
         self._record(ok=True, offset=next_offset if updates else None)
         return len(updates)
 
+    def _register_commands(self) -> None:
+        """Persian for everyone, English for users whose app is in English."""
+        try:
+            for lang, code in (("fa", None), ("en", "en")):
+                commands = [(name, t(lang, f"cmd_{name}")) for name in COMMANDS]
+                self.api.set_commands(commands, code)
+        except BotApiError as exc:
+            # Not every messenger supports a command menu; the commands work without it.
+            logger.debug("%s bot: setMyCommands failed: %s", self.platform, exc.code)
+
     def _loop(self) -> None:
         backoff = 1
         try:
@@ -100,6 +110,7 @@ class BotPoller:
                 db.commit()
         except BotApiError as exc:
             logger.warning("%s bot: getMe failed: %s", self.platform, exc.code)
+        self._register_commands()
         while not self._stop.is_set():
             try:
                 self.poll_once()

@@ -26,6 +26,7 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { ProjectFormPage } from "./pages/ProjectFormPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { OverviewPage } from "./pages/OverviewPage";
 import { notifications } from "@mantine/notifications";
 import { cssVariablesResolver, theme } from "./theme/theme";
 
@@ -83,7 +84,8 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/instances" replace />} />
+          <Route path="/" element={<Navigate to="/overview" replace />} />
+          <Route path="/overview" element={<OverviewPage />} />
           <Route path="/instances" element={<InstancesPage />} />
           <Route path="/instances/new" element={<InstanceFormPage />} />
           <Route path="/instances/:id" element={<InstanceDetailPage />} />
