@@ -26,8 +26,8 @@ and English.
   manage their containers, deploy projects to them and back up their databases from one place
 - **overview**: a home page with the current server's health, the last day's backups, its
   containers and deploys, and everything that needs attention
-- **organized menu**: grouped by area (databases & backups, applications, infrastructure, alerts
-  & chat access, system), a **Go to…** search (`Ctrl+K`), keyboard and screen-reader friendly
+- **organized menu**: folding groups from the widest scope down (infrastructure, applications,
+  databases & backups, alerts & chat access, system), a **Go to…** search (`Ctrl+K`), keyboard and screen-reader friendly
 - **built-in guide**: a **Help** page in the panel (Persian and English) that explains every
   feature by topic, with search; the "?" next to a page's title opens its article
 
@@ -210,7 +210,7 @@ check `bind-address` in the MySQL/MariaDB configuration.
 Two ways:
 
 - **Through that machine's agent (recommended).** [Connect the machine](#servers), choose it
-  as the **current server** (the card at the top of the menu), and add the database there.
+  as the **current server** (the card at the bottom of the menu), and add the database there.
   Its agent tests, lists and dumps
   the database on that machine and streams the backup to the panel; the database port never
   has to be open to the outside. The host is then as seen from that machine: `127.0.0.1` for
@@ -743,7 +743,7 @@ and databases are managed from the same panel and bot, and its alerts name it.
 
 ### The current server
 
-The panel always works on one server, the **current server**, shown on the card at the top
+The panel always works on one server, the **current server**, shown on the card at the bottom
 of the side menu (on a phone, the server name at the top). Press it to switch to another
 connected server, or to open **Manage all servers**. The choice is remembered per browser.
 

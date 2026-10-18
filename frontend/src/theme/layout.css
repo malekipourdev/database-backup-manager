@@ -96,7 +96,10 @@
 .cl-nav {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 4px;
+}
+.cl-nav-group[data-open] {
+  padding-bottom: 6px;
 }
 .cl-nav ul {
   list-style: none;
@@ -107,13 +110,27 @@
   gap: 2px;
 }
 .cl-nav-heading {
-  display: block;
-  padding: 0 10px 6px;
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-neutral-500);
+  color: var(--color-neutral-400);
+}
+.cl-nav-heading:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+.cl-nav-heading[data-current] {
+  color: var(--color-accent-200);
+}
+.cl-nav-heading:focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 2px;
 }
 .cl-nav-item {
   display: flex;

@@ -336,19 +336,19 @@ class BotHandler(ContainerMenu, ProjectMenu):
         return screens.get(command or "", lambda: self.menu(ctx))()
 
     def menu(self, ctx: Ctx) -> Screen:
-        """The main menu, by area: overview, data, applications, servers, settings."""
+        """The main menu, as the panel's: overview, servers, applications, databases, settings."""
         lang = ctx.lang
         return Screen(
             t(lang, "menu_title"),
             [
                 [button(t(lang, "btn_status"), "st")],
-                [button(t(lang, "btn_backups_menu"), "bk")],
+                [button(t(lang, "btn_servers"), "sv")],
                 [
                     button(t(lang, "btn_projects"), "pl:0"),
                     button(t(lang, "btn_containers"), "cl:0"),
                 ],
-                [button(t(lang, "btn_servers"), "sv"), button(t(lang, "btn_settings"), "ns")],
-                [button(t(lang, "btn_help"), "h")],
+                [button(t(lang, "btn_backups_menu"), "bk")],
+                [button(t(lang, "btn_settings"), "ns"), button(t(lang, "btn_help"), "h")],
             ],
         )
 

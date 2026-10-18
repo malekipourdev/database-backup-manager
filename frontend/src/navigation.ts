@@ -33,11 +33,24 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** The panel's menu, grouped by what the admin is working on. */
+/** The panel's menu, grouped from the widest scope down: servers, applications, databases. */
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "home",
     items: [{ to: "/overview", label: "nav.overview", icon: SquaresFour, scoped: true }],
+  },
+  {
+    id: "infra",
+    label: "nav.groups.infra",
+    items: [{ to: "/servers", label: "nav.servers", icon: HardDrives }],
+  },
+  {
+    id: "apps",
+    label: "nav.groups.apps",
+    items: [
+      { to: "/projects", label: "nav.projects", icon: RocketLaunch, scoped: true },
+      { to: "/containers", label: "nav.containers", icon: Cube, scoped: true },
+    ],
   },
   {
     id: "data",
@@ -53,19 +66,6 @@ export const NAV_GROUPS: NavGroup[] = [
         keywords: "nav.keywords.settings",
       },
     ],
-  },
-  {
-    id: "apps",
-    label: "nav.groups.apps",
-    items: [
-      { to: "/projects", label: "nav.projects", icon: RocketLaunch, scoped: true },
-      { to: "/containers", label: "nav.containers", icon: Cube, scoped: true },
-    ],
-  },
-  {
-    id: "infra",
-    label: "nav.groups.infra",
-    items: [{ to: "/servers", label: "nav.servers", icon: HardDrives }],
   },
   {
     id: "alerts",
@@ -88,7 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 /** The phone's bottom bar: the most used pages; everything else is under "Menu". */
-export const TAB_ITEMS: NavItem[] = ["/overview", "/instances", "/projects", "/containers"].map(
+export const TAB_ITEMS: NavItem[] = ["/overview", "/containers", "/projects", "/instances"].map(
   (to) => NAV_ITEMS.find((item) => item.to === to)!,
 );
 
