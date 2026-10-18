@@ -115,8 +115,8 @@ class ContainerMenu:
 
     # --- screens ---
 
-    def servers_list(self, db: Session, ctx):
-        """The connected servers; skipped when the panel's own is the only one."""
+    def servers_list(self, db: Session, ctx, target: str = "sh:{id}"):
+        """The connected servers; each opens `target` (its hub, or its containers)."""
         from mbp.bots.handler import Screen, button
 
         servers = [s for s in ServerRepository(db).list_all() if s.paired]
@@ -126,15 +126,63 @@ class ContainerMenu:
             label = f"{icon} {server.name}" + (
                 f" ({t(ctx.lang, 'server_local')})" if server.is_local else ""
             )
-            keyboard.append([button(label[:60], f"cl:0:{server.id}")])
+            keyboard.append([button(label[:60], target.format(id=server.id))])
         keyboard.append([button(t(ctx.lang, "btn_menu"), "m")])
+        if not servers:
+            return Screen(t(ctx.lang, "servers_empty"), keyboard)
         return Screen(t(ctx.lang, "servers_title", n=len(servers)), keyboard)
+
+    def server_hub(self, db: Session, ctx, server_id: int):
+        """One server: its state, and the way to its containers, resources, projects, databases."""
+        from mbp.api.scope import ServerScope
+        from mbp.bots.handler import Screen, button
+        from mbp.repositories.project_repository import ProjectRepository
+        from mbp.services.instance_service import InstanceService
+
+        lang = ctx.lang
+        server = self._server(db, server_id)
+        if server.is_local:
+            address, state = t(lang, "hub_local"), t(lang, "hub_ok_local")
+        else:
+            address = t(lang, "hub_address", address=f"{server.host}:{server.port}")
+            if server.last_error:
+                state = t(lang, "hub_bad", error=self._error(ctx, server.last_error))
+            else:
+                state = t(lang, "hub_ok", time=self._time(ctx, server.last_seen_at))
+        lines = [t(lang, "hub_title", name=server.name), address, state]
+        if server.docker_version:
+            lines.append(t(lang, "hub_docker", version=server.docker_version))
+        databases = InstanceService(db).list(ServerScope(server.id, server.is_local).instances())
+        lines.append(
+            t(
+                lang,
+                "hub_counts",
+                databases=len(databases),
+                projects=len(ProjectRepository(db).list_all(server.id)),
+            )
+        )
+        keyboard: Keyboard = []
+        if server.paired:
+            keyboard.append(
+                [
+                    button(t(lang, "btn_containers"), f"cl:0:{server.id}"),
+                    button(t(lang, "btn_server"), f"cs:{server.id}"),
+                ]
+            )
+        keyboard += [
+            [
+                button(t(lang, "btn_projects"), f"pl:0:{server.id}"),
+                button(t(lang, "btn_instances"), f"il:0:{server.id}"),
+            ],
+            [button(t(lang, "btn_back"), "sv"), button(t(lang, "btn_menu"), "m")],
+        ]
+        return Screen("\n".join(lines), keyboard)
 
     def containers_entry(self, db: Session, ctx, page: int, server_id: int | None):
         if server_id is None:
             servers = [s for s in ServerRepository(db).list_all() if s.paired]
             if len(servers) > 1:
-                return self.servers_list(db, ctx)
+                return self.servers_list(db, ctx, target="cl:0:{id}")
             server_id = servers[0].id if servers else ServerRepository(db).local().id
         return self.containers_list(db, ctx, page, server_id)
 
@@ -176,7 +224,7 @@ class ContainerMenu:
         )
         if multiple:
             keyboard.append(
-                [button(t(lang, "btn_servers"), "sv"), button(t(lang, "btn_menu"), "m")]
+                [button(t(lang, "btn_back"), f"sh:{server_id}"), button(t(lang, "btn_menu"), "m")]
             )
         else:
             keyboard.append([button(t(lang, "btn_menu"), "m")])
@@ -233,7 +281,7 @@ class ContainerMenu:
             [
                 [
                     button(t(lang, "btn_refresh"), f"cs:{server_id}"),
-                    button(t(lang, "btn_back"), f"cl:0:{server_id}"),
+                    button(t(lang, "btn_back"), f"sh:{server_id}"),
                 ],
                 [button(t(lang, "btn_menu"), "m")],
             ],

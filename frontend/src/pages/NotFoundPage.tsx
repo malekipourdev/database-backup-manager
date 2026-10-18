@@ -9,14 +9,16 @@ export function NotFoundPage() {
   return (
     <Stack gap="sm" mt={48} align="flex-start">
       <span className="cl-hero-icon">
-        <CloudSlash size={28} />
+        <CloudSlash size={28} aria-hidden />
       </span>
       <Text ff="monospace" c="var(--color-neutral-500)">
         404
       </Text>
-      <Title order={2}>{t("notFound.title")}</Title>
+      <Title order={1} size="h2">
+        {t("notFound.title")}
+      </Title>
       <Text>{t("notFound.body")}</Text>
-      <Button component={Link} to="/instances">
+      <Button component={Link} to="/overview">
         {t("notFound.home")}
       </Button>
     </Stack>

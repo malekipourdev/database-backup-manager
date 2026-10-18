@@ -8,7 +8,7 @@ import time
 import pyotp
 import segno
 
-ISSUER = "MySQL Backup Panel"
+ISSUER = "DevOps Manager"
 STEP_SECONDS = 30
 # Accept the previous and next step too, for phones whose clock is a little off.
 VALID_WINDOW = 1

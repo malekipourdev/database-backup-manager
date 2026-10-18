@@ -64,7 +64,7 @@ def test_recovery_codes_are_single_use():
 
 def test_qr_code_is_inline_svg():
     uri = totp.provisioning_uri(totp.new_secret(), "admin")
-    assert uri.startswith("otpauth://totp/MySQL%20Backup%20Panel:admin?secret=")
+    assert uri.startswith("otpauth://totp/DevOps%20Manager:admin?secret=")
     assert totp.qr_svg_data_uri(uri).startswith("data:image/svg+xml")
 
 

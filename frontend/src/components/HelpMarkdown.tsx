@@ -146,7 +146,13 @@ export function HelpMarkdown({ source }: { source: string }) {
         switch (block.kind) {
           case "heading":
             return (
-              <Title key={index} order={block.level === 2 ? 4 : 5} mt="lg" mb={6}>
+              <Title
+                key={index}
+                order={block.level === 2 ? 3 : 4}
+                size={block.level === 2 ? "h4" : "h5"}
+                mt="lg"
+                mb={6}
+              >
                 {inline(block.text)}
               </Title>
             );

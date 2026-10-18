@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "MySQL Backup Panel",
+    "appName": "DevOps Manager",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -8,20 +8,40 @@
     "back": "Back",
     "loading": "Loading…",
     "retry": "Retry",
-    "notAvailable": "—"
+    "notAvailable": "—",
+    "close": "Close"
   },
   "nav": {
+    "overview": "Overview",
     "instances": "Databases",
-    "backups": "Backups",
-    "settings": "Settings",
+    "backups": "Backup history",
     "schedules": "Schedules",
-    "bots": "Bots",
-    "notifications": "Notifications",
-    "account": "Account",
-    "containers": "Containers",
+    "settings": "Storage & retention",
     "projects": "Projects",
+    "containers": "Containers",
     "servers": "Servers",
-    "help": "Help"
+    "notifications": "Alerts",
+    "bots": "Bale & Telegram bots",
+    "account": "Account security",
+    "help": "Help",
+    "groups": {
+      "data": "Databases & backups",
+      "apps": "Applications",
+      "infra": "Infrastructure",
+      "alerts": "Alerts & chat access",
+      "system": "System"
+    },
+    "sub": {
+      "new": "New",
+      "edit": "Edit",
+      "details": "Details",
+      "article": "Article"
+    },
+    "keywords": {
+      "settings": "settings S3 remote storage retention compression",
+      "bots": "bot bale telegram chat admins link code",
+      "account": "two-step 2FA google authenticator password recovery"
+    }
   },
   "language": {
     "label": "Language",
@@ -34,7 +54,7 @@
   },
   "auth": {
     "title": "Sign in",
-    "subtitle": "Sign in with your admin account to manage database backups.",
+    "subtitle": "Sign in with your admin account to manage your servers, databases, containers and deployments.",
     "username": "Username",
     "password": "Password",
     "signIn": "Sign in",
@@ -260,7 +280,7 @@
   "notFound": {
     "title": "Page not found",
     "body": "The page you are looking for does not exist.",
-    "home": "Go to instances"
+    "home": "Go to the overview"
   },
   "units": {
     "B": "{{n}} B",
@@ -365,7 +385,7 @@
     "deletedLocalKept": "The file on the server was deleted; the remote copy was kept."
   },
   "settings": {
-    "title": "Backup settings",
+    "title": "Storage & retention",
     "globalHint": "Defaults for all instances. Each instance can override them on its page.",
     "instanceTitle": "Backup settings for this instance",
     "instanceHint": "Unchecked fields use the global setting.",
@@ -533,7 +553,7 @@
     "inheritRetention": "Unchecked: the global retention policy applies."
   },
   "bots": {
-    "title": "Bots (Bale and Telegram)",
+    "title": "Bale & Telegram bots",
     "hint": "Manage backups from a chat with inline buttons: status, servers, start backups, history, schedules and retention. Only the admins registered below can use a bot; anyone else only sees their own numeric ID. Bots connect out to the messenger (long polling), so the panel needs no public address.",
     "platform": {
       "bale": "Bale",
@@ -616,7 +636,7 @@
     }
   },
   "alerts": {
-    "title": "Notifications and alerts",
+    "title": "Alerts",
     "hint": "Choose which events raise an alert and where it goes. Every alert is kept in the history below, with where it was delivered.",
     "never": "never",
     "severity": {
@@ -759,14 +779,21 @@
     }
   },
   "layout": {
-    "brand": "Backup Panel",
-    "brandSub": "MySQL · MariaDB",
-    "console": "Console",
-    "navigation": "Main navigation",
+    "brandSub": "Backups · Containers · Deploys",
+    "navigation": "Main menu",
     "accessLocal": "Local access (SSH tunnel)",
     "accessNetwork": "Network access",
     "loginLocal": "Access only through an SSH tunnel",
-    "loginNetwork": "Opened over the network"
+    "loginNetwork": "Opened over the network",
+    "quickNavigation": "Quick navigation",
+    "breadcrumbs": "You are here",
+    "skipToContent": "Skip to content",
+    "menu": "Menu",
+    "search": "Go to…",
+    "searchPlaceholder": "Search pages and servers",
+    "searchEmpty": "Nothing found",
+    "switchTo": "Switch to server “{{name}}”",
+    "twoFactorOn": "Two-step verification is on"
   },
   "account": {
     "title": "Account security",
@@ -1177,5 +1204,44 @@
     "allTopics": "All topics",
     "loadFailed": "The guide could not be loaded.",
     "button": "Help for this page"
+  },
+  "overview": {
+    "title": "Overview",
+    "subtitle": "The current server at a glance: its health, backups, containers and deploys",
+    "addDatabase": "Add database",
+    "addProject": "New project",
+    "server": "Server",
+    "serverUsage": "CPU {{cpu}} · RAM {{memory}} · disk {{disk}}",
+    "serverUsageUnavailable": "Usage unavailable: the agent does not answer",
+    "docker": "Docker {{version}}",
+    "backups": "Backups in the last 24 hours",
+    "backupsNote": "{{failed}} failed · {{running}} in progress",
+    "containers": "Containers",
+    "containersValue": "{{running}} of {{total}} running",
+    "containersProblems_one": "{{n}} with a problem",
+    "containersProblems_other": "{{n}} with problems",
+    "containersOk": "No problems",
+    "containersHint": "Needs the agent on this server",
+    "unavailable": "Unavailable",
+    "projects": "Projects",
+    "projectsNote": "{{n}} database connections on this server",
+    "projectsFailed_one": "{{n}} project's last deploy failed",
+    "projectsFailed_other": "{{n}} projects' last deploy failed",
+    "viewAll": "View all",
+    "recentBackups": "Recent backups",
+    "noBackups": "No backups yet.",
+    "recentDeploys": "Recent deploys",
+    "noDeploys": "No deploys yet.",
+    "attention": {
+      "title": "Needs attention",
+      "none": "Everything looks fine on this server.",
+      "server": "Server “{{name}}” is not reachable: {{error}}",
+      "backups_one": "{{n}} backup failed in the last 24 hours",
+      "backups_other": "{{n}} backups failed in the last 24 hours",
+      "container": "Container “{{name}}”: {{problem}}",
+      "containersUnavailable": "Containers are not available: {{reason}}",
+      "deploy": "The last deploy of “{{name}}” failed",
+      "database": "The connection test of “{{name}}” fails"
+    }
   }
 }

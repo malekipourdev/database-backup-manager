@@ -42,7 +42,7 @@ def test_formatting():
     assert format_size(5 * 1024**3, "fa") == "۵.۰ GB"
     assert format_duration(500, "en") == "< 1s"
     assert format_duration(3_725_000, "en") == "1h 2m"
-    assert t("fa", "status_instances", n=12) == "🖥 سرورها: ۱۲"
+    assert t("fa", "status_instances", n=12) == "🗄 پایگاه‌های داده: ۱۲"
 
 
 @pytest.mark.parametrize("event", sorted(EVENTS) + ["test"])

@@ -31,12 +31,13 @@ export function PageHeader({ title, subtitle, badge, actions, back, help }: Page
             c="var(--color-neutral-400)"
             style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            <Arrow size={13} />
+            <Arrow size={13} aria-hidden />
             {back.label}
           </Anchor>
         )}
         <Group gap="sm" wrap="nowrap">
-          <Title order={2} style={{ overflowWrap: "anywhere" }}>
+          {/* The page's one h1, sized as before; focus moves here on navigation. */}
+          <Title order={1} size="h2" style={{ overflowWrap: "anywhere" }} className="cl-page-title">
             {title}
           </Title>
           {badge}
@@ -50,7 +51,7 @@ export function PageHeader({ title, subtitle, badge, actions, back, help }: Page
                 radius="xl"
                 aria-label={t("help.button")}
               >
-                <Question size={18} />
+                <Question size={18} aria-hidden />
               </ActionIcon>
             </Tooltip>
           )}

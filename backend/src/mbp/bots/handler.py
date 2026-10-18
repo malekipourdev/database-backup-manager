@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.api.errors import ApiError
 from mbp.api.schemas import ScheduleIn
+from mbp.api.scope import ServerScope
 from mbp.backups.store import LocalBackupStore
 from mbp.bots.api import BotApi, BotApiError, Keyboard
 from mbp.bots.containers import ContainerMenu
@@ -31,8 +32,10 @@ from mbp.models import BackupRun, BotAdmin
 from mbp.repositories.backup_run_repository import BackupRunRepository, RunFilters
 from mbp.repositories.bot_repository import BotRepository
 from mbp.repositories.notification_repository import NotificationRepository
+from mbp.repositories.project_repository import ProjectRepository
 from mbp.repositories.remote_storage_repository import RemoteStorageRepository
 from mbp.repositories.selection_repository import SelectionRepository
+from mbp.repositories.server_repository import ServerRepository
 from mbp.services.backup_service import BackupService
 from mbp.services.bot_service import BotService
 from mbp.services.instance_service import InstanceService
@@ -52,6 +55,15 @@ LEVELS = ("info", "warning", "error", "off")
 # What a link code looks like (see services.bot_service); anything else is not a code.
 LINK_CODE_RE = re.compile(r"[A-Za-z0-9]{8}")
 STATUS_ICONS = {"queued": "🕓", "running": "⏳", "success": "✅", "failed": "❌"}
+# Slash commands, in the order the messenger's command menu lists them.
+COMMANDS = ("menu", "status", "backups", "projects", "containers", "servers", "settings", "help")
+
+
+def command_of(text: str) -> str | None:
+    """The command of a message like "/status" or "/status@my_bot", lowercased; else None."""
+    if not text.startswith("/"):
+        return None
+    return text.split()[0][1:].split("@")[0].lower()
 
 
 @dataclass
@@ -167,7 +179,12 @@ class BotHandler(ContainerMenu, ProjectMenu):
                         t(ctx.lang, "error", message=self._error(ctx, exc.code)), self._home(ctx)
                     )
             if screen is None:
-                screen = self.status(db, ctx) if text.startswith("/status") else self.menu(ctx)
+                try:
+                    screen = self.command(db, ctx, command_of(text))
+                except ApiError as exc:
+                    screen = Screen(
+                        t(ctx.lang, "error", message=self._error(ctx, exc.code)), self._home(ctx)
+                    )
             db.commit()
         self.api.send_message(chat_id, screen.text, screen.keyboard)
 
@@ -221,8 +238,10 @@ class BotHandler(ContainerMenu, ProjectMenu):
 
         routes: dict[str, Callable[[], Screen | None]] = {
             "m": lambda: self.menu(ctx),
+            "h": lambda: self.help(ctx),
             "st": lambda: self.status(db, ctx),
-            "il": lambda: self.instances(db, ctx, num(0)),
+            "bk": lambda: self.backups_menu(db, ctx),
+            "il": lambda: self.instances(db, ctx, num(0), num(1)),
             "i": lambda: self.instance(db, ctx, num(0)),
             "it": lambda: self.test_instance(db, ctx, num(0)),
             "ba": lambda: self.confirm_backup_all(db, ctx, num(0)),
@@ -246,6 +265,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
             "nl": lambda: self.set_level(db, ctx, args[0] if args else ""),
             "lg": lambda: self.toggle_language(db, ctx),
             "sv": lambda: self.servers_list(db, ctx),
+            "sh": lambda: self.server_hub(db, ctx, num(0)),
             "cl": lambda: self.containers_entry(db, ctx, num(0), num(1) if len(args) > 1 else None),
             "cs": lambda: self.server_status(db, ctx, num(0)),
             "c": lambda: self.container_view(db, ctx, args[0] if args else ""),
@@ -254,7 +274,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
                 db, ctx, args[0] if args else "", args[1] if len(args) > 1 else "", chat_id
             ),
             "cx": lambda: self.cancel_action(db, ctx, args[0] if args else "", chat_id),
-            "pl": lambda: self.projects_list(db, ctx, num(0)),
+            "pl": lambda: self.projects_list(db, ctx, num(0), num(1)),
             "p": lambda: self.project_view(db, ctx, num(0)),
             "ph": lambda: self.project_history(db, ctx, num(0)),
             "pd": lambda: self.ask_deploy(db, ctx, num(0), chat_id),
@@ -302,18 +322,55 @@ class BotHandler(ContainerMenu, ProjectMenu):
 
     # --- screens ---
 
+    def command(self, db: Session, ctx: Ctx, command: str | None) -> Screen:
+        """The answer to a typed message: a command's screen, else the main menu."""
+        screens: dict[str, Callable[[], Screen]] = {
+            "status": lambda: self.status(db, ctx),
+            "backups": lambda: self.backups_menu(db, ctx),
+            "projects": lambda: self.projects_list(db, ctx, 0),
+            "containers": lambda: self.containers_entry(db, ctx, 0, None),
+            "servers": lambda: self.servers_list(db, ctx),
+            "settings": lambda: self.settings(db, ctx),
+            "help": lambda: self.help(ctx),
+        }
+        return screens.get(command or "", lambda: self.menu(ctx))()
+
     def menu(self, ctx: Ctx) -> Screen:
+        """The main menu, by area: overview, data, applications, servers, settings."""
         lang = ctx.lang
         return Screen(
             t(lang, "menu_title"),
             [
-                [button(t(lang, "btn_status"), "st"), button(t(lang, "btn_instances"), "il:0")],
-                [button(t(lang, "btn_runs"), "rl:0:0"), button(t(lang, "btn_schedules"), "sl:0")],
+                [button(t(lang, "btn_status"), "st")],
+                [button(t(lang, "btn_backups_menu"), "bk")],
                 [
-                    button(t(lang, "btn_containers"), "cl:0"),
                     button(t(lang, "btn_projects"), "pl:0"),
+                    button(t(lang, "btn_containers"), "cl:0"),
                 ],
-                [button(t(lang, "btn_retention"), "rt"), button(t(lang, "btn_settings"), "ns")],
+                [button(t(lang, "btn_servers"), "sv"), button(t(lang, "btn_settings"), "ns")],
+                [button(t(lang, "btn_help"), "h")],
+            ],
+        )
+
+    def help(self, ctx: Ctx) -> Screen:
+        return Screen(t(ctx.lang, "help_text"), self._home(ctx))
+
+    def backups_menu(self, db: Session, ctx: Ctx) -> Screen:
+        """Everything about databases and their backups, with a one-line state of each."""
+        lang = ctx.lang
+        schedules = ScheduleService(db).list_all()
+        return Screen(
+            t(
+                lang,
+                "backups_menu_title",
+                instances=len(InstanceService(db).list()),
+                active=len(BackupRunRepository(db).list_active()),
+                schedules=sum(1 for s in schedules if s.enabled),
+            ),
+            [
+                [button(t(lang, "btn_instances"), "il:0"), button(t(lang, "btn_runs"), "rl:0:0")],
+                [button(t(lang, "btn_schedules"), "sl:0"), button(t(lang, "btn_retention"), "rt")],
+                [button(t(lang, "btn_menu"), "m")],
             ],
         )
 
@@ -387,15 +444,43 @@ class BotHandler(ContainerMenu, ProjectMenu):
             )
         else:
             lines.append(t(lang, "status_next_none"))
+        lines.append("")
+        servers = [s for s in ServerRepository(db).list_all() if s.paired]
+        unreachable = sum(1 for s in servers if s.last_error)
+        lines.append(
+            t(
+                lang,
+                "status_servers",
+                n=len(servers),
+                problems=t(lang, "status_servers_problems", n=unreachable) if unreachable else "",
+            )
+        )
+        projects = ProjectRepository(db)
+        failed = sum(1 for d in projects.last_deployments().values() if d.status == "failed")
+        lines.append(
+            t(
+                lang,
+                "status_projects",
+                n=len(projects.list_all()),
+                failed=t(lang, "status_projects_failed", n=failed) if failed else "",
+            )
+        )
         return Screen(
             "\n".join(lines),
             [[button(t(lang, "btn_refresh"), "st"), button(t(lang, "btn_menu"), "m")]],
         )
 
-    def instances(self, db: Session, ctx: Ctx, page: int) -> Screen:
-        items = InstanceService(db).list()
+    def instances(self, db: Session, ctx: Ctx, page: int, server_id: int = 0) -> Screen:
+        """The databases, of every server or (with `server_id`) of one."""
+        server = self._server(db, server_id) if server_id else None
+        where = ServerScope(server.id, server.is_local).instances() if server else None
+        items = InstanceService(db).list(where)
+        back = [
+            button(t(ctx.lang, "btn_back"), f"sh:{server_id}" if server else "bk"),
+            button(t(ctx.lang, "btn_menu"), "m"),
+        ]
         if not items:
-            return Screen(t(ctx.lang, "instances_empty"), self._home(ctx))
+            return Screen(t(ctx.lang, "instances_empty"), [back])
         chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
         keyboard: Keyboard = []
         for instance in chunk:
@@ -407,9 +492,15 @@ class BotHandler(ContainerMenu, ProjectMenu):
             keyboard.append([button(f"🖥 {instance.name}{kind}", f"i:{instance.id}")])
         pager = self._pager(ctx, "il", page, len(items), PAGE_SIZE)
         if pager:
+            for item in pager:
+                item["callback_data"] += f":{server_id}"
             keyboard.append(pager)
-        keyboard.append([button(t(ctx.lang, "btn_menu"), "m")])
-        return Screen(t(ctx.lang, "instances_title", n=len(items)), keyboard)
+        keyboard.append(back)
+        if server:
+            title = t(ctx.lang, "instances_title_server", server=server.name, n=len(items))
+        else:
+            title = t(ctx.lang, "instances_title", n=len(items))
+        return Screen(title, keyboard)
 
     def instance(self, db: Session, ctx: Ctx, instance_id: int) -> Screen:
         lang = ctx.lang
@@ -572,7 +663,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
         scope = ""
         if instance_id:
             scope = t(lang, "runs_scope", name=InstanceService(db).get(instance_id).name)
-        back_target = f"i:{instance_id}" if instance_id else "m"
+        back_target = f"i:{instance_id}" if instance_id else "bk"
         if not items:
             return Screen(
                 t(lang, "runs_empty"),
@@ -766,7 +857,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
         if instance_id:
             scope = t(lang, "runs_scope", name=InstanceService(db).get(instance_id).name)
         back = [
-            button(t(lang, "btn_back"), f"i:{instance_id}" if instance_id else "m"),
+            button(t(lang, "btn_back"), f"i:{instance_id}" if instance_id else "bk"),
             button(t(lang, "btn_menu"), "m"),
         ]
         if not items:
@@ -891,7 +982,10 @@ class BotHandler(ContainerMenu, ProjectMenu):
         ]
         return Screen(
             "\n".join(lines),
-            [[button(t(ctx.lang, "btn_preview"), "rtp")], [button(t(ctx.lang, "btn_menu"), "m")]],
+            [
+                [button(t(ctx.lang, "btn_preview"), "rtp")],
+                [button(t(ctx.lang, "btn_back"), "bk"), button(t(ctx.lang, "btn_menu"), "m")],
+            ],
         )
 
     def retention_preview(self, db: Session, ctx: Ctx) -> Screen:

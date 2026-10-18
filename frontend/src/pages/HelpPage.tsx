@@ -208,7 +208,9 @@ function Article({ guide, id }: { guide: HelpCategory[]; id: string }) {
         </Text>
       </Group>
       <Group justify="space-between" align="flex-start" mb="xs">
-        <Title order={3}>{article.title}</Title>
+        <Title order={2} size="h3">
+          {article.title}
+        </Title>
         {article.page && (
           <Button component={Link} to={article.page} variant="light" size="xs">
             {t("help.openPage")}

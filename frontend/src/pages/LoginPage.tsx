@@ -33,7 +33,7 @@ export function LoginPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const me = useMe();
-  const from = (location.state as LocationState | null)?.from ?? "/instances";
+  const from = (location.state as LocationState | null)?.from ?? "/overview";
 
   const form = useForm({
     initialValues: { username: "", password: "" },
@@ -111,7 +111,7 @@ export function LoginPage() {
               >
                 <Stack gap="md">
                   <div>
-                    <Title order={3} fz={22}>
+                    <Title order={1} fz={22}>
                       {t("auth.twoFactorTitle")}
                     </Title>
                     <Text size="sm" mt={6} c="var(--color-neutral-300)">
@@ -188,7 +188,7 @@ export function LoginPage() {
               <form onSubmit={form.onSubmit((values) => signIn.mutate(values))} noValidate>
                 <Stack gap="md">
                   <div>
-                    <Title order={3} fz={22}>
+                    <Title order={1} fz={22}>
                       {t("auth.title")}
                     </Title>
                     <Text size="sm" mt={6} c="var(--color-neutral-300)">
