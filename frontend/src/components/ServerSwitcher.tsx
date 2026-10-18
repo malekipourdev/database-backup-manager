@@ -51,7 +51,7 @@ export function ServerSwitcher({ compact = false }: { compact?: boolean }) {
   const label = server.kind === "local" ? t("servers.local") : `${server.host}:${server.port}`;
 
   return (
-    <Menu position={compact ? "bottom-end" : "bottom-start"} width={260} withinPortal shadow="md">
+    <Menu position={compact ? "bottom-end" : "top-start"} width={260} withinPortal shadow="md">
       <Menu.Target>
         {compact ? (
           <UnstyledButton

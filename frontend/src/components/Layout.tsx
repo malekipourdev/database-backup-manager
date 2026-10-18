@@ -20,6 +20,7 @@ import { LANGUAGES } from "../i18n";
 import { NAV_GROUPS, type NavItem, TAB_ITEMS, isActive, locate } from "../navigation";
 import { CurrentServerProvider, useCurrentServer } from "../server/CurrentServer";
 import {
+  CaretDown,
   CaretLeft,
   CaretRight,
   HardDrives,
@@ -91,33 +92,97 @@ export function LanguageSeg({ short = false }: { short?: boolean }) {
   );
 }
 
-/** The grouped menu: in the sidebar, and in the phone's menu drawer. */
+const OPEN_GROUPS_KEY = "mbp.nav.open";
+
+function readOpenGroups(): Set<string> {
+  try {
+    const raw = localStorage.getItem(OPEN_GROUPS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : []);
+  } catch {
+    return new Set(); // storage can be unavailable; every group then starts closed
+  }
+}
+
+function storeOpenGroups(open: Set<string>): void {
+  try {
+    localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...open]));
+  } catch {
+    // Remembering which groups are open is a convenience only.
+  }
+}
+
+/**
+ * The grouped menu: in the sidebar, and in the phone's menu drawer. Groups fold; the one
+ * holding the current page opens by itself, and the others stay as the admin left them.
+ */
 function NavMenu({ idPrefix }: { idPrefix: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { pathname } = useLocation();
+  const [open, setOpen] = useState(readOpenGroups);
+  const current = locate(pathname).group?.id;
+  const Caret = i18n.dir(i18n.language) === "rtl" ? CaretLeft : CaretRight;
+
+  useEffect(() => {
+    if (!current) return;
+    setOpen((previous) => {
+      if (previous.has(current)) return previous;
+      const next = new Set(previous).add(current);
+      storeOpenGroups(next);
+      return next;
+    });
+  }, [current]);
+
+  const toggle = (id: string) =>
+    setOpen((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      storeOpenGroups(next);
+      return next;
+    });
+
   return (
     <div className="cl-nav">
       {NAV_GROUPS.map((group) => {
+        const items = (
+          <ul id={`${idPrefix}-${group.id}-items`}>
+            {group.items.map((item) => (
+              <li key={item.to}>
+                <NavLink item={item} active={isActive(item, pathname)} />
+              </li>
+            ))}
+          </ul>
+        );
+        if (!group.label) {
+          return (
+            <div key={group.id} className="cl-nav-group">
+              {items}
+            </div>
+          );
+        }
+        const expanded = open.has(group.id);
         const headingId = `${idPrefix}-${group.id}`;
         return (
           <div
             key={group.id}
             className="cl-nav-group"
-            role={group.label ? "group" : undefined}
-            aria-labelledby={group.label ? headingId : undefined}
+            role="group"
+            aria-labelledby={headingId}
+            data-open={expanded || undefined}
           >
-            {group.label && (
-              <span id={headingId} className="cl-nav-heading">
-                {t(group.label)}
-              </span>
-            )}
-            <ul>
-              {group.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink item={item} active={isActive(item, pathname)} />
-                </li>
-              ))}
-            </ul>
+            <UnstyledButton
+              id={headingId}
+              className="cl-nav-heading"
+              aria-expanded={expanded}
+              aria-controls={`${idPrefix}-${group.id}-items`}
+              data-current={group.id === current || undefined}
+              onClick={() => toggle(group.id)}
+            >
+              <span>{t(group.label)}</span>
+              {expanded ? <CaretDown size={12} aria-hidden /> : <Caret size={12} aria-hidden />}
+            </UnstyledButton>
+            {expanded && items}
           </div>
         );
       })}
@@ -331,11 +396,11 @@ function PanelLayout() {
 
       <aside className="cl-sidebar">
         <Brand />
-        <ServerSwitcher />
+        <SearchButton />
         <nav aria-label={t("layout.navigation")} className="cl-sidebar-nav">
           <NavMenu idPrefix="side" />
         </nav>
-        <SearchButton />
+        <ServerSwitcher />
       </aside>
 
       <div className="cl-main">

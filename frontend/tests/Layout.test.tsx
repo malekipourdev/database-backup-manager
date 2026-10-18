@@ -2,7 +2,7 @@ import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { Layout } from "../src/components/Layout";
@@ -52,14 +52,35 @@ describe("where a page is in the menu", () => {
 });
 
 describe("the panel's frame", () => {
+  afterEach(() => localStorage.removeItem("mbp.nav.open"));
+
   it("groups the menu, marks the current page and names it in the title", async () => {
     renderLayout("/backups");
     const menu = await screen.findByRole("navigation", { name: "Main menu" });
     const group = within(menu).getByRole("group", { name: "Databases & backups" });
     const current = within(group).getByRole("link", { name: "Backup history" });
     expect(current).toHaveAttribute("aria-current", "page");
-    expect(within(menu).getByRole("group", { name: "Applications" })).toBeInTheDocument();
-    expect(within(menu).getByRole("link", { name: "Servers" })).toHaveAttribute("href", "/servers");
+    // Groups run from the widest scope down.
+    expect(
+      within(menu)
+        .getAllByRole("group")
+        .map((g) => g.getAttribute("aria-labelledby")),
+    ).toEqual(["side-infra", "side-apps", "side-data", "side-alerts", "side-system"]);
+    // Only the current page's group is open; the others fold.
+    const apps = within(menu).getByRole("button", { name: "Applications" });
+    expect(apps).toHaveAttribute("aria-expanded", "false");
+    expect(within(menu).queryByRole("link", { name: "Projects" })).toBeNull();
+    await userEvent.click(apps);
+    expect(apps).toHaveAttribute("aria-expanded", "true");
+    expect(within(menu).getByRole("link", { name: "Projects" })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
+    const data = within(menu).getByRole("button", { name: "Databases & backups" });
+    await userEvent.click(data);
+    expect(within(menu).queryByRole("link", { name: "Backup history" })).toBeNull();
+    // The choice is remembered.
+    expect(JSON.parse(localStorage.getItem("mbp.nav.open")!)).toEqual(["apps"]);
 
     const crumbs = screen.getByRole("navigation", { name: "You are here" });
     expect(crumbs).toHaveTextContent("Databases & backups");
@@ -89,6 +110,7 @@ describe("the panel's frame", () => {
     expect(open).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(open);
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
+    await userEvent.click(within(drawer).getByRole("button", { name: "Alerts & chat access" }));
     expect(within(drawer).getByRole("link", { name: "Alerts" })).toBeInTheDocument();
     expect(within(drawer).getByRole("link", { name: "Servers" })).toHaveAttribute(
       "aria-current",

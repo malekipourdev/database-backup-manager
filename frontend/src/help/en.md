@@ -7,28 +7,28 @@ DevOps Manager backs up **MySQL** and **MariaDB** databases, verifies and keeps 
 
 ## The current server
 
-The panel can manage several servers. At the top of the side menu (on a phone, the server name button at the top of the screen) is the **Current server** card: whichever server is chosen there, the Overview, Databases, Backup history, Schedules, Projects and Containers show **only that server's**. Everything else is shared by all servers. ([About the current server](#current-server))
+The panel can manage several servers. At the bottom of the side menu (on a phone, the server name button at the top of the screen) is the **Current server** card: whichever server is chosen there, the Overview, Databases, Backup history, Schedules, Projects and Containers show **only that server's**. Everything else is shared by all servers. ([About the current server](#current-server))
 
 ## The menu
 
-The menu is grouped by what you are working on:
+The menu is grouped from the widest scope down: servers, then applications, then databases. Groups fold: press a group's name to open or close it; the group of the current page opens by itself.
 
 | Section              | Item                 | Used for                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
 |                      | Overview             | (current server) Health, the last day's backups, containers, deploys, and problems |
+| Infrastructure       | Servers              | Add, connect and check the servers the panel manages                               |
+| Applications         | Projects             | (current server) Deploy applications from git with docker compose                  |
+|                      | Containers           | (current server) See and control Docker containers                                 |
 | Databases & backups  | Databases            | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
 |                      | Backup history       | (current server) Download, delete, retry uploads                                   |
 |                      | Schedules            | (current server) Automatic backups at set times                                    |
 |                      | Storage & retention  | Backup settings, remote storage (S3) and retention                                 |
-| Applications         | Projects             | (current server) Deploy applications from git with docker compose                  |
-|                      | Containers           | (current server) See and control Docker containers                                 |
-| Infrastructure       | Servers              | Add, connect and check the servers the panel manages                               |
 | Alerts & chat access | Alerts               | Alerts to Bale, Telegram and a webhook                                             |
 |                      | Bale & Telegram bots | Manage everything from Bale and Telegram                                           |
 | System               | Account security     | Two-step verification and recovery codes                                           |
 |                      | Help                 | This guide                                                                         |
 
-**Go to…** (bottom of the side menu, or `Ctrl+K`, or `/`) finds any page or switches server by typing a few letters.
+**Go to…** (top of the side menu, or `Ctrl+K`, or `/`) finds any page or switches server by typing a few letters.
 
 ## Where to begin?
 
@@ -109,11 +109,11 @@ Then open `http://localhost:8080`. If port 8080 is taken on your computer, use f
 @title Language, layout and mobile
 @summary Switching language, using the panel on a phone, and searching this guide.
 
-- **Current server:** the card at the top of the side menu (on a phone, the server name button at the top). [More](#current-server)
+- **Current server:** the card at the bottom of the side menu (on a phone, the server name button at the top). [More](#current-server)
 - **Go to…:** press Ctrl+K (or /) anywhere, type part of a page or server name and press Enter.
 - **Keyboard:** Tab first reaches "Skip to content"; after opening a page, the focus is on its title.
 - **Language:** the "فارسی / English" switch at the top. Your choice is remembered in this browser. Each bot admin picks the bot's language in the bot itself.
-- **Mobile:** on small screens the bottom bar holds Overview, Databases, Projects and Containers; **Menu** opens every other page, the language and sign out.
+- **Mobile:** on small screens the bottom bar holds Overview, Containers, Projects and Databases; **Menu** opens every other page, the language and sign out.
 - **Session:** after 30 minutes of inactivity you sign in again.
 - **Help:** most pages have a "?" button next to their title that opens the guide for that page. This page can also be searched.
 
@@ -481,8 +481,8 @@ Commands, also listed in the messenger's command menu: `/menu`, `/status`, `/bac
 
 @@article current-server
 @title The current server, and switching
-@summary The panel always works on one server; switch it from the card at the top of the menu.
-The panel always works on **one server**: the "current server". Its name and state are on the card at the top of the side menu (on a phone, the server name button at the top). Press the card to:
+@summary The panel always works on one server; switch it from the card at the bottom of the menu.
+The panel always works on **one server**: the "current server". Its name and state are on the card at the bottom of the side menu (on a phone, the server name button at the top). Press the card to:
 
 - **Choose another server.** Servers that are not connected yet cannot be chosen.
 - Open **Manage all servers**: add, connect, edit and remove servers.
@@ -932,7 +932,7 @@ Grant the user `SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES`.
 
 ## How do I work on another server?
 
-Press the **Current server** card at the top of the menu and choose the server ([guide](#current-server)).
+Press the **Current server** card at the bottom of the menu and choose the server ([guide](#current-server)).
 
 ## A database or project I added is not shown.
 
