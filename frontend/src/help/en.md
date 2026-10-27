@@ -603,6 +603,37 @@ If a token leaked or was lost, press "New token" on the server's card. The old t
 - Removing it from the panel does not remove the agent. On that server run: `docker compose -f docker-compose.agent.yml down -v`
 - The panel's own server cannot be removed, but it can be renamed.
 
+@@article webservers /webservers
+@title Web servers (nginx and Apache)
+@summary The domains that nginx or Apache serve on a server, read from their configuration.
+
+**Web servers** (under Infrastructure) shows the nginx and Apache installed on the current server and every domain they serve. For now the page only reads: it never changes a file or restarts a web server.
+
+## What the list shows
+
+- **Domain:** each `server_name` (nginx) or `ServerName` / `ServerAlias` (Apache). A block without a name is shown as "Any other name (catch-all)".
+- **Ports and HTTPS:** from `listen` or `<VirtualHost *:443>`. "HTTPS (HTTP redirects)" means port 80 only sends visitors to HTTPS. Hover the badge to see the certificate file.
+- **Serves:** the proxy address (`proxy_pass`, `ProxyPass`, with the servers of an nginx `upstream`), PHP-FPM (`fastcgi_pass`), a redirect, or the folder of files (`root`, `DocumentRoot`).
+- **Defined in:** the file and line, to find it on the server.
+- **Disabled:** sites in `sites-available` that are not linked in `sites-enabled`; shown under "All".
+
+## How it works
+
+The agent reads the server's `/etc` (mounted read-only) starting from `nginx.conf`, `apache2.conf` or `httpd.conf`, and follows `include` the way the web servers do. A file it cannot read or find is listed as a warning on the web server's card.
+
+## Turning it on
+
+The agent needs the read-only mount `/etc:/host/etc:ro`, already in the compose files. After updating the panel:
+
+```bash
+git pull
+docker compose up -d --build agent
+```
+
+On another server, rebuild its agent as in [Updating an agent](#server-maintenance).
+
+> The list shows the configuration on disk. Changes not yet loaded with `nginx -s reload` or `systemctl reload apache2` are already shown here.
+
 @@category containers containers Containers
 
 @@article containers-enable /containers

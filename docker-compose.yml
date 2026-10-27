@@ -70,6 +70,9 @@ services:
       # Deployed projects, at the same path as on the host: relative bind mounts in their
       # compose files ("./data:/data") then point to the right host directories.
       - ${MBP_PROJECTS_DIR:-/opt/mbp-projects}:${MBP_PROJECTS_DIR:-/opt/mbp-projects}
+      # The host's /etc, read-only: the web servers' configuration (nginx, Apache) for the
+      # Web servers page. Nothing there is ever changed.
+      - /etc:/host/etc:ro
     tmpfs:
       - /tmp
     read_only: true

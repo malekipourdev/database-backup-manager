@@ -27,6 +27,9 @@ services:
       - ${MBP_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       # Deployed projects, at the same path as on the host (see docker-compose.yml).
       - ${MBP_PROJECTS_DIR:-/opt/mbp-projects}:${MBP_PROJECTS_DIR:-/opt/mbp-projects}
+      # The host's /etc, read-only: the web servers' configuration (nginx, Apache) for the
+      # Web servers page. Nothing there is ever changed.
+      - /etc:/host/etc:ro
       # The agent's TLS certificate, pinned by the panel: keep it across rebuilds.
       - mbp-agent-data:/data
     tmpfs:

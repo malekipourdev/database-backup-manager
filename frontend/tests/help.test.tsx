@@ -32,6 +32,7 @@ const PAGES = [
   /^\/schedules$/,
   /^\/servers$/,
   /^\/containers$/,
+  /^\/webservers$/,
   /^\/projects(\/new)?$/,
   /^\/notifications$/,
   /^\/bots$/,
