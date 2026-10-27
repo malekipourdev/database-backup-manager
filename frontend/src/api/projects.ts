@@ -44,6 +44,9 @@ export interface Project {
   backup_instance_id: number | null;
   backup_databases: string[];
   backup_required: boolean;
+  /** After a successful deploy, proxied to web_target by the server's web server. */
+  web_domains: string[];
+  web_target: string | null;
   created_at: string;
   updated_at: string;
   last_deployment: DeploymentSummary | null;
@@ -66,6 +69,8 @@ export interface ProjectInput {
   backup_instance_id: number | null;
   backup_databases: string[];
   backup_required: boolean;
+  web_domains: string[];
+  web_target: string | null;
 }
 
 export interface ProjectState {

@@ -58,6 +58,11 @@ class ProjectService:
         return project
 
     def _check(self, data: dict, project: Project | None) -> None:
+        domains = data.get("web_domains", project.web_domains if project else None)
+        target = data.get("web_target", project.web_target if project else None)
+        if bool(domains) != bool(target):
+            # Both or neither: a domain needs somewhere to send its visitors.
+            raise ApiError(422, "validation_error", fields={"web_target": "web_target_required"})
         fields: dict[str, str] = {}
         name = data.get("name", project.name if project else "")
         if not valid_project(name) or name in RESERVED_NAMES:
@@ -134,6 +139,8 @@ class ProjectService:
             "backup_instance_id",
             "backup_databases",
             "backup_required",
+            "web_domains",
+            "web_target",
         ):
             if field in data:
                 setattr(project, field, data[field])

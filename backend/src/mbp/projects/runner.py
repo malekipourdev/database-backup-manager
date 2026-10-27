@@ -15,6 +15,7 @@ from mbp.notifications.events import Event
 from mbp.projects.service import credential_of, env_of
 from mbp.repositories.project_repository import ProjectRepository
 from mbp.services.backup_service import BackupService
+from mbp.webservers.service import ensure_project_site
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ class DeployRunner:
                 "auth_type": project.auth_type,
                 "credential": credential_of(project),
             }
+            web = (list(project.web_domains or []), project.web_target, deployment.actor)
             backup = (
                 project.backup_instance_id,
                 list(project.backup_databases or []),
@@ -136,7 +138,7 @@ class DeployRunner:
         self._update(deployment_id, status="running", started_at=utcnow())
         if backup[0] and backup[1]:
             self._backup(deployment_id, *backup)
-        self._deploy(deployment_id, server_id, payload)
+        self._deploy(deployment_id, server_id, payload, web)
 
     def _backup(self, deployment_id: int, instance_id: int, names: list[str], required: bool):
         self._update(
@@ -180,7 +182,13 @@ class DeployRunner:
         else:
             self._update(deployment_id, lines=["Backup done."])
 
-    def _deploy(self, deployment_id: int, server_id: int, payload: dict) -> None:
+    def _deploy(
+        self,
+        deployment_id: int,
+        server_id: int,
+        payload: dict,
+        web: tuple[list[str], str | None, str] = ([], None, ""),
+    ) -> None:
         try:
             agent = self.agents().get(server_id)
         except ApiError as exc:
@@ -214,6 +222,11 @@ class DeployRunner:
             )
             if view["status"] != "running":
                 if view["status"] == "success":
+                    domains, target, actor = web
+                    if domains and target:
+                        self._update(
+                            deployment_id, lines=[self._web_site(server_id, domains, target, actor)]
+                        )
                     self._finish(deployment_id, "success")
                 else:
                     raise _Failed(
@@ -223,6 +236,18 @@ class DeployRunner:
                     )
                 return
             time.sleep(self.poll_seconds)
+
+    def _web_site(self, server_id: int, domains: list[str], target: str, actor: str) -> str:
+        """The project's domains on the server's web server (a line for the log)."""
+        with self.session_factory() as db:
+            server = db.get(Server, server_id)
+            if server is None:
+                return "⚠ Web server: the server is gone."
+            try:
+                agent = self.agents().get(server_id)
+            except ApiError as exc:
+                return f"⚠ Web server: {exc.code}"
+            return ensure_project_site(db, agent, server, domains, target, actor=actor)
 
     def _finish(
         self,

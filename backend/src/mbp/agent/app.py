@@ -9,6 +9,7 @@ import hmac
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.concurrency import run_in_threadpool
@@ -33,6 +34,8 @@ from mbp.agent.docker import (
     summarize,
 )
 from mbp.agent.host import HostProbe
+from mbp.agent.hostexec import DockerHostRunner
+from mbp.agent.webmanage import WebManager
 from mbp.agent.webserver import scan as scan_webservers
 from mbp.backups import dump_command
 from mbp.security import agent_auth
@@ -65,6 +68,9 @@ class AgentSettings(BaseSettings):
     # The host's filesystem as mounted in the agent (its /etc at <host_root>/etc, read-only),
     # for the web servers' configuration.
     host_root: str = "/host"
+    # The image of the helper container that runs web server commands on the host; empty:
+    # the agent's own image.
+    host_helper_image: str = ""
 
     @property
     def remote(self) -> bool:
@@ -97,6 +103,48 @@ class RemoveRequest(BaseModel):
     down: bool = True
 
 
+WebKind = Literal["nginx", "apache"]
+
+
+class WebFile(BaseModel):
+    path: str = Field(max_length=500)
+    content: str = Field(max_length=200_000)
+    sha256: str | None = Field(default=None, max_length=64)
+
+
+class WebPath(BaseModel):
+    path: str = Field(max_length=500)
+
+
+class WebRestore(WebPath):
+    backup: str = Field(max_length=32)
+
+
+class WebEnabled(WebPath):
+    enabled: bool
+
+
+class WebMaintenance(WebPath):
+    on: bool
+
+
+class WebSiteSpec(BaseModel):
+    template: str = Field(max_length=20)
+    domains: list[str] = Field(max_length=50)
+    name: str | None = Field(default=None, max_length=63)
+    target: str | None = Field(default=None, max_length=300)
+    root: str | None = Field(default=None, max_length=300)
+    php_fpm: str | None = Field(default=None, max_length=300)
+    permanent: bool = True
+    keep_path: bool = True
+
+
+class CertbotIssue(BaseModel):
+    domains: list[str] = Field(max_length=50)
+    email: str | None = Field(default=None, max_length=254)
+    redirect: bool = True
+
+
 class StatsCache:
     """The previous CPU sample per container, for CPU% from one-shot stats."""
 
@@ -123,6 +171,7 @@ def create_agent_app(
     host: HostProbe | None = None,
     deployer: DeployManager | None = None,
     cert_fingerprint: str = "",
+    web: WebManager | None = None,
 ) -> FastAPI:
     """`cert_fingerprint`: of the agent's TLS certificate, in remote mode."""
     docker = docker or DockerClient(settings.docker_host)
@@ -140,6 +189,9 @@ def create_agent_app(
         settings.projects_dir,
         protected_projects=protected_projects,
         git_protocols=settings.git_protocols,
+    )
+    web = web or WebManager(
+        settings.host_root, DockerHostRunner(docker, settings.host_helper_image)
     )
     token = settings.token()
     remote = settings.remote
@@ -319,6 +371,91 @@ def create_agent_app(
     @app.get("/v1/webservers", dependencies=auth)
     def webservers() -> dict:
         return scan_webservers(settings.host_root)
+
+    @app.get("/v1/webservers/status", dependencies=auth)
+    def web_status() -> dict:
+        return web.status()
+
+    @app.get("/v1/webservers/certificates", dependencies=auth)
+    def web_certificates() -> dict:
+        return web.certificates()
+
+    @app.get("/v1/webservers/php-sockets", dependencies=auth)
+    def web_php_sockets() -> dict:
+        return web.php_sockets()
+
+    @app.get("/v1/webservers/certbot", dependencies=auth)
+    def web_certbot() -> dict:
+        return web.certbot()
+
+    @app.post("/v1/webservers/certbot/renew", dependencies=auth)
+    def web_certbot_renew() -> dict:
+        return web.certbot_renew().view()
+
+    @app.get("/v1/webservers/jobs/{job_id}", dependencies=auth)
+    def web_job(job_id: str) -> dict:
+        job = web.jobs.get(job_id)
+        if job is None:
+            raise DockerError("job_not_found", 404)
+        return job.view()
+
+    @app.post("/v1/webservers/{kind}/test", dependencies=auth)
+    def web_test(kind: WebKind) -> dict:
+        return web.test(kind)
+
+    @app.post("/v1/webservers/{kind}/control/{action}", dependencies=auth)
+    def web_control(kind: WebKind, action: Literal["reload", "restart"]) -> dict:
+        return web.control(kind, action)
+
+    @app.get("/v1/webservers/{kind}/file", dependencies=auth)
+    def web_file(kind: WebKind, path: str = Query(max_length=500)) -> dict:
+        return web.read_file(kind, path)
+
+    @app.put("/v1/webservers/{kind}/file", dependencies=auth)
+    def web_write(kind: WebKind, body: WebFile) -> dict:
+        return web.write_file(kind, body.path, body.content, body.sha256)
+
+    @app.get("/v1/webservers/{kind}/backups", dependencies=auth)
+    def web_backups(kind: WebKind, path: str = Query(max_length=500)) -> dict:
+        return web.backups(kind, path)
+
+    @app.get("/v1/webservers/{kind}/backup", dependencies=auth)
+    def web_backup(
+        kind: WebKind, path: str = Query(max_length=500), backup: str = Query(max_length=32)
+    ) -> dict:
+        return {"content": web.read_backup(kind, path, backup)}
+
+    @app.post("/v1/webservers/{kind}/restore", dependencies=auth)
+    def web_restore(kind: WebKind, body: WebRestore) -> dict:
+        return web.restore(kind, body.path, body.backup)
+
+    @app.post("/v1/webservers/{kind}/enabled", dependencies=auth)
+    def web_enabled(kind: WebKind, body: WebEnabled) -> dict:
+        return web.set_enabled(kind, body.path, body.enabled)
+
+    @app.post("/v1/webservers/{kind}/maintenance", dependencies=auth)
+    def web_maintenance(kind: WebKind, body: WebMaintenance) -> dict:
+        return web.set_maintenance(kind, body.path, body.on)
+
+    @app.post("/v1/webservers/{kind}/sites", dependencies=auth)
+    def web_create(kind: WebKind, body: WebSiteSpec) -> dict:
+        return web.create_site(kind, body.model_dump())
+
+    @app.get("/v1/webservers/{kind}/logs", dependencies=auth)
+    def web_logs(
+        kind: WebKind,
+        path: str = Query(max_length=500),
+        lines: int = Query(default=200, ge=1, le=2000),
+    ) -> dict:
+        return web.logs(kind, path, lines)
+
+    @app.post("/v1/webservers/{kind}/certbot/issue", dependencies=auth)
+    def web_certbot_issue(kind: WebKind, body: CertbotIssue) -> dict:
+        return web.certbot_issue(kind, body.domains, body.email, body.redirect).view()
+
+    @app.post("/v1/webservers/{kind}/certbot/install", dependencies=auth)
+    def web_certbot_install(kind: WebKind) -> dict:
+        return web.certbot_install(kind).view()
 
     # --- databases on this server ---
 

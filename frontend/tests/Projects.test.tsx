@@ -37,6 +37,8 @@ const PROJECT = {
   backup_instance_id: null,
   backup_databases: [],
   backup_required: true,
+  web_domains: [],
+  web_target: null,
   created_at: "2026-10-12T07:00:00Z",
   updated_at: "2026-10-12T07:00:00Z",
   last_deployment: DEPLOYMENT,
@@ -89,6 +91,8 @@ describe("Projects", () => {
       "name",
       "repo_url",
       "server_id",
+      "web_domains",
+      "web_target",
     ]);
     expect(JSON.parse(String(post[1]!.body))).toMatchObject({
       name: "shop",

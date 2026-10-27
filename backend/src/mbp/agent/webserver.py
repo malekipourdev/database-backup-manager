@@ -31,6 +31,10 @@ NGINX_BACKENDS = {
     "scgi_pass": "scgi",
 }
 _MAGIC = re.compile(r"[*?\[]")
+# Files the panel writes: a site's maintenance page, and conf.d files it turned off.
+MAINTENANCE_PREFIX = "mbp-maintenance-"
+DISABLED_SUFFIX = ".mbp-disabled"
+NGINX_LOGS = {"access": "/var/log/nginx/access.log", "error": "/var/log/nginx/error.log"}
 
 
 class ConfigError(Exception):
@@ -281,12 +285,30 @@ def _redirect(args: list[str]) -> str | None:
     return None
 
 
-def _nginx_site(server: Directive, upstreams: dict[str, list[str]], enabled: bool) -> dict:
+def _nginx_log(args: list[str]) -> str | None:
+    return args[0] if args and args[0].startswith("/") else None
+
+
+def _nginx_logs(directives: list[Directive], inherited: dict) -> dict:
+    """The access and error logs of a context, over the ones it inherits."""
+    logs = dict(inherited)
+    for d in directives:
+        if d.name == "access_log" and d.args:
+            logs["access"] = _nginx_log(d.args)
+        elif d.name == "error_log" and d.args:
+            logs["error"] = _nginx_log(d.args)
+    return logs
+
+
+def _nginx_site(
+    server: Directive, upstreams: dict[str, list[str]], enabled: bool, logs: dict
+) -> dict:
     body = server.block or []
     names: list[str] = []
     ports: set[int] = set()
+    listen: list[str] = []
     ssl = default = False
-    root = certificate = redirect = None
+    root = certificate = certificate_key = redirect = None
     backends: list[dict] = []
     has_listen = False
     for d in body:
@@ -294,6 +316,7 @@ def _nginx_site(server: Directive, upstreams: dict[str, list[str]], enabled: boo
             names.extend(a for a in d.args if a and a != "_" and a not in names)
         elif d.name == "listen" and d.args:
             has_listen = True
+            listen.append(" ".join(d.args))
             port = _nginx_port(d.args[0])
             if port is not None:
                 ports.add(port)
@@ -306,6 +329,8 @@ def _nginx_site(server: Directive, upstreams: dict[str, list[str]], enabled: boo
             root = d.args[0]
         elif d.name == "ssl_certificate" and d.args and certificate is None:
             certificate = d.args[0]
+        elif d.name == "ssl_certificate_key" and d.args and certificate_key is None:
+            certificate_key = d.args[0]
         elif d.name == "return" and redirect is None:
             redirect = _redirect(d.args)
         elif d.name == "if" and d.block and redirect is None:
@@ -342,10 +367,40 @@ def _nginx_site(server: Directive, upstreams: dict[str, list[str]], enabled: boo
         "redirect": redirect,
         "backends": backends,
         "certificate": certificate,
+        "certificate_key": certificate_key,
+        "listen": listen,
+        "logs": _nginx_logs(body, logs),
         "file": server.file,
         "line": server.line,
         "enabled": enabled,
+        "maintenance": False,
+        "maintenance_page": _is_maintenance(server.file),
     }
+
+
+def _is_maintenance(path: str) -> bool:
+    return posixpath.basename(path).startswith(MAINTENANCE_PREFIX)
+
+
+def maintenance_page(conf_dir: str, kind: str, real: str) -> str:
+    """Where the panel writes the maintenance page that stands in for the file `real`."""
+    name = posixpath.basename(real)
+    for suffix in (DISABLED_SUFFIX, ".conf"):
+        name = name.removesuffix(suffix)
+    if real.startswith((f"{conf_dir}/sites-available/", f"{conf_dir}/sites-enabled/")):
+        ext = ".conf" if kind == "apache" else ""
+        return f"{conf_dir}/sites-available/{MAINTENANCE_PREFIX}{name}{ext}"
+    return f"{conf_dir}/conf.d/{MAINTENANCE_PREFIX}{name}.conf"
+
+
+def _mark_maintenance(reader: Reader, conf_dir: str, kind: str, sites: list[dict]) -> None:
+    """A site under maintenance is served by its page: shown as active, in maintenance."""
+    for site in sites:
+        if site["maintenance_page"]:
+            continue
+        if reader.exists(maintenance_page(conf_dir, kind, site["file"])):
+            site["maintenance"] = True
+            site["enabled"] = True
 
 
 def _nginx_sites(directives: list[Directive], enabled: bool, in_http: bool) -> list[dict]:
@@ -359,8 +414,9 @@ def _nginx_sites(directives: list[Directive], enabled: bool, in_http: bool) -> l
         for u in _walk(blocks, "upstream")
         if u.args
     }
+    logs = _nginx_logs(blocks, NGINX_LOGS)
     return [
-        _nginx_site(d, upstreams, enabled)
+        _nginx_site(d, upstreams, enabled, logs)
         for d in blocks
         if d.name == "server" and d.block is not None
     ]
@@ -380,11 +436,13 @@ def scan_nginx(root: str) -> dict | None:
             error = str(exc)
     else:
         error = f"{NGINX_MAIN} not found"
-    sites += _disabled(
-        reader,
-        "/etc/nginx/sites-available",
-        lambda p: _nginx_sites(parser.parse_file(p), False, in_http=True),
-    )
+
+    def parse(path: str) -> list[dict]:
+        return _nginx_sites(parser.parse_file(path), False, in_http=True)
+
+    sites += _disabled(reader, "/etc/nginx/sites-available", parse)
+    sites += _switched_off(reader, "/etc/nginx/conf.d", parse)
+    _mark_maintenance(reader, "/etc/nginx", "nginx", sites)
     return {
         "kind": "nginx",
         "config": NGINX_MAIN,
@@ -393,6 +451,19 @@ def scan_nginx(root: str) -> dict | None:
         "files": len(reader.files),
         "sites": sites,
     }
+
+
+def _switched_off(reader: Reader, directory: str, parse) -> list[dict]:
+    """conf.d files the panel turned off (renamed with DISABLED_SUFFIX)."""
+    out: list[dict] = []
+    for name in reader.listdir(directory):
+        if not name.endswith(DISABLED_SUFFIX):
+            continue
+        try:
+            out.extend(parse(posixpath.join(directory, name)))
+        except ConfigError as exc:
+            reader.warn(str(exc))
+    return out
 
 
 def _disabled(reader: Reader, directory: str, parse) -> list[dict]:
@@ -543,12 +614,38 @@ def _apache_host(name: str) -> str:
     return name.rsplit(":", 1)[0] if name.count(":") == 1 else name
 
 
-def _apache_site(vhost: Directive, enabled: bool) -> dict:
+class ApacheLogs:
+    """Resolves Apache log paths: ${APACHE_LOG_DIR} and paths relative to ServerRoot."""
+
+    def __init__(self, server_root: str, log_dir: str) -> None:
+        self.server_root = server_root
+        self.log_dir = log_dir
+        self.defaults: dict = {"access": None, "error": None}
+
+    def path(self, value: str) -> str | None:
+        if not value or value.startswith("|") or value.startswith("syslog"):
+            return None
+        value = value.replace("${APACHE_LOG_DIR}", self.log_dir)
+        if "$" in value:
+            return None
+        return value if value.startswith("/") else posixpath.join(self.server_root, value)
+
+    def of(self, directives: list[Directive], inherited: dict) -> dict:
+        logs = dict(inherited)
+        for d in directives:
+            if d.name in ("customlog", "transferlog") and d.args:
+                logs["access"] = self.path(d.args[0])
+            elif d.name == "errorlog" and d.args:
+                logs["error"] = self.path(d.args[0])
+        return logs
+
+
+def _apache_site(vhost: Directive, enabled: bool, logs: dict, resolver: ApacheLogs) -> dict:
     body = vhost.block or []
     names: list[str] = []
     ports: set[int] = set()
     ssl = False
-    root = certificate = redirect = None
+    root = certificate = certificate_key = certificate_chain = redirect = None
     backends: list[dict] = []
     for address in vhost.args:
         port = address.rsplit(":", 1)[1] if ":" in address.rsplit("]", 1)[-1] else ""
@@ -566,6 +663,10 @@ def _apache_site(vhost: Directive, enabled: bool) -> dict:
             ssl = True
         elif d.name == "sslcertificatefile" and d.args and certificate is None:
             certificate = d.args[0]
+        elif d.name == "sslcertificatekeyfile" and d.args and certificate_key is None:
+            certificate_key = d.args[0]
+        elif d.name == "sslcertificatechainfile" and d.args and certificate_chain is None:
+            certificate_chain = d.args[0]
         elif d.name in ("redirect", "redirectpermanent") and redirect is None:
             args = d.args if d.name == "redirect" else ["permanent", *d.args]
             if len(args) == 3 and args[1] == "/":
@@ -594,14 +695,37 @@ def _apache_site(vhost: Directive, enabled: bool) -> dict:
         "redirect": redirect,
         "backends": backends,
         "certificate": certificate,
+        "certificate_key": certificate_key,
+        "certificate_chain": certificate_chain,
+        "addresses": list(vhost.args),
+        "logs": resolver.of(body, logs),
         "file": vhost.file,
         "line": vhost.line,
         "enabled": enabled,
+        "maintenance": False,
+        "maintenance_page": _is_maintenance(vhost.file),
     }
 
 
-def _apache_sites(directives: list[Directive], enabled: bool) -> list[dict]:
-    return [_apache_site(d, enabled) for d in _walk(directives, "virtualhost")]
+def _apache_sites(
+    directives: list[Directive], enabled: bool, resolver: ApacheLogs, top: bool
+) -> list[dict]:
+    if top:
+        # The main configuration's logs apply to every virtual host, disabled ones too.
+        resolver.defaults = resolver.of(directives, resolver.defaults)
+    defaults = resolver.defaults
+    return [_apache_site(d, enabled, defaults, resolver) for d in _walk(directives, "virtualhost")]
+
+
+def _apache_log_dir(reader: Reader, server_root: str) -> str:
+    """APACHE_LOG_DIR from Debian's envvars file."""
+    default = "/var/log/apache2" if server_root == "/etc/apache2" else "/var/log/httpd"
+    try:
+        _, text = reader.read(posixpath.join(server_root, "envvars"))
+    except ConfigError:
+        return default
+    match = re.search(r"^\s*export\s+APACHE_LOG_DIR=([^\s$#]+)", text, re.MULTILINE)
+    return match.group(1) if match else default
 
 
 def scan_apache(root: str) -> dict | None:
@@ -620,16 +744,23 @@ def scan_apache(root: str) -> dict | None:
             }
         return None
     server_root = "/etc/apache2" if main.startswith("/etc/apache2/") else "/etc/httpd"
+    resolver = ApacheLogs(server_root, _apache_log_dir(reader, server_root))
+    reader.files.clear()  # envvars is not configuration
     parser = ApacheParser(reader, server_root)
     sites: list[dict] = []
     error = None
     try:
-        sites = _apache_sites(parser.parse_file(main), True)
+        sites = _apache_sites(parser.parse_file(main), True, resolver, top=True)
     except ConfigError as exc:
         error = str(exc)
-    sites += _disabled(
-        reader, "/etc/apache2/sites-available", lambda p: _apache_sites(parser.parse_file(p), False)
-    )
+    resolver.server_root = parser.server_root
+
+    def parse(path: str) -> list[dict]:
+        return _apache_sites(parser.parse_file(path), False, resolver, top=False)
+
+    sites += _disabled(reader, "/etc/apache2/sites-available", parse)
+    sites += _switched_off(reader, posixpath.join(server_root, "conf.d"), parse)
+    _mark_maintenance(reader, server_root, "apache", sites)
     return {
         "kind": "apache",
         "config": main,

@@ -112,10 +112,10 @@ describe("the panel's frame", () => {
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
     await userEvent.click(within(drawer).getByRole("button", { name: "Alerts & chat access" }));
     expect(within(drawer).getByRole("link", { name: "Alerts" })).toBeInTheDocument();
-    expect(within(drawer).getByRole("link", { name: "Servers" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    // Servers is opened from the current-server card, not the menu; it keeps its title.
+    expect(within(drawer).queryByRole("link", { name: "Servers" })).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("link", { name: "Web servers" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Servers · DevOps Manager"));
     expect(within(drawer).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 });

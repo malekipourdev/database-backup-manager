@@ -36,6 +36,7 @@ from mbp.security import crypto
 from mbp.security.sessions import require_csrf, require_session
 from mbp.servers.registry import AgentRegistry, set_registry
 from mbp.services.auth_service import bootstrap_admin
+from mbp.webservers.monitor import WebMonitor
 
 API_PREFIX = "/api"
 
@@ -62,6 +63,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner.notifier = notifier
     app.state.notifier = notifier
     monitor = AlertMonitor(sessions, notifier, settings.backup_root)
+    web_monitor = WebMonitor(sessions, notifier, agents)
+    app.state.web_monitor = web_monitor
     scheduler = BackupScheduler(
         settings,
         sessions,
@@ -70,6 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         notifier=notifier,
         monitor=monitor,
         container_monitor=ContainerMonitor(sessions, notifier, agents),
+        web_monitor=web_monitor,
     )
     scheduler.start()
     app.state.backup_scheduler = scheduler
@@ -97,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bot_manager.stop()
         deploy_runner.stop()
         scheduler.stop()
+        web_monitor.close()
         runner.stop()
         notifier.close()
         set_registry(None)

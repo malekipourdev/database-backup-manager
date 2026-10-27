@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Agent status codes that the panel passes on as they are; anything else becomes 502.
 PASSED_ON = {403, 404, 503, 504}
+# Web server requests also pass on the agent's answers to invalid input and conflicts.
+WEB_PASSED_ON = PASSED_ON | {400, 409, 413}
 # 401 codes an agent explains itself; any other 401 means the token is wrong.
 UNAUTHORIZED_CODES = {"agent_clock_skew"}
 # A dump may pause while the server works on a big table.
@@ -95,7 +97,7 @@ class AgentClient:
         self._client.close()
 
     @staticmethod
-    def _error(response: httpx.Response) -> ApiError:
+    def _error(response: httpx.Response, passed_on: set[int] = PASSED_ON) -> ApiError:
         try:
             body = response.json()
         except ValueError:
@@ -105,10 +107,10 @@ class AgentClient:
             # Never a 401 to the browser: that would look like the admin's session ended.
             logger.error("An agent refused the panel's token (%s)", code)
             return ApiError(502, code if code in UNAUTHORIZED_CODES else "agent_unauthorized")
-        status = response.status_code if response.status_code in PASSED_ON else 502
+        status = response.status_code if response.status_code in passed_on else 502
         return ApiError(status, code, body.get("detail"))
 
-    def _call(self, method: str, path: str, **kwargs) -> dict:
+    def _call(self, method: str, path: str, passed_on: set[int] = PASSED_ON, **kwargs) -> dict:
         if self._auth is not None:
             kwargs["auth"] = self._auth
         try:
@@ -117,7 +119,7 @@ class AgentClient:
             raise _transport_error(exc) from exc
         if response.status_code < 400:
             return response.json()
-        raise self._error(response)
+        raise self._error(response, passed_on)
 
     def hello(self, nonce: str) -> dict:
         return self._call("POST", "/v1/hello", json={"nonce": nonce})
@@ -163,14 +165,76 @@ class AgentClient:
 
     # --- web servers ---
 
-    def webservers(self) -> dict:
+    def _web(self, method: str, path: str, **kwargs) -> dict:
         try:
-            return self._call("GET", "/v1/webservers")
+            return self._call(method, f"/v1/webservers{path}", WEB_PASSED_ON, **kwargs)
         except ApiError as exc:
-            # An agent from before web servers has no such route.
+            # An agent from before this web server operation has no such route.
             if exc.status == 404 and exc.code == "agent_error":
                 raise ApiError(409, "agent_outdated") from exc
             raise
+
+    def webservers(self) -> dict:
+        return self._web("GET", "")
+
+    def web_status(self) -> dict:
+        return self._web("GET", "/status")
+
+    def web_certificates(self) -> dict:
+        return self._web("GET", "/certificates")["certificates"]
+
+    def web_php_sockets(self) -> list[str]:
+        return self._web("GET", "/php-sockets")["sockets"]
+
+    def web_test(self, kind: str) -> dict:
+        return self._web("POST", f"/{kind}/test")
+
+    def web_control(self, kind: str, action: str) -> dict:
+        return self._web("POST", f"/{kind}/control/{action}")
+
+    def web_file(self, kind: str, path: str) -> dict:
+        return self._web("GET", f"/{kind}/file", params={"path": path})
+
+    def web_write(self, kind: str, path: str, content: str, sha: str | None) -> dict:
+        body = {"path": path, "content": content, "sha256": sha}
+        return self._web("PUT", f"/{kind}/file", json=body)
+
+    def web_backups(self, kind: str, path: str) -> dict:
+        return self._web("GET", f"/{kind}/backups", params={"path": path})
+
+    def web_backup(self, kind: str, path: str, backup: str) -> str:
+        params = {"path": path, "backup": backup}
+        return self._web("GET", f"/{kind}/backup", params=params)["content"]
+
+    def web_restore(self, kind: str, path: str, backup: str) -> dict:
+        return self._web("POST", f"/{kind}/restore", json={"path": path, "backup": backup})
+
+    def web_enabled(self, kind: str, path: str, enabled: bool) -> dict:
+        return self._web("POST", f"/{kind}/enabled", json={"path": path, "enabled": enabled})
+
+    def web_maintenance(self, kind: str, path: str, on: bool) -> dict:
+        return self._web("POST", f"/{kind}/maintenance", json={"path": path, "on": on})
+
+    def web_create(self, kind: str, spec: dict) -> dict:
+        return self._web("POST", f"/{kind}/sites", json=spec)
+
+    def web_logs(self, kind: str, path: str, lines: int) -> dict:
+        return self._web("GET", f"/{kind}/logs", params={"path": path, "lines": lines})
+
+    def web_certbot(self) -> dict:
+        return self._web("GET", "/certbot")
+
+    def web_certbot_issue(self, kind: str, body: dict) -> dict:
+        return self._web("POST", f"/{kind}/certbot/issue", json=body)
+
+    def web_certbot_renew(self) -> dict:
+        return self._web("POST", "/certbot/renew")
+
+    def web_certbot_install(self, kind: str) -> dict:
+        return self._web("POST", f"/{kind}/certbot/install")
+
+    def web_job(self, job_id: str) -> dict:
+        return self._web("GET", f"/jobs/{job_id}")
 
     # --- databases on the agent's server ---
 

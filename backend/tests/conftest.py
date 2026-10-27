@@ -295,7 +295,15 @@ def agent_commands():
 
 
 @pytest.fixture
-def agent_app(docker, agent_commands, tmp_path, monkeypatch):
+def fake_host(tmp_path):
+    """The host's / for web server management, with stand-in commands (tests.fakes.fake_host)."""
+    from tests.fakes.fake_host import FakeHost
+
+    return FakeHost(tmp_path / "host", tmp_path / "host-bin")
+
+
+@pytest.fixture
+def agent_app(docker, agent_commands, fake_host, tmp_path, monkeypatch):
     from mbp.agent.app import AgentSettings, create_agent_app
     from mbp.agent.deploy import DeployManager
     from mbp.agent.docker import DockerClient
@@ -310,8 +318,11 @@ def agent_app(docker, agent_commands, tmp_path, monkeypatch):
         protected_projects=lambda: {"mysql-backup-panel"},
         sleep=lambda seconds: None,
     )
+    from mbp.agent.webmanage import Jobs, WebManager
+
+    web = WebManager(str(fake_host.root), fake_host.runner, Jobs(background=False))
     return create_agent_app(
-        settings, docker=client, host=HostProbe(proc=docker.proc), deployer=deployer
+        settings, docker=client, host=HostProbe(proc=docker.proc), deployer=deployer, web=web
     )
 
 

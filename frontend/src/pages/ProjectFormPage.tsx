@@ -11,6 +11,7 @@ import {
   Select,
   Stack,
   Switch,
+  TagsInput,
   Text,
   TextInput,
   Textarea,
@@ -66,6 +67,8 @@ function initial(
     backup_instance_id: project?.backup_instance_id ?? null,
     backup_databases: project?.backup_databases ?? [],
     backup_required: project?.backup_required ?? true,
+    web_domains: project?.web_domains ?? [],
+    web_target: project?.web_target ?? null,
   };
 }
 
@@ -375,6 +378,38 @@ function Form({ project }: { project?: Project }) {
               }))
             }
           />
+        </Paper>
+
+        <Paper withBorder p="lg">
+          <Title order={4} mb={4}>
+            {t("projects.sections.web")}
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            {t("projects.webHint")}
+          </Text>
+          <Stack gap="md">
+            <TagsInput
+              label={t("projects.fields.webDomains")}
+              placeholder={`app.example.com`}
+              value={values.web_domains}
+              onChange={(v) => setValues((prev) => ({ ...prev, web_domains: v }))}
+              splitChars={[",", " "]}
+              dir="ltr"
+              error={fieldError("web_domains")}
+            />
+            <TextInput
+              label={t("projects.fields.webTarget")}
+              description={t("projects.fields.webTargetHint")}
+              placeholder={`http://127.0.0.1:8080`}
+              value={values.web_target ?? ""}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setValues((prev) => ({ ...prev, web_target: value || null }));
+              }}
+              dir="ltr"
+              error={fieldError("web_target")}
+            />
+          </Stack>
         </Paper>
 
         {save.isError && !Object.keys(fields).length && (

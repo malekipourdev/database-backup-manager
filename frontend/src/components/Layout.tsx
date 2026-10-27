@@ -147,11 +147,13 @@ function NavMenu({ idPrefix }: { idPrefix: string }) {
       {NAV_GROUPS.map((group) => {
         const items = (
           <ul id={`${idPrefix}-${group.id}-items`}>
-            {group.items.map((item) => (
-              <li key={item.to}>
-                <NavLink item={item} active={isActive(item, pathname)} />
-              </li>
-            ))}
+            {group.items
+              .filter((item) => !item.hidden)
+              .map((item) => (
+                <li key={item.to}>
+                  <NavLink item={item} active={isActive(item, pathname)} />
+                </li>
+              ))}
           </ul>
         );
         if (!group.label) {

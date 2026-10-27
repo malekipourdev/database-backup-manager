@@ -637,6 +637,8 @@ EventName = Literal[
     "container_resources",
     "host_resources",
     "agent_unreachable",
+    "site_down",
+    "cert_expiring",
     "deploy_failed",
     "deploy_succeeded",
     "backup_succeeded",
@@ -939,6 +941,28 @@ class ProjectIn(BaseModel):
     backup_instance_id: int | None = None
     backup_databases: list[str] = Field(default=[], max_length=50)
     backup_required: bool = True
+    # After a successful deploy: these domains proxied to web_target by the web server.
+    web_domains: list[str] = Field(default=[], max_length=20)
+    web_target: str | None = Field(default=None, max_length=300)
+
+    @field_validator("web_domains")
+    @classmethod
+    def _domains(cls, value: list[str]) -> list[str]:
+        names = [v.strip().lower() for v in value if v.strip()]
+        pattern = r"([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}"
+        if any(not re.fullmatch(pattern, n) for n in names):
+            raise ValueError("invalid_domain")
+        return list(dict.fromkeys(names))
+
+    @field_validator("web_target")
+    @classmethod
+    def _target(cls, value: str | None) -> str | None:
+        value = (value or "").strip() or None
+        if value is not None and not re.fullmatch(
+            r"https?://[A-Za-z0-9.\-]+(:\d{1,5})?(/[A-Za-z0-9._~/\-]*)?", value
+        ):
+            raise ValueError("invalid_target")
+        return value
 
     @field_validator("repo_url", "branch", "compose_file", "name")
     @classmethod
@@ -1012,6 +1036,8 @@ class ProjectOut(BaseModel):
     backup_instance_id: int | None
     backup_databases: list[str]
     backup_required: bool
+    web_domains: list[str] = []
+    web_target: str | None = None
     created_at: datetime
     updated_at: datetime
     last_deployment: DeploymentSummary | None = None
@@ -1120,8 +1146,14 @@ class WebSite(BaseModel):
     certificate: str | None = None
     file: str
     line: int
-    # False: in sites-available but not loaded by the server.
+    # False: in sites-available (or a conf.d file turned off) but not loaded by the server.
     enabled: bool = True
+    # Served by its maintenance page for now.
+    maintenance: bool = False
+    # The panel's maintenance page itself (hidden in the list).
+    maintenance_page: bool = False
+    # Access and error log files, if any.
+    logs: dict[str, str | None] = {}
 
 
 class WebServer(BaseModel):
@@ -1138,3 +1170,220 @@ class WebServerList(BaseModel):
     # False: the host's /etc is not mounted in the agent.
     available: bool
     servers: list[WebServer] = []
+
+
+WebKind = Literal["nginx", "apache"]
+
+
+class WebServiceStatus(BaseModel):
+    kind: str
+    service: str
+    # active | inactive | failed | activating | reloading | not_installed | unknown
+    state: str
+    sub_state: str | None = None
+    since: str | None = None
+    pid: int | None = None
+    version: str | None = None
+    # From the service's journal, and the panel's own last reload / restart.
+    last_reload: str | None = None
+    panel_reload: datetime | None = None
+    systemd: bool = False
+
+
+class WebStatusList(BaseModel):
+    servers: list[WebServiceStatus]
+
+
+class WebResult(BaseModel):
+    ok: bool
+    # config_test_failed | reload_failed | command_failed | backup_failed | ...
+    code: str | None = None
+    output: str = ""
+    path: str | None = None
+
+
+class WebTestResult(BaseModel):
+    ok: bool
+    output: str = ""
+
+
+class WebFileContent(BaseModel):
+    path: str
+    content: str
+    sha256: str
+    size: int
+
+
+class WebFileWrite(BaseModel):
+    path: str = Field(max_length=500)
+    content: str = Field(max_length=200_000)
+    # Of the content that was read: refused if the file changed since.
+    sha256: str | None = Field(default=None, max_length=64)
+
+
+class WebPathIn(BaseModel):
+    path: str = Field(max_length=500)
+
+
+class WebRestoreIn(WebPathIn):
+    backup: str = Field(max_length=32)
+
+
+class WebEnabledIn(WebPathIn):
+    enabled: bool
+
+
+class WebMaintenanceIn(WebPathIn):
+    on: bool
+
+
+class WebBackupList(BaseModel):
+    path: str
+    backups: list[str]
+
+
+class WebBackupContent(BaseModel):
+    content: str
+
+
+class WebSiteCreate(BaseModel):
+    template: Literal["proxy", "php", "static", "redirect"]
+    domains: list[str] = Field(min_length=1, max_length=50)
+    name: str | None = Field(default=None, max_length=63)
+    target: str | None = Field(default=None, max_length=300)
+    root: str | None = Field(default=None, max_length=300)
+    php_fpm: str | None = Field(default=None, max_length=300)
+    permanent: bool = True
+    keep_path: bool = True
+
+
+class WebLogLines(BaseModel):
+    path: str
+    lines: list[str]
+
+
+class WebCertificate(BaseModel):
+    subject: str | None = None
+    names: list[str] = []
+    issuer: str | None = None
+    not_before: datetime | None = None
+    not_after: datetime | None = None
+    error: str | None = None
+
+
+class WebCertificates(BaseModel):
+    certificates: dict[str, WebCertificate]
+
+
+class WebPhpSockets(BaseModel):
+    sockets: list[str]
+
+
+class CertbotStatus(BaseModel):
+    installed: bool
+    version: str | None = None
+    # certbot.timer, a cron file, or None
+    auto_renew: str | None = None
+    package_manager: str | None = None
+
+
+class CertbotIssueIn(BaseModel):
+    domains: list[str] = Field(min_length=1, max_length=50)
+    email: str | None = Field(default=None, max_length=254)
+    redirect: bool = True
+
+
+class WebJob(BaseModel):
+    id: str
+    action: str
+    target: str
+    # running | success | failed
+    status: str
+    output: str = ""
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+class WebServerSettingsIO(BaseModel):
+    read_only: bool = False
+    cert_warning_days: int = Field(default=14, ge=0, le=90)
+    check_interval_minutes: int = Field(default=5, ge=1, le=1440)
+    check_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    check_failures: int = Field(default=2, ge=1, le=20)
+    # Given to Let's Encrypt for expiry notices.
+    acme_email: str | None = Field(default=None, max_length=254)
+
+    @field_validator("acme_email")
+    @classmethod
+    def _email(cls, value: str | None) -> str | None:
+        value = (value or "").strip() or None
+        if value is not None and not re.fullmatch(
+            r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,63}", value
+        ):
+            raise ValueError("invalid email")
+        return value
+
+
+class WebActionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    actor: str
+    source: str
+    server_id: int | None
+    server_name: str
+    kind: str
+    action: str
+    target: str
+    result: str
+    output: str | None = None
+
+
+class WebActionPage(BaseModel):
+    items: list[WebActionItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class WebCheckResultItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    checked_at: datetime
+    ok: bool
+    code: int | None = None
+    ms: int | None = None
+    error: str | None = None
+
+
+class WebCheckItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    server_id: int
+    url: str
+    enabled: bool
+    created_at: datetime
+    last_checked_at: datetime | None = None
+    status: str | None = None
+    last_code: int | None = None
+    last_ms: int | None = None
+    last_error: str | None = None
+    failures: int = 0
+    down_since: datetime | None = None
+    # Of the last 24 hours, in percent.
+    uptime: float | None = None
+    recent: list[WebCheckResultItem] = []
+
+
+class WebCheckList(BaseModel):
+    checks: list[WebCheckItem]
+
+
+class WebCheckIn(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+
+
+class WebCheckUpdate(BaseModel):
+    enabled: bool

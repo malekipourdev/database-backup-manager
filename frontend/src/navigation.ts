@@ -25,6 +25,8 @@ export interface NavItem {
   scoped?: boolean;
   /** Extra words the "Go to" search matches (i18n key). */
   keywords?: string;
+  /** Not listed in the menu (reached another way); still titled and found by "Go to". */
+  hidden?: boolean;
 }
 
 export interface NavGroup {
@@ -44,7 +46,8 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "infra",
     label: "nav.groups.infra",
     items: [
-      { to: "/servers", label: "nav.servers", icon: HardDrives },
+      // Opened from the current-server card ("Manage all servers").
+      { to: "/servers", label: "nav.servers", icon: HardDrives, hidden: true },
       {
         to: "/webservers",
         label: "nav.webservers",
