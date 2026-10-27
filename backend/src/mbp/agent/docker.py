@@ -119,6 +119,33 @@ class DockerClient:
             timeout=STOP_TIMEOUT_SECONDS + 15,
         )
 
+    # --- one-shot helper containers (mbp.agent.hostexec) ---
+
+    def create(self, body: dict, name: str) -> str:
+        return self._request("POST", "/containers/create", params={"name": name}, json=body).json()[
+            "Id"
+        ]
+
+    def start(self, ref: str) -> None:
+        self._request("POST", f"/containers/{ref}/start")
+
+    def wait(self, ref: str, timeout: float) -> int:
+        response = self._request("POST", f"/containers/{ref}/wait", timeout=timeout)
+        return int(response.json().get("StatusCode", -1))
+
+    def kill(self, ref: str) -> None:
+        self._request("POST", f"/containers/{ref}/kill")
+
+    def output(self, ref: str) -> bytes:
+        """A stopped container's whole output, multiplexed (no TTY)."""
+        params = {"stdout": "1", "stderr": "1"}
+        return self._request("GET", f"/containers/{ref}/logs", params=params).content[
+            :MAX_LOG_BYTES
+        ]
+
+    def remove(self, ref: str) -> None:
+        self._request("DELETE", f"/containers/{ref}", params={"force": "1", "v": "1"})
+
 
 # --- parsing ---
 

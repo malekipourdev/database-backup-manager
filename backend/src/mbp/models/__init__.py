@@ -12,6 +12,7 @@ from mbp.models.schedule import BackupSchedule
 from mbp.models.selection import DbSelection
 from mbp.models.server import Server
 from mbp.models.session import AuthSession
+from mbp.models.webserver import WebAction, WebCheck, WebCheckResult, WebServerSettings
 
 __all__ = [
     "AlertState",
@@ -34,4 +35,8 @@ __all__ = [
     "Project",
     "RemoteStorageSettings",
     "Server",
+    "WebAction",
+    "WebCheck",
+    "WebCheckResult",
+    "WebServerSettings",
 ]

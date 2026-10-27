@@ -16,7 +16,7 @@ The menu is grouped from the widest scope down: the server, then applications, t
 | Section              | Item                 | Used for                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
 |                      | Overview             | (current server) Health, the last day's backups, containers, deploys, and problems |
-| Server management    | Web servers          | (current server) The domains nginx and Apache serve                                |
+| Server management    | Web servers          | (current server) nginx and Apache: sites, certificates, health checks              |
 | Applications         | Projects             | (current server) Deploy applications from git with docker compose                  |
 |                      | Containers           | (current server) See and control Docker containers                                 |
 | Databases & backups  | Databases            | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
@@ -607,25 +607,32 @@ If a token leaked or was lost, press "New token" on the server's card. The old t
 
 @@article webservers /webservers
 @title Web servers (nginx and Apache)
-@summary The domains that nginx or Apache serve on a server, read from their configuration.
+@summary Domains, status, reload, logs, maintenance and new sites of a server's nginx or Apache.
 
-**Web servers** (under Server management) shows the nginx and Apache installed on the current server and every domain they serve. For now the page only reads: it never changes a file or restarts a web server.
+**Web servers** (under Server management) shows the nginx and Apache of the current server and every domain they serve, and lets you manage them.
 
-## What the list shows
+## The page
 
-- **Domain:** each `server_name` (nginx) or `ServerName` / `ServerAlias` (Apache). A block without a name is shown as "Any other name (catch-all)".
-- **Ports and HTTPS:** from `listen` or `<VirtualHost *:443>`. "HTTPS (HTTP redirects)" means port 80 only sends visitors to HTTPS. Hover the badge to see the certificate file.
-- **Serves:** the proxy address (`proxy_pass`, `ProxyPass`, with the servers of an nginx `upstream`), PHP-FPM (`fastcgi_pass`), a redirect, or the folder of files (`root`, `DocumentRoot`).
-- **Defined in:** the file and line, to find it on the server.
-- **Disabled:** sites in `sites-available` that are not linked in `sites-enabled`; shown under "All".
+- **Status cards:** running or not, version, since when, the last reload. **Test configuration** runs `nginx -t` / `apachectl configtest`; **Reload** and **Restart** run only after a successful test.
+- **Domains:** ports, HTTPS with the days the certificate has left, what the domain serves (proxy, PHP-FPM, redirect or folder), the file and line. Disabled sites are under "All". A dot shows the health check's state.
+- **Click a domain** for its drawer: configuration, logs, previous versions, and the buttons below.
 
-## How it works
+## A site's buttons
 
-The agent reads the server's `/etc` (mounted read-only) starting from `nginx.conf`, `apache2.conf` or `httpd.conf`, and follows `include` the way the web servers do. A file it cannot read or find is listed as a warning on the web server's card.
+- **Disable / Enable:** removes or adds the link in `sites-enabled` (Debian, Ubuntu), or renames a `conf.d` file to `….mbp-disabled` and back. The file stays on disk.
+- **Maintenance mode:** visitors get a 503 "under maintenance" page for the same names, ports and certificate; **End maintenance** brings the site back exactly as it was.
+- **Get / renew SSL certificate** and **Watch this site**: see [Certificates](#webservers-ssl) and [Health checks](#webservers-checks).
+- **Logs:** the access and error logs of the site, the last 100–2000 lines.
+
+## New site
+
+**New site** writes a site from a template — reverse proxy (to an address or a container's published port), PHP through PHP-FPM, static files, or a redirect — enables it, tests and reloads. If the test fails, it is removed again. Add HTTPS afterwards with Let's Encrypt.
+
+A [project](#add-project) can do this by itself: give it domains and the address of the application, and after every successful deploy a proxy site is created for the domains that have none yet.
 
 ## Turning it on
 
-The agent needs the read-only mount `/etc:/host/etc:ro`, already in the compose files. After updating the panel:
+The page uses the agent (see [Containers](#containers-enable)). After updating the panel:
 
 ```bash
 git pull
@@ -634,7 +641,55 @@ docker compose up -d --build agent
 
 On another server, rebuild its agent as in [Updating an agent](#server-maintenance).
 
-> The list shows the configuration on disk. Changes not yet loaded with `nginx -s reload` or `systemctl reload apache2` are already shown here.
+@@article webservers-edit /webservers
+@title Editing configuration safely
+@summary Every change is backed up, tested and undone if the web server refuses it.
+
+## What happens on Save
+
+1. The current file is copied to `/var/backups/mbp-webserver` on the server (the 20 newest copies are kept).
+2. The new content is written.
+3. The configuration is tested (`nginx -t` or `apachectl configtest`).
+4. The web server is reloaded.
+
+If step 3 or 4 fails, the old file is put back (and the server reloaded again): nothing broken stays on disk. The panel shows the web server's own message, e.g. the file and line of a typo.
+
+## Good to know
+
+- If someone changed the file since you opened it, Save is refused; open it again.
+- **Previous versions** lists the copies; **Restore** puts one back the same safe way.
+- Only files under `/etc/nginx`, `/etc/apache2` or `/etc/httpd` can be opened or written.
+- **Activity** shows every change, by whom, and the output; **Settings → Read-only** turns all changes off for a server.
+
+> The agent makes changes with a short-lived helper container on the server, which runs one fixed command and is removed. The panel never sends commands, only the operation and checked values.
+
+@@article webservers-ssl /webservers
+@title Certificates (Let's Encrypt)
+@summary Free certificates with certbot, automatic renewal and alerts before they expire.
+
+## Getting a certificate
+
+1. The domain must point to this server in DNS, and port 80 must be reachable from the internet.
+2. Open the domain and press **Get SSL certificate**. certbot asks Let's Encrypt for the certificate, adds it to the site and (optionally) sends HTTP visitors to HTTPS.
+3. The progress and certbot's output appear in the dialog and later under **Activity**.
+
+If certbot is missing, the **Let's Encrypt** card installs it (apt, dnf or yum). Wildcard certificates (`*.example.com`) need a DNS challenge and are not supported here.
+
+## Renewal and alerts
+
+certbot renews certificates by itself (`certbot.timer` or cron; the card shows which). **Renew now** runs `certbot renew` at once. The panel reads every site's certificate a few times a day; one that expires within 14 days (Settings) is an alert to Bale, Telegram and the webhook, and its renewal another.
+
+@@article webservers-checks /webservers
+@title Health checks
+@summary The panel requests your sites regularly and alerts when one stops answering.
+
+Add an address under **Health checks**, or press **Watch this site** on a domain. Every few minutes (Settings) the panel requests it like a visitor would, following redirects:
+
+- an answer below 500 counts as **up**; 5xx, a timeout, no connection or a TLS error as a failure;
+- after 2 failures in a row (Settings) the site is **down** and an alert is sent; when it answers again, a recovery alert follows;
+- the table shows the last answer, response time, the uptime of the last 24 hours and the recent checks.
+
+> The checks are made from the panel's server, so they also show whether your site can be reached from outside the server it runs on.
 
 @@category containers containers Containers
 

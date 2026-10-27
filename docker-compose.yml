@@ -71,7 +71,8 @@ services:
       # compose files ("./data:/data") then point to the right host directories.
       - ${MBP_PROJECTS_DIR:-/opt/mbp-projects}:${MBP_PROJECTS_DIR:-/opt/mbp-projects}
       # The host's /etc, read-only: the web servers' configuration (nginx, Apache) for the
-      # Web servers page. Nothing there is ever changed.
+      # Web servers page. Changes (edits, reloads, certificates) go through a short-lived
+      # helper container the agent starts on the host; see the README, "Web servers".
       - /etc:/host/etc:ro
     tmpfs:
       - /tmp

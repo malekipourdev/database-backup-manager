@@ -20,8 +20,9 @@ and English.
 - **two-step sign-in** with Google Authenticator or any other TOTP app (optional)
 - **containers** (optional): see the server's Docker containers, their usage and logs, start,
   stop and restart them from the panel or a bot, and get alerts when one goes down
-- **web servers** (optional): the nginx and Apache on each server and the domains they serve
-  (ports, HTTPS, proxy target or folder, config file), read-only from their configuration
+- **web servers** (optional): the nginx and Apache on each server: domains, status, reload,
+  configuration with versions and safe editing, logs, new sites from templates, maintenance
+  mode, Let's Encrypt certificates, health checks and expiry alerts
 - **projects** (optional): deploy applications from git with docker compose, from the panel
   or a bot, with a backup of their databases before every deploy and one-click rollback
 - **several servers**: connect other machines to the same panel through a small agent, then
@@ -616,17 +617,51 @@ blocked for 15 minutes. So a stolen or borrowed messenger account can't stop you
 
 ## Web servers (nginx, Apache)
 
-**Web servers** (under Server management) lists the nginx and Apache installed on the current
-server and every domain they serve: `server_name` / `ServerName` and `ServerAlias`, ports,
-HTTPS and its certificate file, what the domain serves (a proxy address with the servers of an
-nginx `upstream`, PHP-FPM, a redirect or a folder) and the file and line it is defined in.
-Sites in `sites-available` that are not enabled are listed separately.
+**Web servers** (under Server management) manages the nginx and Apache installed on the
+current server:
+
+- **Domains:** every `server_name` / `ServerName` and `ServerAlias`, with ports, HTTPS and the
+  days its certificate has left, what it serves (a proxy address with the servers of an nginx
+  `upstream`, PHP-FPM, a redirect or a folder) and the file and line it is defined in. Sites
+  in `sites-available` that are not enabled are listed under "All".
+- **Status:** running or not, version, since when, and the last reload; buttons to test the
+  configuration, reload and restart (always after a successful test).
+- **A site's drawer:** its configuration with colours and the line of the site highlighted;
+  editing; the previous versions with one-click restore; its access and error logs; enable,
+  disable and maintenance mode (a 503 page for the same names and certificate).
+- **New site** from a template: reverse proxy (to an address or a container's published
+  port), PHP through PHP-FPM, static files, or a redirect.
+- **Let's Encrypt:** get or renew a certificate with certbot (installed from the panel with
+  apt/dnf/yum if missing); the card shows whether automatic renewal (`certbot.timer` or cron)
+  is active.
+- **Health checks:** the panel requests chosen addresses regularly and records the status
+  code and response time; a site that fails several checks in a row is an alert, and its
+  recovery too. Certificates that expire within 14 days (configurable) are alerts as well.
+  Both go to Bale, Telegram and the webhook like the other alerts.
+- **Activity:** every change, who made it and the web server's output.
+- **Settings:** read-only mode for a server, the email for Let's Encrypt, alert thresholds.
+- **Projects** can name domains and the address of the application: after every successful
+  deploy, a reverse-proxy site is created for the domains that have none yet.
+
+### How changes are made safely
+
+Every change is a transaction. The current file is copied to `/var/backups/mbp-webserver` on
+the server (the 20 newest copies are kept), the change is made, the configuration is tested
+(`nginx -t`, `apachectl configtest`) and the server reloaded (`systemctl reload`). If the test
+or the reload fails, everything is put back as it was and reloaded again, and the panel shows
+the web server's output. Only files under `/etc/nginx`, `/etc/apache2` or `/etc/httpd` are
+ever written; a file changed by someone else since it was opened is not overwritten.
 
 The agent reads the configuration from the host's `/etc`, mounted read-only
-(`/etc:/host/etc:ro` in both compose files), starting at `/etc/nginx/nginx.conf`,
-`/etc/apache2/apache2.conf` or `/etc/httpd/conf/httpd.conf` and following `include` the way
-the servers do. It never changes a file and never reloads a web server. The page needs the
-agent (see [Containers](#containers)); after updating the panel, rebuild it:
+(`/etc:/host/etc:ro` in both compose files), starting at `nginx.conf`, `apache2.conf` or
+`httpd.conf` and following `include` the way the servers do. To change something it starts a
+short-lived helper container from its own image (privileged, with the host's PID and network
+namespaces and `/` mounted) that runs one fixed command on the host and is removed. That adds
+no power the agent did not have: access to `docker.sock` already is root on the server. The
+panel never sends commands, only the operation and checked values (names, paths, addresses).
+
+The page needs the agent (see [Containers](#containers)); after updating the panel, rebuild
+it:
 
 ```bash
 git pull
@@ -931,6 +966,9 @@ longer need them. Then remove the panel's folder.
 - `docker.sock` is never given to the backend. Only the optional agent has it; see
   [Containers](#containers) for its limits. Agents on other servers are reached over HTTPS
   with a pinned certificate and signed requests; see [Servers](#servers).
+- Web server changes are tested before the reload and undone if the test or the reload fails;
+  files are backed up first, and only the web servers' own directories are written (see
+  [Web servers](#web-servers-nginx-apache)). A server can be made read-only in the panel.
 - Deploy credentials and environment variables of [projects](#projects-deploy-from-git) are
   stored encrypted, never returned, never put on a command line, and masked in deploy logs.
 - Stored database passwords and the S3 secret key are encrypted and are never returned by the API

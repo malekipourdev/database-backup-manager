@@ -112,6 +112,30 @@ def _render(event: Event, lang: str, zone: ZoneInfo) -> str:
         ).strip()
     if kind == "agent_unreachable":
         return t(lang, "event_agent_unreachable", code=p.get("code", ""))
+    if kind == "site_down":
+        if p.get("code"):
+            reason = t(lang, "web_reason_code", code=digits(str(p["code"]), lang))
+        else:
+            error = str(p.get("error") or "")
+            reason = t(lang, f"web_reason_{error}")
+            reason = error if reason == f"web_reason_{error}" else reason
+        return t(lang, "event_site_down", url=p.get("url", ""), reason=reason)
+    if kind == "cert_expiring" or (kind == "recovered" and p.get("kind") == "cert"):
+        names = ", ".join(p.get("names") or []) or p.get("path", "")
+        date = _time(p.get("not_after"), lang, zone)
+        if kind == "recovered":
+            return t(lang, "event_recovered_cert", names=names, date=date)
+        days = int(p.get("days") or 0)
+        if days < 0:
+            return t(lang, "event_cert_expired", names=names, date=date)
+        return t(lang, "event_cert_expiring", names=names, days=digits(str(days), lang), date=date)
+    if kind == "recovered" and p.get("kind") == "site_down":
+        return t(
+            lang,
+            "event_recovered_site_down",
+            url=p.get("url", ""),
+            minutes=digits(str(p.get("minutes", 0)), lang),
+        )
     if kind == "recovered" and p.get("kind") in (
         "container_down",
         "container_restarting",

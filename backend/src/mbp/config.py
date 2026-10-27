@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     agent_repo_url: str = "https://github.com/malekipourdev/database-backup-manager.git"
     # How often containers and host resources are checked for alerts (0 = never).
     container_monitor_seconds: int = Field(default=60, ge=0)
+    # How often due site health checks run and (every few hours) certificates are read.
+    web_monitor_seconds: int = Field(default=60, ge=0)
     # Master switch for the Bale/Telegram bots (e.g. off on a standby copy of the panel).
     bots_enabled: bool = True
 

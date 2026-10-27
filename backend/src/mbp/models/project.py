@@ -36,6 +36,10 @@ class Project(Base):
     )
     backup_databases: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     backup_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # After a successful deploy, these domains are served by a reverse proxy to `web_target`
+    # (e.g. http://127.0.0.1:8080) on the server's web server, unless a site has them already.
+    web_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    web_target: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False

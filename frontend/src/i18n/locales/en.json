@@ -168,7 +168,33 @@
     "server_not_found": "Server not found.",
     "server_not_connected": "This server is not connected to the panel yet.",
     "server_is_local": "Not possible for the panel's own server.",
-    "server_in_use": "This server still has projects or databases."
+    "server_in_use": "This server still has projects or databases.",
+    "webservers_read_only": "This server's web servers are read-only (Settings tab).",
+    "webserver_not_found": "That web server is not installed on this server.",
+    "path_not_allowed": "Only files in the web server's own folder can be opened.",
+    "file_not_found": "The file does not exist (any more).",
+    "file_unreadable": "The file could not be read.",
+    "file_changed": "The file was changed by someone else since you opened it. Open it again.",
+    "file_too_large": "The file is too large to edit in the panel (96 KB at most).",
+    "site_not_found": "The site was not found in the configuration.",
+    "site_name_taken": "A site with that name already exists.",
+    "log_not_found": "That log file is not used by any site.",
+    "log_unreadable": "The log file could not be read (it may not exist yet).",
+    "backup_not_found": "That version no longer exists.",
+    "invalid_domain": "One of the domains is not valid.",
+    "invalid_target": "The address is not valid (http://host:port).",
+    "invalid_root": "The folder must be an absolute path, e.g. /var/www/site.",
+    "invalid_php_fpm": "Enter a socket (unix:/run/php/…sock) or an address (127.0.0.1:9000).",
+    "invalid_site_name": "The site name is not valid.",
+    "invalid_template": "Unknown site type.",
+    "invalid_email": "The email address is not valid.",
+    "wildcard_not_supported": "Wildcard certificates (*.example.com) need a DNS challenge, which certbot cannot do here.",
+    "check_exists": "That address is already checked.",
+    "too_many_checks": "Too many checks on this server.",
+    "check_not_found": "The check no longer exists.",
+    "host_helper_unavailable": "The agent could not start its helper on this server; is the agent's container running under the label mbp.role=agent?",
+    "certificate_unreadable": "The certificate file could not be read.",
+    "certificate_invalid": "The certificate file is not valid."
   },
   "validation": {
     "required": "This field is required.",
@@ -676,7 +702,9 @@
       "host_resources": "Server resources low",
       "agent_unreachable": "Agent unreachable",
       "deploy_failed": "Deploy failed",
-      "deploy_succeeded": "Deploy succeeded"
+      "deploy_succeeded": "Deploy succeeded",
+      "site_down": "Site down",
+      "cert_expiring": "Certificate expiring"
     },
     "descriptions": {
       "backup_failed": "A backup ended with an error.",
@@ -695,7 +723,9 @@
       "host_resources": "The server's RAM or Docker disk is above the limits in Containers → Settings.",
       "agent_unreachable": "The panel lost contact with the agent that manages containers.",
       "deploy_failed": "A project's deploy failed (fetch, build, start, check or the backup before it).",
-      "deploy_succeeded": "A project was deployed."
+      "deploy_succeeded": "A project was deployed.",
+      "site_down": "A health-checked site stopped answering (and when it is back).",
+      "cert_expiring": "An SSL certificate of a site expires soon (and when it was renewed)."
     },
     "thresholds": {
       "title": "Thresholds and timing",
@@ -777,7 +807,12 @@
       "recovered_host_disk": "The Docker disk has enough space again ({{percent}} used).",
       "recovered_agent": "Contact with the agent is back.",
       "deploy_succeeded": "Project “{{project}}” deployed: {{commit}} {{message}} (by {{actor}}).",
-      "deploy_failed": "Deploy of project “{{project}}” failed: {{error}}"
+      "deploy_failed": "Deploy of project “{{project}}” failed: {{error}}",
+      "site_down": "Site {{url}} is down: {{reason}}",
+      "recovered_site_down": "Site {{url}} is back (after {{minutes}} minutes).",
+      "cert_expiring": "The SSL certificate of {{names}} expires in {{days}} days ({{date}}).",
+      "cert_expired": "The SSL certificate of {{names}} has expired ({{date}}).",
+      "recovered_cert": "The SSL certificate of {{names}} was renewed (valid until {{date}})."
     }
   },
   "layout": {
@@ -1059,7 +1094,8 @@
       "source": "Source",
       "access": "Repository access",
       "env": "Environment variables",
-      "backup": "Backup before deploy"
+      "backup": "Backup before deploy",
+      "web": "Domain (web server)"
     },
     "accessHint": "For a private repository. Prefer a deploy key or a token with read-only access to this repository only.",
     "auth": {
@@ -1095,7 +1131,10 @@
       "backupRequiredHint": "Recommended: nothing is deployed without a fresh backup.",
       "server": "Server",
       "serverHint": "The server the project is built and run on.",
-      "serverLocked": "Cannot change after the first deploy; to move it, delete the project and add it on the other server."
+      "serverLocked": "Cannot change after the first deploy; to move it, delete the project and add it on the other server.",
+      "webDomains": "Domains",
+      "webTarget": "Address of the application",
+      "webTargetHint": "The port your compose file publishes, e.g. http://127.0.0.1:8080."
     },
     "validation": {
       "invalid_project_name": "Lowercase letters, digits, - and _, starting with a letter or digit (not the panel's own name).",
@@ -1112,7 +1151,10 @@
       "env_value_too_long": "A value is too long.",
       "too_many": "Too many variables.",
       "move_after_deploy": "Cannot change after the first deploy; to move it, delete the project and add it on the other server.",
-      "server_not_found": "Server not found."
+      "server_not_found": "Server not found.",
+      "web_target_required": "Domains need an address to send visitors to (and the other way round).",
+      "invalid_domain": "One of the domains is not valid.",
+      "invalid_target": "Use http://host:port."
     },
     "errors": {
       "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
@@ -1137,7 +1179,8 @@
       "down_failed": "Stopping the project's containers failed.",
       "job_not_found": "The agent no longer knows this deploy.",
       "agent_error": "The agent hit an unexpected error."
-    }
+    },
+    "webHint": "Optional. After every successful deploy, these domains are served by a reverse proxy on the server's nginx or Apache, unless a site has them already. Add HTTPS afterwards on the Web servers page."
   },
   "servers": {
     "title": "Servers",
@@ -1194,12 +1237,10 @@
   },
   "webservers": {
     "title": "Web servers",
-    "subtitle": "The nginx and Apache installed on this server and the domains they serve, read from their configuration.",
+    "subtitle": "nginx and Apache on this server: domains, status, configuration, logs, certificates and health checks.",
     "reload": "Read again",
     "config": "Configuration",
-    "filesRead": "Files read",
     "unreadable": "Not readable",
-    "sitesCount": "{{n}} sites",
     "domains": "Domains",
     "search": "Search domain, folder or address",
     "filter": {
@@ -1239,7 +1280,201 @@
       "outdated": "This page needs a newer agent. Update the panel's code on that server (git pull), then rebuild the agent.",
       "mountTitle": "The agent cannot see the server's configuration",
       "mount": "The agent reads the web servers' configuration from the server's /etc, mounted read-only. The compose files of this version already do this; update and rebuild the agent:",
-      "readOnly": "The mount is read-only: the panel only reads the configuration and never changes a file or restarts a web server."
+      "readOnly": "The panel reads the configuration through a read-only mount. Changes are made by the agent on the server: every change is tested (nginx -t / apachectl configtest) and undone if the test or the reload fails, and files are backed up before they are overwritten."
+    },
+    "sites": "Active sites",
+    "since": "Running since",
+    "lastReload": "Last reload",
+    "testOk": "The configuration is valid.",
+    "readOnly": "Read-only",
+    "readOnlyHint": "This server's web servers are read-only (Settings tab).",
+    "maintenance": "Maintenance",
+    "expired": "Expired",
+    "daysLeft": "{{n}} days left",
+    "restartConfirm": "Restart {{name}}? Open connections are dropped; a reload is usually enough. The configuration is tested first.",
+    "state": {
+      "active": "Running",
+      "inactive": "Stopped",
+      "failed": "Failed",
+      "activating": "Starting",
+      "reloading": "Reloading",
+      "deactivating": "Stopping",
+      "not_installed": "Not installed",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "test": "Test configuration",
+      "reload": "Reload",
+      "restart": "Restart"
+    },
+    "tabs": {
+      "sites": "Sites",
+      "checks": "Health checks",
+      "activity": "Activity",
+      "settings": "Settings"
+    },
+    "result": {
+      "ok": "Done: the configuration was tested and the web server reloaded.",
+      "failed": "The change failed",
+      "undone": "Nothing was left changed: the panel put everything back.",
+      "config_test_failed": "The configuration test failed",
+      "reload_failed": "The web server could not reload",
+      "restart_failed": "The web server could not restart",
+      "command_failed": "A command on the server failed",
+      "backup_failed": "The file could not be backed up, so it was not changed"
+    },
+    "job": {
+      "running": "Running…",
+      "success": "Done",
+      "failed": "Failed"
+    },
+    "certbot": {
+      "card": "Let's Encrypt (certbot)",
+      "missing": "Not installed",
+      "autoRenew": "Automatic renewal",
+      "noAutoRenew": "Not found",
+      "installHint": "certbot is not installed on this server. The panel can install it with the system's package manager.",
+      "installManual": "certbot is not installed and there is no apt, dnf or yum: install it on the server by hand.",
+      "install": "Install certbot",
+      "renewAll": "Renew now",
+      "title": "Get an SSL certificate",
+      "intro": "certbot asks Let's Encrypt for a free certificate for these names and adds it to the site. The names must point to this server (DNS) and port 80 must be reachable from the internet.",
+      "notInstalled": "certbot is not installed on this server; install it first (Let's Encrypt card).",
+      "email": "Email (optional)",
+      "emailHint": "Let's Encrypt writes here before a certificate expires. Empty: the one in Settings.",
+      "redirect": "Send HTTP visitors to HTTPS",
+      "issue": "Get certificate"
+    },
+    "new": {
+      "button": "New site",
+      "title": "New site",
+      "create": "Create, test and reload",
+      "domains": "Domains",
+      "domainsHint": "Press Enter after each name, e.g. example.com and www.example.com.",
+      "target": "Address to proxy to",
+      "targetHint": "Usually a port published on this server, e.g. http://127.0.0.1:8080.",
+      "fromContainer": "…or a container's published port",
+      "pickContainer": "Pick a container",
+      "redirectTo": "Redirect to",
+      "permanent": "Permanent (301); off: temporary (302)",
+      "keepPath": "Keep the path (/page → new address/page)",
+      "root": "Folder of the files",
+      "fpm": "PHP-FPM",
+      "fpmHint": "The PHP-FPM socket (unix:/run/php/php8.2-fpm.sock) or address (127.0.0.1:9000).",
+      "safety": "The site is written to sites-available (or conf.d), enabled, tested and the web server reloaded; if the test fails, it is removed again. HTTPS can be added afterwards with Let's Encrypt.",
+      "templates": {
+        "proxy": "Reverse proxy",
+        "php": "PHP",
+        "static": "Static files",
+        "redirect": "Redirect"
+      },
+      "hints": {
+        "proxy": "Sends visitors to an application, e.g. a container or a project, with WebSocket support.",
+        "php": "Serves a PHP application (WordPress, Laravel, …) through PHP-FPM.",
+        "static": "Serves the files in a folder (HTML, a built front end).",
+        "redirect": "Sends every visitor to another address."
+      }
+    },
+    "site": {
+      "tabs": {
+        "config": "Configuration",
+        "logs": "Logs",
+        "versions": "Previous versions"
+      },
+      "file": "File",
+      "editor": "Configuration file",
+      "saveAndReload": "Test, save and reload",
+      "saveHint": "The current file is backed up first. If the test or the reload fails, the old version is put back.",
+      "versionsHint": "A copy is kept every time the panel changes this file (the newest 20).",
+      "noVersions": "No earlier versions yet: they are made when the file is edited in the panel.",
+      "view": "View",
+      "restore": "Restore",
+      "restoreConfirm": "Put this version back? It is tested first, and the current one is kept as a version too.",
+      "log": {
+        "access": "Access log",
+        "error": "Error log"
+      },
+      "logFile": "Log file",
+      "noLogs": "This site has no log files of its own.",
+      "emptyLog": "(empty)",
+      "enable": "Enable",
+      "disable": "Disable",
+      "disableConfirm": "Stop serving this site? {{file}} stays on disk and can be enabled again.",
+      "maintenanceOn": "Maintenance mode",
+      "maintenanceOff": "End maintenance",
+      "maintenanceConfirm": "Show visitors a maintenance page (HTTP 503) instead of the site? Its certificate is kept, and turning it off brings the site back as it was.",
+      "getCertificate": "Get SSL certificate",
+      "renewCertificate": "Renew certificate",
+      "monitor": "Watch this site",
+      "certificate": "Certificate from {{issuer}}, valid until {{date}} ({{days}} days)."
+    },
+    "checks": {
+      "url": "Address",
+      "urlHint": "The panel requests it regularly, like a visitor; an answer below 500 means up.",
+      "add": "Add",
+      "added": "The site is now watched (Health checks tab).",
+      "empty": "No checks yet. Add an address, or use “Watch this site” on a domain.",
+      "state": "State",
+      "response": "Last answer",
+      "uptime": "Uptime (24 h)",
+      "recent": "Recent checks",
+      "runNow": "Check now",
+      "enabled": "Watched",
+      "delete": "Delete this check?",
+      "never": "Not checked yet",
+      "downSince": "Down since {{time}}",
+      "hint": "Interval, timeout and failures before an alert are in Settings. Alerts go to Bale, Telegram and the webhook like the others.",
+      "status": {
+        "up": "Up",
+        "down": "Down",
+        "pending": "Waiting"
+      },
+      "errors": {
+        "timeout": "Timeout",
+        "connect_error": "No connection",
+        "tls_error": "TLS error"
+      }
+    },
+    "activity": {
+      "empty": "No changes yet.",
+      "time": "Time",
+      "action": "Action",
+      "target": "Target",
+      "by": "By",
+      "result": "Result",
+      "ok": "Done",
+      "output": "Output",
+      "sources": {
+        "panel": "Panel",
+        "deploy": "Deploy"
+      },
+      "actions": {
+        "reload": "Reload",
+        "restart": "Restart",
+        "edit": "Edit",
+        "restore": "Restore version",
+        "enable": "Enable site",
+        "disable": "Disable site",
+        "maintenance_on": "Maintenance on",
+        "maintenance_off": "Maintenance off",
+        "create": "New site",
+        "certbot_issue": "Get certificate",
+        "certbot_renew": "Renew certificates",
+        "certbot_install": "Install certbot"
+      }
+    },
+    "settings": {
+      "readOnly": "Read-only",
+      "readOnlyHint": "Only view: reloads, edits, sites and certificates are refused for this server.",
+      "acmeEmail": "Email for Let's Encrypt",
+      "acmeEmailHint": "Used when getting certificates, for expiry notices from Let's Encrypt.",
+      "alerts": "Alerts",
+      "alertsHint": "0 days turns certificate alerts off. Certificates are read every few hours.",
+      "cert_warning_days": "Warn about a certificate this many days before it expires",
+      "check_interval_minutes": "Check sites every (minutes)",
+      "check_timeout_seconds": "Wait for an answer (seconds)",
+      "check_failures": "Failed checks in a row before an alert",
+      "saved": "Settings saved."
     }
   },
   "help": {

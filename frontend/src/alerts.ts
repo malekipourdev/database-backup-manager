@@ -98,7 +98,37 @@ function renderBody(item: NotificationLogItem, t: TFunction, lang: string): stri
       return t("alerts.events.agent_unreachable", {
         code: t(`errors.${str("code")}`, { defaultValue: str("code") }),
       });
+    case "site_down":
+      return t("alerts.events.site_down", {
+        url: str("url"),
+        reason:
+          typeof p.code === "number"
+            ? `HTTP ${p.code}`
+            : t(`webservers.checks.errors.${str("error")}`, { defaultValue: str("error") }),
+      });
+    case "cert_expiring": {
+      const values = {
+        names: (Array.isArray(p.names) ? p.names : []).join(", ") || str("path"),
+        days: formatNumber(num("days") ?? 0, lang),
+        date: p.not_after ? formatDateTime(str("not_after"), lang) : "—",
+      };
+      return (num("days") ?? 0) < 0
+        ? t("alerts.events.cert_expired", values)
+        : t("alerts.events.cert_expiring", values);
+    }
     case "recovered":
+      if (p.kind === "site_down") {
+        return t("alerts.events.recovered_site_down", {
+          url: str("url"),
+          minutes: formatNumber(num("minutes") ?? 0, lang),
+        });
+      }
+      if (p.kind === "cert") {
+        return t("alerts.events.recovered_cert", {
+          names: (Array.isArray(p.names) ? p.names : []).join(", ") || str("path"),
+          date: p.not_after ? formatDateTime(str("not_after"), lang) : "—",
+        });
+      }
       if (typeof p.kind === "string" && RECOVERED_KINDS.has(p.kind)) {
         return t(`alerts.events.recovered_${p.kind}`, {
           name: str("name"),
