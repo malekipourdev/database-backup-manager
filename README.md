@@ -28,7 +28,7 @@ and English.
   manage their containers, deploy projects to them and back up their databases from one place
 - **overview**: a home page with the current server's health, the last day's backups, its
   containers and deploys, and everything that needs attention
-- **organized menu**: folding groups from the widest scope down (infrastructure, applications,
+- **organized menu**: folding groups from the widest scope down (server management, applications,
   databases & backups, alerts & chat access, system), a **Go to…** search (`Ctrl+K`), keyboard and screen-reader friendly
 - **built-in guide**: a **Help** page in the panel (Persian and English) that explains every
   feature by topic, with search; the "?" next to a page's title opens its article
@@ -616,7 +616,7 @@ blocked for 15 minutes. So a stolen or borrowed messenger account can't stop you
 
 ## Web servers (nginx, Apache)
 
-**Web servers** (under Infrastructure) lists the nginx and Apache installed on the current
+**Web servers** (under Server management) lists the nginx and Apache installed on the current
 server and every domain they serve: `server_name` / `ServerName` and `ServerAlias`, ports,
 HTTPS and its certificate file, what the domain serves (a proxy address with the servers of an
 nginx `upstream`, PHP-FPM, a redirect or a folder) and the file and line it is defined in.
@@ -724,7 +724,7 @@ and databases are managed from the same panel and bot, and its alerts name it.
 
 ### Add a server
 
-1. In the panel, open **Servers** (under Infrastructure in the menu), then **Add server**: a name, the address the panel reaches it at,
+1. In the panel, open **Manage all servers** (in the current server's card), then **Add server**: a name, the address the panel reaches it at,
    and the agent's port (`8443` by default).
 2. The panel shows the commands to run on that machine, with a **token made for it, shown only
    once**. They clone this repository, write `.env.agent` and start

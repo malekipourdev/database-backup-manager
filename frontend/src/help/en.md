@@ -11,12 +11,12 @@ The panel can manage several servers. At the bottom of the side menu (on a phone
 
 ## The menu
 
-The menu is grouped from the widest scope down: servers, then applications, then databases. Groups fold: press a group's name to open or close it; the group of the current page opens by itself.
+The menu is grouped from the widest scope down: the server, then applications, then databases. Groups fold: press a group's name to open or close it; the group of the current page opens by itself.
 
 | Section              | Item                 | Used for                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
 |                      | Overview             | (current server) Health, the last day's backups, containers, deploys, and problems |
-| Infrastructure       | Servers              | Add, connect and check the servers the panel manages                               |
+| Server management    | Web servers          | (current server) The domains nginx and Apache serve                                |
 | Applications         | Projects             | (current server) Deploy applications from git with docker compose                  |
 |                      | Containers           | (current server) See and control Docker containers                                 |
 | Databases & backups  | Databases            | (current server) Add MySQL/MariaDB, test connections, pick databases, take backups |
@@ -27,6 +27,8 @@ The menu is grouped from the widest scope down: servers, then applications, then
 |                      | Bale & Telegram bots | Manage everything from Bale and Telegram                                           |
 | System               | Account security     | Two-step verification and recovery codes                                           |
 |                      | Help                 | This guide                                                                         |
+
+The servers themselves are added, connected and checked under **Manage all servers**, in the current server's card.
 
 **Go to…** (top of the side menu, or `Ctrl+K`, or `/`) finds any page or switches server by typing a few letters.
 
@@ -607,7 +609,7 @@ If a token leaked or was lost, press "New token" on the server's card. The old t
 @title Web servers (nginx and Apache)
 @summary The domains that nginx or Apache serve on a server, read from their configuration.
 
-**Web servers** (under Infrastructure) shows the nginx and Apache installed on the current server and every domain they serve. For now the page only reads: it never changes a file or restarts a web server.
+**Web servers** (under Server management) shows the nginx and Apache installed on the current server and every domain they serve. For now the page only reads: it never changes a file or restarts a web server.
 
 ## What the list shows
 

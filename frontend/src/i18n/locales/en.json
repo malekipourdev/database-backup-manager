@@ -28,7 +28,7 @@
     "groups": {
       "data": "Databases & backups",
       "apps": "Applications",
-      "infra": "Infrastructure",
+      "infra": "Server management",
       "alerts": "Alerts & chat access",
       "system": "System"
     },
