@@ -1093,3 +1093,48 @@ class ServerSetup(BaseModel):
     server: ServerOut
     token: str
     install_command: str
+
+
+# --- Web servers (nginx, Apache; read from the host's configuration) ---
+
+
+class WebBackend(BaseModel):
+    # proxy | fastcgi | uwsgi | grpc | scgi
+    kind: str
+    target: str
+    # The servers of an nginx upstream named by the target, if any.
+    servers: list[str] = []
+
+
+class WebSite(BaseModel):
+    # nginx | apache
+    server: str
+    # server_name / ServerName and ServerAlias; empty for a catch-all block.
+    names: list[str] = []
+    ports: list[int] = []
+    ssl: bool = False
+    default_server: bool = False
+    root: str | None = None
+    redirect: str | None = None
+    backends: list[WebBackend] = []
+    certificate: str | None = None
+    file: str
+    line: int
+    # False: in sites-available but not loaded by the server.
+    enabled: bool = True
+
+
+class WebServer(BaseModel):
+    kind: str
+    config: str
+    # Why the main configuration file could not be read, if it could not.
+    error: str | None = None
+    warnings: list[str] = []
+    files: int = 0
+    sites: list[WebSite] = []
+
+
+class WebServerList(BaseModel):
+    # False: the host's /etc is not mounted in the agent.
+    available: bool
+    servers: list[WebServer] = []

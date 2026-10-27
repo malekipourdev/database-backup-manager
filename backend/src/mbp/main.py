@@ -16,6 +16,7 @@ from mbp.api import (
     schedules,
     servers,
     storage,
+    webservers,
 )
 from mbp.api.errors import register_error_handlers
 from mbp.backups.runner import BackupRunner
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(projects.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(servers.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(webservers.router, prefix=API_PREFIX, dependencies=protected)
     return app
 
 

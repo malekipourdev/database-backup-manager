@@ -603,6 +603,37 @@ docker compose -f docker-compose.agent.yml --env-file .env.agent up -d --build
 - حذف از پنل، agent را از روی سرور پاک نمی‌کند. روی آن سرور اجرا کنید: `docker compose -f docker-compose.agent.yml down -v`
 - سرور خود پنل قابل حذف نیست، ولی می‌توانید نامش را عوض کنید.
 
+@@article webservers /webservers
+@title وب‌سرورها (nginx و Apache)
+@summary دامنه‌هایی که nginx یا Apache روی یک سرور سرو می‌کنند، از روی پیکربندی‌شان.
+
+صفحه‌ی **وب‌سرورها** (در بخش زیرساخت) nginx و Apache نصب‌شده روی سرور فعلی و همه‌ی دامنه‌هایشان را نشان می‌دهد. فعلاً فقط می‌خواند: هیچ فایلی را تغییر نمی‌دهد و وب‌سروری را ری‌استارت نمی‌کند.
+
+## در فهرست چه می‌بینید
+
+- **دامنه:** هر `server_name` (در nginx) یا `ServerName` / `ServerAlias` (در Apache). بلوکی که نام ندارد «هر نام دیگر (catch-all)» نشان داده می‌شود.
+- **پورت‌ها و HTTPS:** از `listen` یا `<VirtualHost *:443>`. «HTTPS (HTTP منتقل می‌شود)» یعنی پورت ۸۰ فقط بازدیدکننده را به HTTPS می‌فرستد. با نگه داشتن نشانگر روی برچسب، فایل گواهی دیده می‌شود.
+- **سرو می‌کند:** آدرس پراکسی (`proxy_pass`، `ProxyPass`، همراه سرورهای `upstream` در nginx)، PHP-FPM (`fastcgi_pass`)، انتقال (redirect)، یا پوشه‌ی فایل‌ها (`root`، `DocumentRoot`).
+- **تعریف‌شده در:** فایل و شماره‌ی خط، برای پیدا کردنش روی سرور.
+- **غیرفعال:** سایت‌هایی در `sites-available` که در `sites-enabled` لینک نشده‌اند؛ با گزینه‌ی «همه» دیده می‌شوند.
+
+## چطور کار می‌کند
+
+agent پوشه‌ی `/etc` سرور را (فقط‌خواندنی) از `nginx.conf`، `apache2.conf` یا `httpd.conf` شروع به خواندن می‌کند و `include`ها را همان‌طور که خود وب‌سرور دنبال می‌کند. فایلی که پیدا یا خوانده نشود، به‌صورت هشدار روی کارت وب‌سرور می‌آید.
+
+## روشن کردن
+
+agent به اتصال فقط‌خواندنی `/etc:/host/etc:ro` نیاز دارد که در فایل‌های compose هست. بعد از به‌روزرسانی پنل:
+
+```bash
+git pull
+docker compose up -d --build agent
+```
+
+روی سرورهای دیگر، agent را مثل [به‌روزرسانی agent](#server-maintenance) دوباره build کنید.
+
+> فهرست، پیکربندی روی دیسک را نشان می‌دهد. تغییری که هنوز با `nginx -s reload` یا `systemctl reload apache2` بارگذاری نشده، اینجا از قبل دیده می‌شود.
+
 @@category containers containers کانتینرها
 
 @@article containers-enable /containers

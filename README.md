@@ -20,6 +20,8 @@ and English.
 - **two-step sign-in** with Google Authenticator or any other TOTP app (optional)
 - **containers** (optional): see the server's Docker containers, their usage and logs, start,
   stop and restart them from the panel or a bot, and get alerts when one goes down
+- **web servers** (optional): the nginx and Apache on each server and the domains they serve
+  (ports, HTTPS, proxy target or folder, config file), read-only from their configuration
 - **projects** (optional): deploy applications from git with docker compose, from the panel
   or a bot, with a backup of their databases before every deploy and one-click rollback
 - **several servers**: connect other machines to the same panel through a small agent, then
@@ -611,6 +613,29 @@ verification](#two-step-verification-google-authenticator) turned on, and the co
 within 2 minutes. If nobody has turned on two-step verification, containers can only be
 watched from the bot. After 5 wrong codes in 15 minutes, container control from the bot is
 blocked for 15 minutes. So a stolen or borrowed messenger account can't stop your services.
+
+## Web servers (nginx, Apache)
+
+**Web servers** (under Infrastructure) lists the nginx and Apache installed on the current
+server and every domain they serve: `server_name` / `ServerName` and `ServerAlias`, ports,
+HTTPS and its certificate file, what the domain serves (a proxy address with the servers of an
+nginx `upstream`, PHP-FPM, a redirect or a folder) and the file and line it is defined in.
+Sites in `sites-available` that are not enabled are listed separately.
+
+The agent reads the configuration from the host's `/etc`, mounted read-only
+(`/etc:/host/etc:ro` in both compose files), starting at `/etc/nginx/nginx.conf`,
+`/etc/apache2/apache2.conf` or `/etc/httpd/conf/httpd.conf` and following `include` the way
+the servers do. It never changes a file and never reloads a web server. The page needs the
+agent (see [Containers](#containers)); after updating the panel, rebuild it:
+
+```bash
+git pull
+docker compose up -d --build agent
+```
+
+On another server, rebuild its agent as in [Updating or removing an agent](#updating-or-removing-an-agent).
+With SELinux enforcing (RHEL, Rocky, Alma), the agent may not be allowed to read `/etc`; the
+page then shows "permission denied" warnings.
 
 ## Projects (deploy from git)
 

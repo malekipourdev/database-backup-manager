@@ -23,6 +23,7 @@ export {
   DownloadSimple,
   Flag,
   GearSix,
+  Globe,
   HardDrives,
   Infinity as InfinityIcon,
   Key,

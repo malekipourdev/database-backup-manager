@@ -27,6 +27,7 @@ import { ProjectFormPage } from "./pages/ProjectFormPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { WebServersPage } from "./pages/WebServersPage";
 import { notifications } from "@mantine/notifications";
 import { cssVariablesResolver, theme } from "./theme/theme";
 
@@ -96,6 +97,7 @@ export function AppRoutes() {
           <Route path="/bots" element={<BotsPage />} />
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/containers" element={<ContainersPage />} />
+          <Route path="/webservers" element={<WebServersPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/new" element={<ProjectFormPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />

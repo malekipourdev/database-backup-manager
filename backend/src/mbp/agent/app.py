@@ -33,6 +33,7 @@ from mbp.agent.docker import (
     summarize,
 )
 from mbp.agent.host import HostProbe
+from mbp.agent.webserver import scan as scan_webservers
 from mbp.backups import dump_command
 from mbp.security import agent_auth
 from mbp.security.agent_token import agent_token
@@ -61,6 +62,9 @@ class AgentSettings(BaseSettings):
     mysqldump_path: str = "/usr/local/bin/mysqldump"
     mariadb_dump_path: str = "/usr/bin/mariadb-dump"
     connect_timeout_seconds: int = 10
+    # The host's filesystem as mounted in the agent (its /etc at <host_root>/etc, read-only),
+    # for the web servers' configuration.
+    host_root: str = "/host"
 
     @property
     def remote(self) -> bool:
@@ -309,6 +313,12 @@ def create_agent_app(
     @app.post("/v1/projects/{name}/remove", dependencies=auth)
     def project_remove(name: str, body: RemoveRequest) -> dict:
         return deployer.remove(name, body.compose_file, body.down)
+
+    # --- web servers on this server (read-only) ---
+
+    @app.get("/v1/webservers", dependencies=auth)
+    def webservers() -> dict:
+        return scan_webservers(settings.host_root)
 
     # --- databases on this server ---
 

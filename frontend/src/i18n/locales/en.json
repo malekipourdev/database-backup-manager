@@ -20,6 +20,7 @@
     "projects": "Projects",
     "containers": "Containers",
     "servers": "Servers",
+    "webservers": "Web servers",
     "notifications": "Alerts",
     "bots": "Bale & Telegram bots",
     "account": "Account security",
@@ -40,7 +41,8 @@
     "keywords": {
       "settings": "settings S3 remote storage retention compression",
       "bots": "bot bale telegram chat admins link code",
-      "account": "two-step 2FA google authenticator password recovery"
+      "account": "two-step 2FA google authenticator password recovery",
+      "webservers": "nginx apache apache2 httpd domains sites virtual host vhost ssl https"
     }
   },
   "language": {
@@ -1189,6 +1191,56 @@
     "manage": "Manage all servers",
     "selected": "Current server",
     "select": "Work on this server"
+  },
+  "webservers": {
+    "title": "Web servers",
+    "subtitle": "The nginx and Apache installed on this server and the domains they serve, read from their configuration.",
+    "reload": "Read again",
+    "config": "Configuration",
+    "filesRead": "Files read",
+    "unreadable": "Not readable",
+    "sitesCount": "{{n}} sites",
+    "domains": "Domains",
+    "search": "Search domain, folder or address",
+    "filter": {
+      "enabled": "Active",
+      "all": "All (+{{n}} disabled)"
+    },
+    "noSites": "No sites are defined in the configuration.",
+    "noMatch": "No domain matches.",
+    "catchAll": "Any other name (catch-all)",
+    "disabled": "Disabled",
+    "default": "Default",
+    "https": "HTTPS",
+    "httpsForced": "HTTPS (HTTP redirects)",
+    "httpOnly": "HTTP only",
+    "redirect": "Redirect",
+    "files": "Files",
+    "backends": {
+      "proxy": "Proxy",
+      "fastcgi": "PHP / FastCGI",
+      "uwsgi": "uWSGI",
+      "grpc": "gRPC",
+      "scgi": "SCGI"
+    },
+    "columns": {
+      "domain": "Domain",
+      "server": "Server",
+      "ports": "Ports",
+      "https": "HTTPS",
+      "serves": "Serves",
+      "file": "Defined in"
+    },
+    "noneTitle": "No web server found",
+    "none": "Neither nginx (/etc/nginx) nor Apache (/etc/apache2 or /etc/httpd) is installed on this server.",
+    "setup": {
+      "agentTitle": "The agent did not answer",
+      "agentLocal": "This page reads the web servers' configuration through the agent, the same service the Containers page uses. Turn it on as described there.",
+      "outdated": "This page needs a newer agent. Update the panel's code on that server (git pull), then rebuild the agent.",
+      "mountTitle": "The agent cannot see the server's configuration",
+      "mount": "The agent reads the web servers' configuration from the server's /etc, mounted read-only. The compose files of this version already do this; update and rebuild the agent:",
+      "readOnly": "The mount is read-only: the panel only reads the configuration and never changes a file or restarts a web server."
+    }
   },
   "help": {
     "title": "Help and documentation",

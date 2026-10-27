@@ -302,7 +302,7 @@ def agent_app(docker, agent_commands, tmp_path, monkeypatch):
     from mbp.agent.host import HostProbe
 
     monkeypatch.setenv("MBP_AGENT_HOME", str(tmp_path / "agent-home"))
-    settings = AgentSettings(encryption_key=TEST_ENCRYPTION_KEY)
+    settings = AgentSettings(encryption_key=TEST_ENCRYPTION_KEY, host_root=str(tmp_path / "host"))
     client = DockerClient("http://docker", transport=docker.transport())
     deployer = DeployManager(
         tmp_path / "projects",

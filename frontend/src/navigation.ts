@@ -7,6 +7,7 @@ import {
   Cube,
   Database,
   GearSix,
+  Globe,
   HardDrives,
   Question,
   Robot,
@@ -42,7 +43,16 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "infra",
     label: "nav.groups.infra",
-    items: [{ to: "/servers", label: "nav.servers", icon: HardDrives }],
+    items: [
+      { to: "/servers", label: "nav.servers", icon: HardDrives },
+      {
+        to: "/webservers",
+        label: "nav.webservers",
+        icon: Globe,
+        scoped: true,
+        keywords: "nav.keywords.webservers",
+      },
+    ],
   },
   {
     id: "apps",

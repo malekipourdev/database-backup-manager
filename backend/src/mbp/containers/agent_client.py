@@ -161,6 +161,17 @@ class AgentClient:
             json={"compose_file": compose_file, "down": down},
         )
 
+    # --- web servers ---
+
+    def webservers(self) -> dict:
+        try:
+            return self._call("GET", "/v1/webservers")
+        except ApiError as exc:
+            # An agent from before web servers has no such route.
+            if exc.status == 404 and exc.code == "agent_error":
+                raise ApiError(409, "agent_outdated") from exc
+            raise
+
     # --- databases on the agent's server ---
 
     def mysql_test(self, target: dict) -> dict:
