@@ -317,3 +317,25 @@ def test_deploy_alert_texts(lang):
         failed = Event("deploy_failed", "s", {**base, "error": error, "detail": "web: exited"})
         text = render(failed, lang, ZoneInfo("UTC"))
         assert "result_" not in text and "{" not in text and "web: exited" in text
+
+
+def test_folders(auth_client):
+    first = create(auth_client, name="api", folder="  Airplus   Core ")
+    assert first["folder"] == "Airplus Core"
+    second = create(auth_client, name="web", folder="Airplus Core")
+    plain = create(auth_client, name="blog")
+    assert plain["folder"] is None
+    listed = {p["name"]: p["folder"] for p in auth_client.get("/api/projects").json()}
+    assert listed == {"api": "Airplus Core", "web": "Airplus Core", "blog": None}
+    moved = auth_client.put(
+        f"/api/projects/{second['id']}",
+        json={**body(name="web", credential=None), "folder": "ایرپلاس"},
+    )
+    assert moved.status_code == 200 and moved.json()["folder"] == "ایرپلاس"
+    cleared = auth_client.put(
+        f"/api/projects/{second['id']}", json={**body(name="web", credential=None), "folder": ""}
+    )
+    assert cleared.json()["folder"] is None
+    for bad in ("a/b", "nul\x00here", "x" * 61):
+        response = auth_client.post("/api/projects", json=body(name="bad", folder=bad))
+        assert response.status_code == 422, bad

@@ -33,6 +33,8 @@ export interface DeploymentDetail extends DeploymentSummary {
 export interface Project {
   id: number;
   name: string;
+  /** A folder in the list (display only); null: none. */
+  folder: string | null;
   server_id: number;
   server_name: string;
   repo_url: string;
@@ -58,6 +60,7 @@ export interface Project {
 
 export interface ProjectInput {
   name: string;
+  folder: string | null;
   /** null: the panel's own server (new project) or unchanged. */
   server_id: number | null;
   repo_url: string;

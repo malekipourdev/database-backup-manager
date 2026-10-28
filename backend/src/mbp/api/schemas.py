@@ -930,6 +930,8 @@ class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     # The server it is deployed on; None: the panel's own.
     server_id: int | None = None
+    # A folder in the list (display only); empty: none.
+    folder: str | None = Field(default=None, max_length=60)
     repo_url: str = Field(min_length=1, max_length=500)
     branch: str = Field(default="main", min_length=1, max_length=200)
     compose_file: str = Field(default="docker-compose.yml", min_length=1, max_length=200)
@@ -947,6 +949,16 @@ class ProjectIn(BaseModel):
     # Build the images on this server and send them to the project's server; None: build
     # where it runs.
     build_server_id: int | None = None
+
+    @field_validator("folder")
+    @classmethod
+    def _folder(cls, value: str | None) -> str | None:
+        value = " ".join((value or "").split()) or None
+        if value is not None and (
+            "/" in value or any(ord(c) < 32 or 0x7F <= ord(c) < 0xA0 for c in value)
+        ):
+            raise ValueError("invalid_folder")
+        return value
 
     @field_validator("web_domains")
     @classmethod
@@ -1027,6 +1039,7 @@ class DeploymentPage(BaseModel):
 class ProjectOut(BaseModel):
     id: int
     name: str
+    folder: str | None = None
     server_id: int
     server_name: str
     repo_url: str

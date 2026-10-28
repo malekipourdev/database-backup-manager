@@ -1,9 +1,12 @@
 import {
   ActionIcon,
   Alert,
+  Autocomplete,
   Button,
+  FileButton,
   Group,
   Loader,
+  Modal,
   MultiSelect,
   Paper,
   PasswordInput,
@@ -30,8 +33,10 @@ import {
   type Project,
   type ProjectInput,
   useProject,
+  useProjects,
   useSaveProject,
 } from "../api/projects";
+import { parseDotenv } from "../dotenv";
 import { Plus, Trash } from "../components/Icons";
 import { PageHeader } from "../components/PageHeader";
 
@@ -55,6 +60,7 @@ function initial(
 ): ProjectInput & { rows: EnvRow[] } {
   return {
     name: project?.name ?? "",
+    folder: project?.folder ?? null,
     server_id: project?.server_id ?? serverId,
     repo_url: project?.repo_url ?? "",
     branch: project?.branch ?? "main",
@@ -189,6 +195,46 @@ function Form({ project }: { project?: Project }) {
       : null;
   const deployed = Boolean(project?.last_deployment);
   const envError = fieldError("env");
+  const projects = useProjects();
+  const folders = useMemo(
+    () =>
+      [...new Set((projects.data ?? []).map((p) => p.folder).filter((f): f is string => !!f))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [projects.data],
+  );
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState("");
+
+  /** Fills the variables from a .env file: same names get the new value, new ones are added. */
+  const importEnv = (text: string) => {
+    const { vars, skipped } = parseDotenv(text);
+    let added = 0;
+    let updated = 0;
+    setValues((prev) => {
+      const rows = prev.rows.filter((r) => r.name.trim() || r.value);
+      for (const { name, value } of vars) {
+        const index = rows.findIndex((r) => r.name.trim() === name);
+        if (index === -1) {
+          rows.push({ ...row(name), value });
+          added += 1;
+        } else {
+          rows[index] = { ...rows[index], value };
+          updated += 1;
+        }
+      }
+      return { ...prev, rows };
+    });
+    notifications.show({
+      color: vars.length ? (skipped.length ? "yellow" : "green") : "red",
+      message: vars.length
+        ? t("projects.envImport.done", { added, updated }) +
+          (skipped.length
+            ? ` ${t("projects.envImport.skipped", { lines: skipped.slice(0, 10).join(", ") })}`
+            : "")
+        : t("projects.envImport.empty"),
+    });
+  };
 
   const submit = () => {
     const { rows, ...rest } = values;
@@ -235,6 +281,16 @@ function Form({ project }: { project?: Project }) {
               error={fieldError("name")}
             />
             <ServerNote serverId={values.server_id} deployed={deployed} />
+            <Autocomplete
+              label={t("projects.fields.folder")}
+              description={t("projects.fields.folderHint")}
+              placeholder={t("projects.fields.folderPlaceholder")}
+              data={folders}
+              value={values.folder ?? ""}
+              onChange={(v) => set("folder", v || null)}
+              error={fieldError("folder")}
+              maxLength={60}
+            />
             <TextInput
               label={t("projects.fields.repoUrl")}
               description={t("projects.fields.repoUrlHint")}
@@ -382,7 +438,7 @@ function Form({ project }: { project?: Project }) {
                 {envError}
               </Text>
             )}
-            <Group>
+            <Group gap="xs">
               <Button
                 variant="default"
                 size="xs"
@@ -391,7 +447,66 @@ function Form({ project }: { project?: Project }) {
               >
                 {t("projects.addVar")}
               </Button>
+              <FileButton
+                accept=".env,text/plain,application/octet-stream"
+                onChange={async (file) => {
+                  if (!file) return;
+                  if (file.size > 512 * 1024) {
+                    notifications.show({ color: "red", message: t("projects.envImport.tooLarge") });
+                    return;
+                  }
+                  importEnv(await file.text());
+                }}
+              >
+                {(props) => (
+                  <Button {...props} variant="default" size="xs">
+                    {t("projects.envImport.upload")}
+                  </Button>
+                )}
+              </FileButton>
+              <Button variant="default" size="xs" onClick={() => setPasting(true)}>
+                {t("projects.envImport.paste")}
+              </Button>
             </Group>
+            <Text size="xs" c="dimmed">
+              {t("projects.envImport.hint")}
+            </Text>
+            <Modal
+              opened={pasting}
+              onClose={() => setPasting(false)}
+              title={t("projects.envImport.paste")}
+              size="lg"
+            >
+              <Stack gap="sm">
+                <Textarea
+                  aria-label={t("projects.envImport.paste")}
+                  placeholder={`DB_HOST=db\nDB_PASSWORD="…"`}
+                  autosize
+                  minRows={8}
+                  maxRows={20}
+                  dir="ltr"
+                  spellCheck={false}
+                  styles={{ input: { fontFamily: "var(--font-mono)", fontSize: 12 } }}
+                  value={pasted}
+                  onChange={(e) => setPasted(e.currentTarget.value)}
+                />
+                <Group justify="flex-end">
+                  <Button variant="default" onClick={() => setPasting(false)}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    disabled={!pasted.trim()}
+                    onClick={() => {
+                      importEnv(pasted);
+                      setPasted("");
+                      setPasting(false);
+                    }}
+                  >
+                    {t("projects.envImport.apply")}
+                  </Button>
+                </Group>
+              </Stack>
+            </Modal>
           </Stack>
         </Paper>
 

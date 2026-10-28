@@ -28,6 +28,7 @@ def _out(project: Project, repo: ProjectRepository, last=None) -> ProjectOut:
     return ProjectOut(
         id=project.id,
         name=project.name,
+        folder=project.folder,
         server_id=project.server_id,
         server_name=server.name if server else "",
         repo_url=project.repo_url,
