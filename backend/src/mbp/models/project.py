@@ -40,6 +40,11 @@ class Project(Base):
     # (e.g. http://127.0.0.1:8080) on the server's web server, unless a site has them already.
     web_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
     web_target: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Build the images on this server and send them to `server_id`, which then only starts
+    # them; NULL: build where the project runs.
+    build_server_id: Mapped[int | None] = mapped_column(
+        ForeignKey("servers.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False

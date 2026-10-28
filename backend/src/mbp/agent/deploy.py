@@ -33,6 +33,10 @@ REPO_URL_RE = re.compile(
     r"(https://[^\s@/]+(:\d+)?/\S+|ssh://[^\s/]+/\S+|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:\S+)"
 )
 AUTH_TYPES = ("none", "token", "ssh_key")
+# deploy: fetch, build and start here. build: fetch and build only (on a build server; the
+# images are then sent to the server that runs them). prebuilt: fetch and start with images
+# already loaded here, without building.
+DEPLOY_MODES = ("deploy", "build", "prebuilt")
 ENV_MARKER = "# Written by DevOps Manager on every deploy; edit the variables in the panel.\n"
 # Files written before the rename are still recognized as the panel's own.
 ENV_MARKERS = (
@@ -87,6 +91,7 @@ class DeploySpec:
     env: dict[str, str] = field(default_factory=dict)
     auth_type: str = "none"
     credential: str | None = None
+    mode: str = "deploy"
 
     def validate(self, allow_file: bool = False) -> None:
         if not valid_project(self.project):
@@ -98,6 +103,8 @@ class DeploySpec:
             raise DockerError("invalid_ref", 422)
         if not valid_compose_file(self.compose_file):
             raise DockerError("invalid_compose_file", 422)
+        if self.mode not in DEPLOY_MODES:
+            raise DockerError("invalid_mode", 422)
         if self.auth_type not in AUTH_TYPES or (self.auth_type != "none" and not self.credential):
             raise DockerError("invalid_auth", 422)
         for name in self.env:
@@ -124,6 +131,9 @@ class Job:
     commit_message: str | None = None
     error_code: str | None = None
     error_detail: str | None = None
+    mode: str = "deploy"
+    # The images a build job made, for sending to the server that runs them.
+    images: list[str] = field(default_factory=list)
     created: float = field(default_factory=time.monotonic)
     finished: float | None = None
 
@@ -140,6 +150,8 @@ class Job:
             "commit_message": self.commit_message,
             "error_code": self.error_code,
             "error_detail": self.error_detail,
+            "mode": self.mode,
+            "images": self.images,
         }
 
 
@@ -220,7 +232,7 @@ class DeployManager:
             if spec.project in self._busy:
                 raise DockerError("deploy_in_progress", 409)
             self._busy.add(spec.project)
-            job = Job(id=uuid.uuid4().hex, project=spec.project)
+            job = Job(id=uuid.uuid4().hex, project=spec.project, mode=spec.mode)
             self._jobs[job.id] = job
         if background:
             threading.Thread(target=self._run, args=(job, spec), daemon=True).start()
@@ -360,24 +372,40 @@ class DeployManager:
                 env,
                 error="compose_invalid",
             )
-            code = self._cmd(
-                job, spec, "pull", [*compose, "pull", "--ignore-buildable"], workdir, env, error=""
-            )
-            if code != 0:
-                self._log(
-                    job, secrets, "Pulling images failed; using the images already on the server."
+            if spec.mode != "build":
+                code = self._cmd(
+                    job,
+                    spec,
+                    "pull",
+                    [*compose, "pull", "--ignore-buildable"],
+                    workdir,
+                    env,
+                    error="",
                 )
-            self._cmd(job, spec, "build", [*compose, "build"], workdir, env, error="build_failed")
+                if code != 0:
+                    self._log(
+                        job,
+                        secrets,
+                        "Pulling images failed; using the images already on the server.",
+                    )
+            if spec.mode == "prebuilt":
+                self._log(job, secrets, "→ using the images built on the build server")
+            else:
+                self._cmd(
+                    job, spec, "build", [*compose, "build"], workdir, env, error="build_failed"
+                )
+            if spec.mode == "build":
+                images = self._built_images(job, spec, compose, workdir, env)
+                with self._lock:
+                    job.images = images
+                self._log(job, secrets, f"→ built {len(images)} image(s): {', '.join(images)}")
+                self._finish(job, "success")
+                return
             self._step(job, "up")
-            self._cmd(
-                job,
-                spec,
-                "up",
-                [*compose, "up", "-d", "--remove-orphans"],
-                workdir,
-                env,
-                error="up_failed",
-            )
+            up = [*compose, "up", "-d", "--remove-orphans"]
+            if spec.mode == "prebuilt":
+                up.append("--no-build")
+            self._cmd(job, spec, "up", up, workdir, env, error="up_failed")
             self._step(job, "check")
             self._check(job, spec, compose, workdir, env)
             self._finish(job, "success")
@@ -475,6 +503,32 @@ class DeployManager:
             self._log(job, [], f"→ wrote {len(spec.env)} variable(s) to .env (values hidden)")
         elif target.exists() and target.read_text(errors="replace").startswith(ENV_MARKERS):
             target.unlink()  # every variable was removed in the panel
+
+    def _built_images(
+        self, job: Job, spec: DeploySpec, compose: list[str], workdir: Path, env: dict[str, str]
+    ) -> list[str]:
+        """The image of every service that has a build section (compose's own naming)."""
+        out: list[str] = []
+        self._cmd(
+            job,
+            spec,
+            "config",
+            [*compose, "config", "--format", "json"],
+            workdir,
+            env,
+            error="compose_invalid",
+            capture=out,
+            quiet=True,
+        )
+        try:
+            services = json.loads("\n".join(out)).get("services") or {}
+        except ValueError as exc:
+            raise StepFailed("compose_invalid", "unreadable compose config") from exc
+        images = []
+        for name, service in services.items():
+            if isinstance(service, dict) and service.get("build"):
+                images.append(service.get("image") or f"{spec.project}-{name}")
+        return sorted(set(images))
 
     def _check(
         self, job: Job, spec: DeploySpec, compose: list[str], workdir: Path, env: dict[str, str]

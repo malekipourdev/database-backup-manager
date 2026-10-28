@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { ProjectDetailPage } from "../src/pages/ProjectDetailPage";
 import { ProjectFormPage } from "../src/pages/ProjectFormPage";
 import { ProjectsPage } from "../src/pages/ProjectsPage";
+import { CurrentServerContext } from "../src/server/CurrentServer";
 import { mockFetch, renderWithProviders } from "./render";
+import { LOCAL, currentOn } from "./servers";
 
 const DEPLOYMENT = {
   id: 7,
@@ -39,6 +41,8 @@ const PROJECT = {
   backup_required: true,
   web_domains: [],
   web_target: null,
+  build_server_id: null,
+  build_server_name: null,
   created_at: "2026-10-12T07:00:00Z",
   updated_at: "2026-10-12T07:00:00Z",
   last_deployment: DEPLOYMENT,
@@ -52,6 +56,35 @@ describe("Projects", () => {
     const card = await screen.findByTestId("project-shop");
     expect(within(card).getByText("Deployed")).toBeInTheDocument();
     expect(within(card).getByText("abcdef12")).toBeInTheDocument();
+  });
+
+  it("can build on another server", async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith("/instances")) return { status: 200, body: [] };
+      if (url.endsWith("/projects") && init.method === "POST")
+        return { status: 201, body: { ...PROJECT, last_deployment: null, last_success: null } };
+      return { status: 404, body: { code: "not_found" } };
+    });
+    renderWithProviders(
+      <CurrentServerContext.Provider value={currentOn(LOCAL)}>
+        <ProjectFormPage />
+      </CurrentServerContext.Provider>,
+      { path: "/projects/new", route: "/projects/new" },
+    );
+    await userEvent.type(await screen.findByLabelText(/^Name/), "shop");
+    await userEvent.type(screen.getByLabelText(/^Repository/), "https://github.com/acme/shop.git");
+    expect(screen.getByText(/happens on the project's server/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("textbox", { name: "Build on" }));
+    // Only other connected servers are offered ("new" is not connected).
+    expect(screen.queryByRole("option", { name: "new" })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("option", { name: "edge" }));
+    expect(screen.getByText(/streamed through the panel/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true),
+    );
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(post[1]!.body)).build_server_id).toBe(4);
   });
 
   it("creates a project without echoing secrets back", async () => {
@@ -84,6 +117,7 @@ describe("Projects", () => {
       "backup_instance_id",
       "backup_required",
       "branch",
+      "build_server_id",
       "clear_credential",
       "compose_file",
       "credential",

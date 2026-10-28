@@ -1,8 +1,11 @@
 """A minimal Docker Engine API client (over the Unix socket) and response parsing."""
 
+import contextlib
 import errno
+import json
 import re
 import struct
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 
 import httpx
@@ -46,11 +49,14 @@ class DockerClient:
         timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if host.startswith("unix://"):
-            transport = transport or httpx.HTTPTransport(uds=host[len("unix://") :])
+        self._uds = host[len("unix://") :] if host.startswith("unix://") else None
+        self._mock = transport if isinstance(transport, httpx.MockTransport) else None
+        if self._uds is not None:
+            transport = transport or httpx.HTTPTransport(uds=self._uds)
             base_url = "http://docker"
         else:
             base_url = host.replace("tcp://", "http://", 1)
+        self._base_url = base_url
         self._client = httpx.Client(base_url=base_url, transport=transport, timeout=timeout)
 
     def close(self) -> None:
@@ -118,6 +124,62 @@ class DockerClient:
             params=params,
             timeout=STOP_TIMEOUT_SECONDS + 15,
         )
+
+    # --- moving images between servers (a build server and the one that runs them) ---
+
+    @contextlib.contextmanager
+    def save_stream(self, names: list[str]) -> Iterator[Iterator[bytes]]:
+        """`docker save` of some images: an uncompressed tar, streamed."""
+        timeout = httpx.Timeout(30.0, read=600.0)
+        params = [("names", name) for name in names]
+        try:
+            with self._client.stream(
+                "GET", "/images/get", params=params, timeout=timeout
+            ) as response:
+                if response.status_code == 404:
+                    raise DockerError("image_not_found", 404)
+                if response.status_code >= 400:
+                    raise DockerError("docker_error", 502)
+                yield response.iter_bytes(1024 * 1024)
+        except httpx.TransportError as exc:
+            raise DockerError("docker_unavailable", 503) from exc
+
+    async def load(self, chunks: AsyncIterator[bytes]) -> list[str]:
+        """`docker load` of a (gzipped) tar from a stream; the names of the loaded images."""
+        transport: httpx.AsyncBaseTransport | None
+        if self._mock is not None:
+            transport = self._mock
+        elif self._uds is not None:
+            transport = httpx.AsyncHTTPTransport(uds=self._uds)
+        else:
+            transport = None
+        timeout = httpx.Timeout(30.0, read=1800.0, write=1800.0)
+        async with httpx.AsyncClient(
+            base_url=self._base_url, transport=transport, timeout=timeout
+        ) as client:
+            try:
+                response = await client.post(
+                    "/images/load",
+                    params={"quiet": "1"},
+                    content=chunks,
+                    headers={"Content-Type": "application/x-tar"},
+                )
+            except httpx.TransportError as exc:
+                raise DockerError("docker_unavailable", 503) from exc
+        if response.status_code >= 400:
+            raise DockerError("image_load_failed", 502, response.text[:300])
+        loaded: list[str] = []
+        for line in response.text.splitlines():
+            try:
+                item = json.loads(line)
+            except ValueError:
+                continue
+            if item.get("error"):
+                raise DockerError("image_load_failed", 502, str(item["error"])[:300])
+            text = str(item.get("stream") or "")
+            if text.startswith("Loaded image"):
+                loaded.append(text.split(":", 1)[1].strip())
+        return loaded
 
     # --- one-shot helper containers (mbp.agent.hostexec) ---
 

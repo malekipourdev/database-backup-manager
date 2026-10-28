@@ -257,3 +257,49 @@ def test_state_while_the_first_fetch_has_no_commit(manager, commands, tmp_path):
     commands.commit = ("fatal: your current branch 'master' does not have any commits yet", "")
     commands.fail["git log"] = 128
     assert manager.state("shop") == {"exists": True, "commit_sha": None, "commit_message": None}
+
+
+# --- building on one server, running on another ---
+
+CONFIG = {
+    "services": {
+        "web": {"build": {"context": "."}},
+        "worker": {"build": {"context": "."}, "image": "acme/worker:1"},
+        "db": {"image": "mysql:8.4"},
+    }
+}
+
+
+def test_build_mode_builds_without_starting(manager, commands):
+    import json
+
+    commands.output["compose config"] = json.dumps(CONFIG).splitlines()
+    job = manager.start(spec(mode="build"), background=False)
+    assert job.status == "success", job.lines
+    assert commands.called() == [
+        "git init",
+        "git remote",
+        "git fetch",
+        "git checkout",
+        "git log",
+        "compose config",
+        "compose build",
+        "compose config",
+    ]
+    assert job.images == ["acme/worker:1", "shop-web"]
+    assert job.view(0)["images"] == ["acme/worker:1", "shop-web"]
+
+
+def test_prebuilt_mode_starts_without_building(manager, commands):
+    job = manager.start(spec(mode="prebuilt", ref="a" * 40), background=False)
+    assert job.status == "success", job.lines
+    assert "compose build" not in commands.called()
+    up = next(c for c in commands.calls if c["key"] == "compose up")
+    assert up["args"][-1] == "--no-build"
+    assert "→ using the images built on the build server" in job.lines
+
+
+def test_unknown_mode(manager):
+    with pytest.raises(DockerError) as exc:
+        manager.start(spec(mode="shell"), background=False)
+    assert exc.value.code == "invalid_mode"

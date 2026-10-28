@@ -8,6 +8,7 @@ with the agent's own certificate and signed requests (see mbp.security.agent_aut
 import hmac
 import logging
 import threading
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mbp.agent import PROTOCOL, mysql
-from mbp.agent.deploy import DeployManager, DeploySpec
+from mbp.agent.deploy import DEPLOY_MODES, DeployManager, DeploySpec, valid_project
 from mbp.agent.docker import (
     ACTIONS,
     COMPOSE_PROJECT,
@@ -92,6 +93,7 @@ class DeployRequest(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     auth_type: str = "none"
     credential: str | None = Field(default=None, max_length=20000)
+    mode: str = Field(default="deploy", max_length=16)
 
 
 class HelloRequest(BaseModel):
@@ -357,6 +359,40 @@ def create_agent_app(
         if job is None:
             raise DockerError("job_not_found", 404)
         return job.view(offset)
+
+    @app.get("/v1/capabilities", dependencies=auth)
+    def capabilities() -> dict:
+        return {"deploy_modes": list(DEPLOY_MODES)}
+
+    @app.get("/v1/deploy/{job_id}/images", dependencies=auth)
+    def deploy_images(job_id: str) -> StreamingResponse:
+        """The images a finished build job made, as one gzipped `docker save` tar."""
+        job = deployer.get(job_id)
+        if job is None or job.mode != "build" or job.status != "success":
+            raise DockerError("job_not_found", 404)
+        if not job.images:
+            raise DockerError("no_images", 404)
+        images = list(job.images)
+
+        def stream():
+            compressor = zlib.compressobj(6, zlib.DEFLATED, 31)
+            with docker.save_stream(images) as chunks:
+                for chunk in chunks:
+                    out = compressor.compress(chunk)
+                    if out:
+                        yield out
+            yield compressor.flush()
+
+        return StreamingResponse(stream(), media_type="application/gzip")
+
+    @app.post("/v1/projects/{name}/images", dependencies=auth)
+    async def load_images(name: str, request: Request) -> dict:
+        """Images built on a build server for this project, loaded before a prebuilt deploy."""
+        if not valid_project(name):
+            raise DockerError("invalid_project", 422)
+        loaded = await docker.load(request.stream())
+        logger.info("Loaded %d image(s) for %s", len(loaded), name)
+        return {"loaded": loaded}
 
     @app.get("/v1/projects/{name}/state", dependencies=auth)
     def project_state(name: str) -> dict:

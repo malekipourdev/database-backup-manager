@@ -47,6 +47,9 @@ export interface Project {
   /** After a successful deploy, proxied to web_target by the server's web server. */
   web_domains: string[];
   web_target: string | null;
+  /** Images are built there and sent to `server_id`; null: built where it runs. */
+  build_server_id: number | null;
+  build_server_name: string | null;
   created_at: string;
   updated_at: string;
   last_deployment: DeploymentSummary | null;
@@ -71,6 +74,7 @@ export interface ProjectInput {
   backup_required: boolean;
   web_domains: string[];
   web_target: string | null;
+  build_server_id: number | null;
 }
 
 export interface ProjectState {

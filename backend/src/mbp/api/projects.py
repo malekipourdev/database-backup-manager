@@ -41,6 +41,12 @@ def _out(project: Project, repo: ProjectRepository, last=None) -> ProjectOut:
         backup_required=project.backup_required,
         web_domains=list(project.web_domains or []),
         web_target=project.web_target,
+        build_server_id=project.build_server_id,
+        build_server_name=(
+            build.name
+            if project.build_server_id and (build := repo.db.get(Server, project.build_server_id))
+            else None
+        ),
         created_at=project.created_at,
         updated_at=project.updated_at,
         last_deployment=DeploymentSummary.model_validate(last) if last else None,

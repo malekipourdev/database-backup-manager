@@ -230,6 +230,87 @@ def test_deploy_on_another_server(auth_client, app, remote, agent_commands):
     assert refused.json()["fields"] == {"server_id": "move_after_deploy"}
 
 
+def test_build_on_another_server(containers_client, app, remote, agent_commands, docker):
+    """Built on "edge", images streamed through the panel, started on the panel's server."""
+    import json
+
+    agent_commands.output["compose config"] = json.dumps(
+        {"services": {"web": {"build": {"context": "."}}, "db": {"image": "mysql:8.4"}}}
+    ).splitlines()
+    project = containers_client.post(
+        "/api/projects",
+        json={
+            "name": "shop",
+            "repo_url": "https://github.com/acme/shop.git",
+            "build_server_id": remote["id"],
+        },
+    ).json()
+    assert (project["build_server_id"], project["build_server_name"]) == (remote["id"], "edge")
+    started = containers_client.post(f"/api/projects/{project['id']}/deploy", json={})
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        d = containers_client.get(f"/api/deployments/{started.json()['id']}").json()
+        if d["status"] in ("success", "failed"):
+            break
+        time.sleep(0.05)
+    assert d["status"] == "success", d
+    log = d["log"]
+    assert "Building on server “edge”" in log
+    assert "Sending 1 image(s)" in log and "loaded: shop-web" in log
+    builds = [c for c in agent_commands.calls if c["key"] == "compose build"]
+    assert len(builds) == 1 and "projects-a" in builds[0]["cwd"]  # on edge only
+    up = next(c for c in agent_commands.calls if c["key"] == "compose up")
+    assert "--no-build" in up["args"] and "projects-a" not in up["cwd"]
+    # The project's server fetched exactly the commit that was built.
+    fetches = [c["args"][-1] for c in agent_commands.calls if c["key"] == "git fetch"]
+    assert fetches == ["main", "a" * 40]
+    assert docker.saved == [["shop-web"]]
+    assert docker.loaded[0].startswith(b"TAR:shop-web\n")
+    assert len(docker.loaded[0]) == len(b"TAR:shop-web\n") * 50000
+
+
+def test_build_server_must_be_connected(auth_client):
+    response = auth_client.post("/api/servers", json={"name": "new", "host": "127.0.0.1"})
+    new_id = response.json()["server"]["id"]
+    refused = auth_client.post(
+        "/api/projects",
+        json={"name": "x", "repo_url": "https://github.com/a/x.git", "build_server_id": new_id},
+    )
+    assert refused.json()["fields"] == {"build_server_id": "server_not_connected"}
+    local_id = auth_client.get("/api/servers").json()[0]["id"]
+    same = auth_client.post(
+        "/api/projects",
+        json={"name": "x", "repo_url": "https://github.com/a/x.git", "build_server_id": local_id},
+    ).json()
+    assert same["build_server_id"] is None  # building where it runs is the default
+
+
+def test_an_outdated_build_agent_is_named(containers_client, app, remote, monkeypatch):
+    from mbp.api.errors import ApiError
+    from mbp.containers.agent_client import AgentClient
+
+    def old(self):
+        raise ApiError(409, "agent_outdated")
+
+    monkeypatch.setattr(AgentClient, "capabilities", old)
+    project = containers_client.post(
+        "/api/projects",
+        json={
+            "name": "old",
+            "repo_url": "https://github.com/a/o.git",
+            "build_server_id": remote["id"],
+        },
+    ).json()
+    started = containers_client.post(f"/api/projects/{project['id']}/deploy", json={})
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        d = containers_client.get(f"/api/deployments/{started.json()['id']}").json()
+        if d["status"] in ("success", "failed"):
+            break
+        time.sleep(0.05)
+    assert (d["status"], d["error_code"]) == ("failed", "agent_outdated")
+
+
 # --- databases on another server ---
 
 
