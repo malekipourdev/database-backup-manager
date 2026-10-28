@@ -712,9 +712,12 @@ It uses the [agent](#containers), so turn that on first, including the projects 
   from an existing `.env` (read in the browser, as docker compose reads it: comments,
   `export`, quotes and multi-line values): names already listed get the new value, new
   names are added, and lines that are not variables are reported.
-- **Folder** (optional): keeps related projects together on the Projects page, e.g. the
-  services of one product. Folders open and close and the page has a search. It is only for
-  the panel: files on the server stay in `<projects dir>/<name>`.
+- **Folder** (optional): keeps related projects together, e.g. the services of one product:
+  on the Projects page (folders open and close, with a search) and on the server, where the
+  files go to `<projects dir>/<folder>/<name>` (spaces and other signs become `-`). Changing a
+  deployed project's folder moves it on its next deploy: `docker compose down` where it was
+  (volumes kept), the directory with its data folders is moved, then it starts again. The
+  project page shows where its files are. A folder cannot have the name of a project.
 - **Backup before deploy**: pick a database server and databases. They are backed up right
   before every deploy (shown in the backup history as "Before a deploy"). With **Stop the
   deploy if the backup fails** on, nothing is deployed without a fresh backup.

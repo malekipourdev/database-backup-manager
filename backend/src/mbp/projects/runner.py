@@ -133,6 +133,7 @@ class DeployRunner:
                 "env": env_of(project),
                 "auth_type": project.auth_type,
                 "credential": credential_of(project),
+                "folder": project.folder,
             }
             web = (list(project.web_domains or []), project.web_target, deployment.actor)
             backup = (
@@ -193,6 +194,16 @@ class DeployRunner:
         except ApiError as exc:
             raise _Failed(exc.code) from exc
 
+    @staticmethod
+    def _require_folders(agent) -> None:
+        """An agent from before folders would put the files elsewhere: refuse instead."""
+        try:
+            folders = agent.capabilities().get("folders")
+        except ApiError as exc:
+            raise _Failed(exc.code, exc.detail) from exc
+        if not folders:
+            raise _Failed("agent_outdated")
+
     def _server_name(self, server_id: int) -> str:
         with self.session_factory() as db:
             server = db.get(Server, server_id)
@@ -207,6 +218,8 @@ class DeployRunner:
         build_server_id: int | None = None,
     ) -> None:
         agent = self._agent(server_id)
+        if payload.get("folder"):
+            self._require_folders(agent)
         if build_server_id is not None:
             prebuilt = self._prebuild(deployment_id, build_server_id, agent, payload)
             if prebuilt is None:
@@ -229,6 +242,8 @@ class DeployRunner:
         """
         builder = self._agent(build_server_id)
         name = self._server_name(build_server_id)
+        if payload.get("folder"):
+            self._require_folders(builder)
         for agent in (builder, target):
             try:
                 modes = agent.capabilities().get("deploy_modes") or []

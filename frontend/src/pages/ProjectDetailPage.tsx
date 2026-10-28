@@ -270,6 +270,14 @@ export function ProjectDetailPage() {
                 {state.data.commit_message}
               </Text>
             )}
+            {state.data?.path && (
+              <div className="cl-kv" data-testid="project-path">
+                <span>{t("projects.path")}</span>
+                <code dir="ltr" style={{ overflowWrap: "anywhere" }}>
+                  {state.data.path}
+                </code>
+              </div>
+            )}
             {state.data && !state.data.available && (
               <Text size="xs" c="dimmed">
                 {t(`errors.${state.data.error_code}`, {

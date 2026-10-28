@@ -94,6 +94,7 @@ class DeployRequest(BaseModel):
     auth_type: str = "none"
     credential: str | None = Field(default=None, max_length=20000)
     mode: str = Field(default="deploy", max_length=16)
+    folder: str | None = Field(default=None, max_length=60)
 
 
 class HelloRequest(BaseModel):
@@ -103,6 +104,7 @@ class HelloRequest(BaseModel):
 class RemoveRequest(BaseModel):
     compose_file: str = Field(default="docker-compose.yml", max_length=200)
     down: bool = True
+    folder: str | None = Field(default=None, max_length=60)
 
 
 WebKind = Literal["nginx", "apache"]
@@ -362,7 +364,8 @@ def create_agent_app(
 
     @app.get("/v1/capabilities", dependencies=auth)
     def capabilities() -> dict:
-        return {"deploy_modes": list(DEPLOY_MODES)}
+        # folders: projects in <projects dir>/<folder>/<name>, moved there on deploy.
+        return {"deploy_modes": list(DEPLOY_MODES), "folders": True}
 
     @app.get("/v1/deploy/{job_id}/images", dependencies=auth)
     def deploy_images(job_id: str) -> StreamingResponse:
@@ -395,12 +398,12 @@ def create_agent_app(
         return {"loaded": loaded}
 
     @app.get("/v1/projects/{name}/state", dependencies=auth)
-    def project_state(name: str) -> dict:
-        return deployer.state(name)
+    def project_state(name: str, folder: str | None = Query(default=None, max_length=60)) -> dict:
+        return deployer.state(name, folder)
 
     @app.post("/v1/projects/{name}/remove", dependencies=auth)
     def project_remove(name: str, body: RemoveRequest) -> dict:
-        return deployer.remove(name, body.compose_file, body.down)
+        return deployer.remove(name, body.compose_file, body.down, body.folder)
 
     # --- web servers on this server (read-only) ---
 

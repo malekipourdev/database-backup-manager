@@ -150,7 +150,9 @@ def test_deploy_success(containers_client, agent_commands, db):
         "exists": True,
         "commit_sha": "a" * 40,
         "commit_message": "Add feature",
+        "path": state["path"],
     }
+    assert state["path"].endswith("/projects/shop")
 
 
 def test_deploy_failure_is_reported_and_alerted(containers_client, agent_commands, db):
@@ -339,3 +341,20 @@ def test_folders(auth_client):
     for bad in ("a/b", "nul\x00here", "x" * 61):
         response = auth_client.post("/api/projects", json=body(name="bad", folder=bad))
         assert response.status_code == 422, bad
+
+
+def test_deploy_into_the_projects_folder(containers_client, agent_commands, monkeypatch):
+    project = create(containers_client, name="api", folder="Airplus")
+    done = deploy(containers_client, project["id"])
+    assert done["status"] == "success", done
+    up = next(c for c in agent_commands.calls if c["key"] == "compose up")
+    assert up["cwd"].endswith("/projects/Airplus/api")
+    state = containers_client.get(f"/api/projects/{project['id']}/state").json()
+    assert state["path"].endswith("/projects/Airplus/api")
+
+    # An agent from before folders would deploy elsewhere: refused instead.
+    from mbp.containers.agent_client import AgentClient
+
+    monkeypatch.setattr(AgentClient, "capabilities", lambda self: {"deploy_modes": ["deploy"]})
+    refused = deploy(containers_client, project["id"])
+    assert (refused["status"], refused["error_code"]) == ("failed", "agent_outdated")

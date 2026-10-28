@@ -211,14 +211,17 @@ class AgentClient:
             raise self._error(response)
         return response.json()["loaded"]
 
-    def project_state(self, name: str) -> dict:
-        return self._call("GET", f"/v1/projects/{name}/state")
+    def project_state(self, name: str, folder: str | None = None) -> dict:
+        params = {"folder": folder} if folder else None
+        return self._call("GET", f"/v1/projects/{name}/state", params=params)
 
-    def project_remove(self, name: str, compose_file: str, down: bool) -> dict:
+    def project_remove(
+        self, name: str, compose_file: str, down: bool, folder: str | None = None
+    ) -> dict:
         return self._call(
             "POST",
             f"/v1/projects/{name}/remove",
-            json={"compose_file": compose_file, "down": down},
+            json={"compose_file": compose_file, "down": down, "folder": folder},
         )
 
     # --- web servers ---

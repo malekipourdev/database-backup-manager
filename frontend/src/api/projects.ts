@@ -86,6 +86,8 @@ export interface ProjectState {
   exists: boolean;
   commit_sha: string | null;
   commit_message: string | null;
+  /** Where the project's files are on its server. */
+  path?: string | null;
 }
 
 export const projectKeys = {

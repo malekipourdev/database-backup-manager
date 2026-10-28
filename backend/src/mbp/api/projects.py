@@ -106,7 +106,7 @@ def delete_project(
         # Stop and remove its containers (down) and the checkout on the server.
         try:
             agent = request.app.state.agents.get(project.server_id)
-            agent.project_remove(project.name, project.compose_file, down)
+            agent.project_remove(project.name, project.compose_file, down, project.folder)
         except ApiError:
             if down:
                 raise
@@ -152,7 +152,9 @@ def list_deployments(
 def project_state(project_id: int, request: Request, db: Session = Depends(get_db)) -> ProjectState:
     project = ProjectService(db).get(project_id)
     try:
-        state = request.app.state.agents.get(project.server_id).project_state(project.name)
+        state = request.app.state.agents.get(project.server_id).project_state(
+            project.name, project.folder
+        )
     except ApiError as exc:
         return ProjectState(available=False, error_code=exc.code)
     return ProjectState(available=True, **state)

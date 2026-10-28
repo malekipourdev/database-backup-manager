@@ -198,7 +198,9 @@
     "transfer_failed": "The images could not be sent from the build server.",
     "image_load_failed": "The project's server could not load the images.",
     "no_images": "The build made no images.",
-    "invalid_mode": "This agent does not know that kind of deploy; update it."
+    "invalid_mode": "This agent does not know that kind of deploy; update it.",
+    "folder_is_a_project": "A project has the same name as this folder; choose another folder name.",
+    "move_failed": "The project could not be moved to its new folder."
   },
   "validation": {
     "required": "This field is required.",
@@ -1142,7 +1144,7 @@
       "webTarget": "Address of the application",
       "webTargetHint": "The port your compose file publishes, e.g. http://127.0.0.1:8080.",
       "folder": "Folder",
-      "folderHint": "Optional: keeps related projects together in the list (e.g. one product's services). Only for the panel; files on the server do not move.",
+      "folderHint": "Optional: keeps related projects together in the list and on the server, in <projects dir>/<folder>/<name>. Changing it moves the project on its next deploy (its services are restarted; data folders move with it).",
       "folderPlaceholder": "e.g. Airplus"
     },
     "validation": {
@@ -1211,7 +1213,8 @@
       "skipped": "Lines not understood: {{lines}}.",
       "empty": "No variables were found in it.",
       "tooLarge": "That file is too large for a .env file."
-    }
+    },
+    "path": "On the server"
   },
   "servers": {
     "title": "Servers",
