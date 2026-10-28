@@ -40,6 +40,9 @@ class ApiKey(Base):
     scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # Addresses or networks (CIDR) the key may be used from; empty: anywhere.
     allowed_ips: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # The servers the key reaches (what is on them and what belongs to them); null: every
+    # server, and the panel-wide settings. See mbp.apiaccess.servers.
+    server_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Requests per minute; 0: unlimited.
     rate_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -74,6 +77,8 @@ class ApiRequestLog(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # The error code of a refused or failed request.
     error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The person the calling software acted for (its X-MBP-On-Behalf-Of header).
+    on_behalf_of: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class ApiWebhook(Base):
@@ -86,6 +91,8 @@ class ApiWebhook(Base):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     # Event names, or ["*"] for every event.
     events: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Only events about these servers; null: every event (also the panel-wide ones).
+    server_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # HMAC-SHA256 key of the X-MBP-Signature header; Fernet token.
     secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False)

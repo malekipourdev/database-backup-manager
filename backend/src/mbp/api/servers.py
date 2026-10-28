@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from mbp.api.schemas import ServerIn, ServerOut, ServerSetup, ServerUpdate
+from mbp.api.scope import ServerScope, restriction
+from mbp.apiaccess.servers import add_created_server
 from mbp.db import get_db
 from mbp.models import Server
 from mbp.repositories.server_repository import ServerRepository
@@ -31,16 +33,19 @@ def _out(server: Server, repo: ServerRepository) -> ServerOut:
 
 
 @router.get("/servers", response_model=list[ServerOut])
-def list_servers(db: Session = Depends(get_db)) -> list[ServerOut]:
+def list_servers(
+    db: Session = Depends(get_db), scope: ServerScope | None = Depends(restriction)
+) -> list[ServerOut]:
     repo = ServerRepository(db)
     repo.local()
-    return [_out(s, repo) for s in repo.list_all()]
+    return [_out(s, repo) for s in repo.list_all() if scope is None or scope.allows(s.id)]
 
 
 @router.post("/servers", response_model=ServerSetup, status_code=201)
-def create_server(body: ServerIn, db: Session = Depends(get_db)) -> ServerSetup:
+def create_server(body: ServerIn, request: Request, db: Session = Depends(get_db)) -> ServerSetup:
     service = ServerService(db)
     server, token = service.create(body.name, body.host, body.port, body.notes)
+    add_created_server(request, db, server.id)
     return ServerSetup(
         server=_out(server, service.repo),
         token=token,

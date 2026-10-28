@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 V1_PREFIX = "/api/v1"
 ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-ALLOW_HEADERS = "Authorization, Content-Type, X-API-Key"
+ALLOW_HEADERS = "Authorization, Content-Type, X-API-Key, X-MBP-On-Behalf-Of"
 EXPOSE_HEADERS = (
     "Content-Disposition, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset"
 )
@@ -79,6 +79,7 @@ class ApiV1Middleware:
                         ip=state.get("api_ip", ""),
                         duration_ms=int((time.monotonic() - started) * 1000),
                         error=state.get("api_error"),
+                        on_behalf_of=state.get("api_on_behalf"),
                     )
                 except Exception:  # the log must never break the response
                     logger.exception("Could not record an API request")

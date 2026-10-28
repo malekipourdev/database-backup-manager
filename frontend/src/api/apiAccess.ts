@@ -30,6 +30,8 @@ export interface ApiKey {
   name: string;
   prefix: string;
   scopes: string[];
+  /** null: every server. */
+  server_ids: number[] | null;
   allowed_ips: string[];
   rate_limit: number;
   enabled: boolean;
@@ -47,6 +49,7 @@ export interface ApiKey {
 export interface ApiKeyFields {
   name: string;
   scopes: string[];
+  server_ids: number[] | null;
   allowed_ips: string[];
   rate_limit: number;
   expires_at: string | null;
@@ -68,6 +71,7 @@ export interface ApiRequest {
   ip: string;
   duration_ms: number;
   error: string | null;
+  on_behalf_of: string | null;
 }
 
 export interface ApiRequestPage {
@@ -80,6 +84,8 @@ export interface Webhook {
   name: string;
   url: string;
   events: string[];
+  /** null: every server's events, and the whole panel's. */
+  server_ids: number[] | null;
   enabled: boolean;
   created_at: string;
   last_delivery_at: string | null;
@@ -91,6 +97,7 @@ export interface WebhookFields {
   name: string;
   url: string;
   events: string[];
+  server_ids: number[] | null;
   enabled: boolean;
 }
 

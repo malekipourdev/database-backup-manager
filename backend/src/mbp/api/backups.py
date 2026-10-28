@@ -117,8 +117,9 @@ def list_runs(
     store = get_store()
     filters = RunFilters(
         instances=scope.instances() if scope else None,
-        # Backups of deleted databases are listed with the panel's own server.
-        orphans=bool(scope and scope.local),
+        # Backups of deleted databases are listed with the panel's own server (not to a key
+        # limited to some servers: they belong to no server any more).
+        orphans=bool(scope and scope.local and not scope.restricted),
         instance_id=instance_id,
         database=database or None,
         statuses=list(status) if status else None,

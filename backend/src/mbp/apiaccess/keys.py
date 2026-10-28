@@ -22,6 +22,8 @@ from mbp.security.sessions import require_session
 KEY_PREFIX = "mbp_"
 # Characters of the secret shown in lists ("mbp_" and 8 more).
 SHOWN = 12
+ON_BEHALF_HEADER = "x-mbp-on-behalf-of"
+ON_BEHALF_MAX = 120
 
 
 def generate_key() -> str:
@@ -117,6 +119,7 @@ def require_api_key(request: Request, db: Session = Depends(get_db)) -> ApiKey:
     request.state.api_key_id = key.id
     ip = client_ip(request)
     request.state.api_ip = ip
+    request.state.api_on_behalf = on_behalf_of(request)
     if not get_api_settings(db).enabled:
         raise _refuse(request, 403, "api_disabled")
     if not key.enabled:
@@ -141,7 +144,15 @@ def require_api_key(request: Request, db: Session = Depends(get_db)) -> ApiKey:
         raise _refuse(request, 401, "api_key_invalid")
     request.state.api_key = key
     request.state.api_admin = admin
+    request.state.api_servers = None if key.server_ids is None else frozenset(key.server_ids)
     return key
+
+
+def on_behalf_of(request: Request) -> str | None:
+    """`X-MBP-On-Behalf-Of`: the person the calling software acts for (its own user), which
+    the panel only records: the key alone decides what the request may do."""
+    value = " ".join(request.headers.get(ON_BEHALF_HEADER, "").split())
+    return value[:ON_BEHALF_MAX] or None
 
 
 @dataclass(frozen=True)
@@ -157,4 +168,7 @@ def current_actor(request: Request, admin: AdminAccount = Depends(require_sessio
     key: ApiKey | None = getattr(request.state, "api_key", None)
     if key is None:
         return Actor(admin.username, "panel")
+    person = on_behalf_of(request)
+    if person:
+        return Actor(f"{person} (API: {key.name})"[:100], "api")
     return Actor(f"{admin.username} (API: {key.name})"[:100], "api")

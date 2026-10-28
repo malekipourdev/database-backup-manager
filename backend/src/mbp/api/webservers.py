@@ -44,6 +44,7 @@ from mbp.api.schemas import (
     WebStatusList,
     WebTestResult,
 )
+from mbp.api.scope import ServerScope, restriction
 from mbp.apiaccess.keys import Actor, current_actor
 from mbp.db import get_db, utcnow
 from mbp.models import Server, WebCheck
@@ -337,8 +338,11 @@ def actions(
     page_size: int = Query(default=25, ge=1, le=100),
     server: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
 ) -> WebActionPage:
-    items, total = WebServerRepository(db).actions_page(page, page_size, server)
+    items, total = WebServerRepository(db).actions_page(
+        page, page_size, server, scope.server_ids if scope else None
+    )
     return WebActionPage(
         items=[WebActionItem.model_validate(i) for i in items],
         total=total,

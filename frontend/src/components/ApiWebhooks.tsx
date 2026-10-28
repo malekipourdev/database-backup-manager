@@ -32,7 +32,13 @@ import {
 } from "../api/apiAccess";
 import { ApiError, errorMessage } from "../api/client";
 import { formatDateTime, formatNumber } from "../i18n";
-import { CodeBlock, HttpStatusBadge, SecretModal } from "./ApiShared";
+import {
+  CodeBlock,
+  HttpStatusBadge,
+  SecretModal,
+  ServerLimitPicker,
+  ServerLimitSummary,
+} from "./ApiShared";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
   ArrowClockwise,
@@ -78,9 +84,16 @@ function WebhookModal(props: {
     editing && !editing.events.includes("*") ? editing.events : [],
   );
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
+  const [servers, setServers] = useState<number[] | null>(editing ? editing.server_ids : null);
   const mutation = editing ? update : create;
   const choices = props.events.filter((e) => e !== "*");
-  const body = { name: name.trim(), url: url.trim(), events: all ? ["*"] : events, enabled };
+  const body = {
+    name: name.trim(),
+    url: url.trim(),
+    events: all ? ["*"] : events,
+    server_ids: servers,
+    enabled,
+  };
   const urlError =
     mutation.error instanceof ApiError && mutation.error.fields?.url
       ? t("api.validation.invalid_url")
@@ -155,6 +168,13 @@ function WebhookModal(props: {
             />
           )}
         </div>
+        <ServerLimitPicker
+          label={t("api.webhooks.servers")}
+          allHint={t("api.webhooks.serversAllHint")}
+          someHint={t("api.webhooks.serversSomeHint")}
+          value={servers}
+          onChange={setServers}
+        />
         <Switch
           label={t("api.webhooks.enabled")}
           checked={enabled}
@@ -170,7 +190,12 @@ function WebhookModal(props: {
           <Button
             onClick={submit}
             loading={mutation.isPending}
-            disabled={!body.name || !body.url || body.events.length === 0}
+            disabled={
+              !body.name ||
+              !body.url ||
+              body.events.length === 0 ||
+              (servers !== null && servers.length === 0)
+            }
           >
             {editing ? t("common.save") : t("api.webhooks.create")}
           </Button>
@@ -389,6 +414,7 @@ export function WebhooksTab() {
                 <Table.Tr>
                   <Table.Th>{t("api.webhooks.name")}</Table.Th>
                   <Table.Th>{t("api.webhooks.events")}</Table.Th>
+                  <Table.Th>{t("api.webhooks.servers")}</Table.Th>
                   <Table.Th>{t("api.webhooks.lastDelivery")}</Table.Th>
                   <Table.Th w={150} />
                 </Table.Tr>
@@ -437,6 +463,9 @@ export function WebhooksTab() {
                           )}
                         </Group>
                       )}
+                    </Table.Td>
+                    <Table.Td>
+                      <ServerLimitSummary ids={hook.server_ids} />
                     </Table.Td>
                     <Table.Td>
                       <HookHealth hook={hook} />

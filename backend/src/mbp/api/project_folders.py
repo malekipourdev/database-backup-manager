@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from mbp.agent.deploy import folder_dir, valid_project
 from mbp.api.errors import ApiError
 from mbp.api.schemas import ProjectFolderIn, ProjectFolderOut
+from mbp.api.scope import ServerScope, restriction
 from mbp.db import get_db, utcnow
 from mbp.models import Project, ProjectFolder
 from mbp.projects.service import ensure_folder
@@ -32,7 +33,8 @@ def _check_name(db: Session, name: str, folder: ProjectFolder | None) -> None:
         raise ApiError(409, "folder_is_a_project")
 
 
-def _out(db: Session) -> list[ProjectFolderOut]:
+def _out(db: Session, scope: ServerScope | None = None) -> list[ProjectFolderOut]:
+    """Every folder; to a key limited to some servers, the folders of its projects only."""
     counts = dict(
         db.execute(
             select(Project.folder, func.count(Project.id))
@@ -43,12 +45,21 @@ def _out(db: Session) -> list[ProjectFolderOut]:
     for name in counts:
         ensure_folder(db, name)
     db.commit()
+    if scope is not None:
+        counts = dict(
+            db.execute(
+                select(Project.folder, func.count(Project.id))
+                .where(Project.folder.is_not(None), scope.projects())
+                .group_by(Project.folder)
+            ).all()
+        )
     folders = db.scalars(select(ProjectFolder).order_by(ProjectFolder.name))
     return [
         ProjectFolderOut(
             id=f.id, name=f.name, created_at=f.created_at, projects=counts.get(f.name, 0)
         )
         for f in folders
+        if scope is None or f.name in counts
     ]
 
 
@@ -60,8 +71,10 @@ def _folder(db: Session, folder_id: int) -> ProjectFolder:
 
 
 @router.get("/project-folders", response_model=list[ProjectFolderOut])
-def list_folders(db: Session = Depends(get_db)) -> list[ProjectFolderOut]:
-    return _out(db)
+def list_folders(
+    db: Session = Depends(get_db), scope: ServerScope | None = Depends(restriction)
+) -> list[ProjectFolderOut]:
+    return _out(db, scope)
 
 
 @router.post("/project-folders", response_model=ProjectFolderOut, status_code=201)

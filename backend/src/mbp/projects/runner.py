@@ -393,7 +393,9 @@ class DeployRunner:
                 params["server"] = server.name
             kind = "deploy_succeeded" if d.status == "success" else "deploy_failed"
             subject = f"{kind}:{d.project_name}:{deployment_id}"
-        self.notifier.emit(Event(kind, subject, params))
+        self.notifier.emit(
+            Event(kind, subject, params, server_id=server.id if server is not None else None)
+        )
 
 
 def _mib(size: int) -> str:

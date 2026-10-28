@@ -7,8 +7,10 @@ import {
   CopyButton,
   Group,
   Modal,
+  MultiSelect,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -16,6 +18,8 @@ import {
 } from "@mantine/core";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
+import { type Server, useServers } from "../api/servers";
 
 import { Check, Copy, Warning } from "./Icons";
 
@@ -183,5 +187,84 @@ export function Stat(props: { label: string; value: ReactNode; icon: ReactNode; 
         </div>
       </Group>
     </Paper>
+  );
+}
+
+/** Which servers a key reaches, or whose events a webhook gets: all of them, or some. */
+export function ServerLimitPicker(props: {
+  value: number[] | null;
+  onChange: (value: number[] | null) => void;
+  label: string;
+  allHint: string;
+  someHint: string;
+  error?: string | null;
+}) {
+  const { t } = useTranslation();
+  const servers = useServers().data ?? [];
+  const some = props.value !== null;
+  return (
+    <div>
+      <Text size="sm" fw={500} mb={6}>
+        {props.label}
+      </Text>
+      <SegmentedControl
+        fullWidth
+        value={some ? "some" : "all"}
+        onChange={(v) => props.onChange(v === "all" ? null : (props.value ?? []))}
+        data={[
+          { value: "all", label: t("api.servers.all") },
+          { value: "some", label: t("api.servers.some") },
+        ]}
+      />
+      <Text size="xs" c="dimmed" mt={6}>
+        {some ? props.someHint : props.allHint}
+      </Text>
+      {some && (
+        <MultiSelect
+          mt="sm"
+          data={servers.map((s) => ({ value: String(s.id), label: serverLabel(t, s) }))}
+          value={(props.value ?? []).map(String)}
+          onChange={(ids) => props.onChange(ids.map(Number))}
+          placeholder={t("api.servers.pick")}
+          aria-label={props.label}
+          error={props.error}
+          searchable
+        />
+      )}
+    </div>
+  );
+}
+
+function serverLabel(t: (k: string) => string, server: Server): string {
+  return server.kind === "local" ? `${server.name} (${t("api.servers.local")})` : server.name;
+}
+
+/** The servers of a key or webhook, as badges. */
+export function ServerLimitSummary({ ids }: { ids: number[] | null }) {
+  const { t } = useTranslation();
+  const servers = useServers().data ?? [];
+  if (ids === null) {
+    return (
+      <Badge variant="light" color="grape">
+        {t("api.servers.all")}
+      </Badge>
+    );
+  }
+  if (ids.length === 0) {
+    return (
+      <Badge variant="light" color="red">
+        {t("api.servers.none")}
+      </Badge>
+    );
+  }
+  const names = new Map(servers.map((s) => [s.id, s.name]));
+  return (
+    <Group gap={4}>
+      {ids.map((id) => (
+        <Badge key={id} variant="light" color="cyan" size="sm">
+          {names.get(id) ?? `#${id}`}
+        </Badge>
+      ))}
+    </Group>
   );
 }

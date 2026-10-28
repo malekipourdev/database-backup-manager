@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -45,9 +47,14 @@ class ContainerRepository:
         page_size: int,
         container: str | None = None,
         server_id: int | None = None,
+        server_ids: Collection[int] | None = None,
     ) -> tuple[list[ContainerAction], int]:
+        """`server_ids`: only the actions on these servers."""
         stmt = select(ContainerAction)
         count = select(func.count()).select_from(ContainerAction)
+        if server_ids is not None:
+            stmt = stmt.where(ContainerAction.server_id.in_(sorted(server_ids)))
+            count = count.where(ContainerAction.server_id.in_(sorted(server_ids)))
         if server_id is not None:
             stmt = stmt.where(ContainerAction.server_id == server_id)
             count = count.where(ContainerAction.server_id == server_id)

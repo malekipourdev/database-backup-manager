@@ -246,6 +246,11 @@ function LogTab({ keyId, onKey }: { keyId: number | null; onKey: (id: number | n
                     </Table.Td>
                     <Table.Td>
                       <Text size="sm">{r.key_name}</Text>
+                      {r.on_behalf_of && (
+                        <Text size="xs" c="dimmed">
+                          {t("api.log.onBehalfOf", { name: r.on_behalf_of })}
+                        </Text>
+                      )}
                     </Table.Td>
                     <Table.Td>
                       <Group gap={8} wrap="nowrap" dir="ltr">

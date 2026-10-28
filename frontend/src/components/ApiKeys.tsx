@@ -37,7 +37,13 @@ import {
 } from "../api/apiAccess";
 import { ApiError, errorMessage } from "../api/client";
 import { formatDateTime, formatNumber } from "../i18n";
-import { CodeBlock, CopyIcon, SecretModal } from "./ApiShared";
+import {
+  CodeBlock,
+  CopyIcon,
+  SecretModal,
+  ServerLimitPicker,
+  ServerLimitSummary,
+} from "./ApiShared";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ArrowClockwise, Key, List, Lock, PencilSimple, Play, Plus, Stop, Trash } from "./Icons";
 
@@ -208,6 +214,7 @@ function KeyModal(props: {
   const [custom, setCustom] = useState<string[]>(
     editing && !editing.scopes.includes("*") ? editing.scopes : [],
   );
+  const [servers, setServers] = useState<number[] | null>(editing ? editing.server_ids : null);
   const [ips, setIps] = useState<string[]>(editing?.allowed_ips ?? []);
   const [rate, setRate] = useState<number>(editing?.rate_limit ?? 600);
   const [expiry, setExpiry] = useState<Expiry>(editing ? "keep" : "never");
@@ -222,6 +229,7 @@ function KeyModal(props: {
     const fields = {
       name: name.trim(),
       scopes,
+      server_ids: servers,
       allowed_ips: ips,
       rate_limit: rate,
       ...(expires === undefined ? {} : { expires_at: expires }),
@@ -246,7 +254,11 @@ function KeyModal(props: {
 
   const error = mutation.error;
   const valid =
-    name.trim() && scopes.length > 0 && (editing || password) && !(expiry === "date" && !date);
+    name.trim() &&
+    scopes.length > 0 &&
+    (editing || password) &&
+    !(expiry === "date" && !date) &&
+    (servers === null || servers.length > 0);
   return (
     <Modal
       opened={props.opened}
@@ -298,6 +310,14 @@ function KeyModal(props: {
             {t("api.scopes.downloadWarning")}
           </Alert>
         )}
+        <ServerLimitPicker
+          label={t("api.keys.servers")}
+          allHint={t("api.keys.serversAllHint")}
+          someHint={t("api.keys.serversSomeHint")}
+          value={servers}
+          onChange={setServers}
+          error={fieldError(t, error, "server_ids")}
+        />
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TagsInput
             label={t("api.keys.ips")}
@@ -561,6 +581,12 @@ function KeyCard(props: {
       </Group>
       <Stack gap="sm">
         <ScopeSummary scopes={key.scopes} areas={props.areas} />
+        <Group gap={8}>
+          <Text size="xs" c="dimmed">
+            {t("api.keys.servers")}
+          </Text>
+          <ServerLimitSummary ids={key.server_ids} />
+        </Group>
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="sm">
           <Fact label={t("api.keys.lastUsed")}>
             {key.last_used_at ? formatDateTime(key.last_used_at, lang) : t("api.keys.never")}

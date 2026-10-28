@@ -64,6 +64,7 @@ def record_request(
     ip: str,
     duration_ms: int,
     error: str | None,
+    on_behalf_of: str | None = None,
 ) -> None:
     now = utcnow()
     with session_factory() as db:
@@ -77,6 +78,7 @@ def record_request(
                 ip=ip[:45],
                 duration_ms=duration_ms,
                 error=error[:64] if error else None,
+                on_behalf_of=on_behalf_of,
             )
         )
         db.execute(

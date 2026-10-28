@@ -15,6 +15,7 @@ from mbp.notifications.events import Event
 from mbp.notifications.notifier import Notifier
 from mbp.repositories.notification_repository import NotificationRepository
 from mbp.repositories.remote_storage_repository import RemoteStorageRepository
+from mbp.repositories.server_repository import ServerRepository
 from mbp.services.remote_storage_service import is_configured
 
 logger = logging.getLogger(__name__)
@@ -64,14 +65,15 @@ class AlertMonitor:
             repo = NotificationRepository(db)
             limit = timedelta(hours=repo.get_settings().stale_hours)
             rows = db.execute(
-                select(DbSelection, DbInstance.name).join(
+                select(DbSelection, DbInstance.name, DbInstance.server_id).join(
                     DbInstance, DbInstance.id == DbSelection.instance_id
                 )
             ).all()
+            local_id = ServerRepository(db).local().id
             last = _last_successes(db)
             states = repo.active_states("stale:")
             current: set[str] = set()
-            for selection, instance_name in rows:
+            for selection, instance_name, server_id in rows:
                 key = f"stale:{selection.instance_id}:{selection.database_name}"
                 current.add(key)
                 last_ok = last.get((selection.instance_id, selection.database_name))
@@ -90,11 +92,19 @@ class AlertMonitor:
                                 "hours": int(limit.total_seconds() // 3600),
                                 "last_success": last_ok.isoformat() if last_ok else None,
                             },
+                            server_id=server_id or local_id,
                         )
                     )
                 elif not stale and key in states:
                     repo.deactivate(states[key])
-                    events.append(Event("recovered", key, {**params, "kind": "stale_backup"}))
+                    events.append(
+                        Event(
+                            "recovered",
+                            key,
+                            {**params, "kind": "stale_backup"},
+                            server_id=server_id or local_id,
+                        )
+                    )
             for key, state in states.items():
                 if key not in current:  # unmarked or server deleted: forget quietly
                     repo.deactivate(state)

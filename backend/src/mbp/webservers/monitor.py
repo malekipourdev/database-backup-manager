@@ -192,6 +192,8 @@ class WebMonitor:
                             "failures": check.failures,
                         },
                     )
+            if event is not None:
+                event.server_id = check.server_id
             db.commit()
             return event
 
@@ -214,7 +216,10 @@ class WebMonitor:
             except ApiError:
                 continue  # no agent, an old one, or no web server: nothing to watch
             self._certs_checked[server.id] = now
-            events.extend(self._certificates(server, certificates, now))
+            found = self._certificates(server, certificates, now)
+            for event in found:
+                event.server_id = server.id
+            events.extend(found)
         return events
 
     def _certificates(self, server: Server, certificates: dict, now: datetime) -> list[Event]:

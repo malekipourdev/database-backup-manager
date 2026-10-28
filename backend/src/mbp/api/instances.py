@@ -10,7 +10,7 @@ from mbp.api.schemas import (
     InstanceUpdate,
     SelectionUpdate,
 )
-from mbp.api.scope import ServerScope, server_scope
+from mbp.api.scope import ServerScope, check_server_field, restriction, server_scope
 from mbp.db import get_db
 from mbp.servers import db_access
 from mbp.services.instance_service import InstanceService, check_server
@@ -33,15 +33,23 @@ def list_instances(
 
 
 @router.post("/instances", response_model=Instance, status_code=201)
-def create_instance(body: InstanceCreate, db: Session = Depends(get_db)) -> Instance:
+def create_instance(
+    body: InstanceCreate,
+    db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
+) -> Instance:
+    check_server_field(scope, "server_id", body.server_id)
     return Instance.model_validate(InstanceService(db).create(body))
 
 
 # Declared before the /instances/{instance_id} routes.
 @router.post("/instances/test-connection", response_model=ConnectionTestResult)
 def test_unsaved_connection(
-    body: ConnectionParams, db: Session = Depends(get_db)
+    body: ConnectionParams,
+    db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
 ) -> ConnectionTestResult:
+    check_server_field(scope, "server_id", body.server_id)
     check_server(db, body.server_id)
     db.commit()
     params = ConnParams(
@@ -60,8 +68,13 @@ def get_instance(instance_id: int, db: Session = Depends(get_db)) -> Instance:
 
 @router.patch("/instances/{instance_id}", response_model=Instance)
 def update_instance(
-    instance_id: int, body: InstanceUpdate, db: Session = Depends(get_db)
+    instance_id: int,
+    body: InstanceUpdate,
+    db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
 ) -> Instance:
+    if "server_id" in body.model_fields_set:
+        check_server_field(scope, "server_id", body.server_id)
     return Instance.model_validate(InstanceService(db).update(instance_id, body))
 
 
