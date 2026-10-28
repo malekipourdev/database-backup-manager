@@ -12,6 +12,7 @@ from mbp.api import (
     health,
     instances,
     notifications,
+    project_folders,
     projects,
     schedules,
     servers,
@@ -137,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(projects.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(project_folders.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(servers.router, prefix=API_PREFIX, dependencies=protected)
     app.include_router(webservers.router, prefix=API_PREFIX, dependencies=protected)
     return app

@@ -634,6 +634,11 @@ current server:
 - **Let's Encrypt:** get or renew a certificate with certbot (installed from the panel with
   apt/dnf/yum if missing); the card shows whether automatic renewal (`certbot.timer` or cron)
   is active.
+- **Problems:** a tab lists what the panel found while reading the configuration: broken
+  links in `sites-enabled` (with a button that removes them, then tests and reloads, and
+  puts them back if the test fails), files that could not be read, includes of missing
+  files. Files outside the mounted `/etc` (for example a `sites-available` that is a link
+  elsewhere) are read on the server by the agent's helper.
 - **Health checks:** the panel requests chosen addresses regularly and records the status
   code and response time; a site that fails several checks in a row is an alert, and its
   recovery too. Certificates that expire within 14 days (configurable) are alerts as well.
@@ -712,8 +717,10 @@ It uses the [agent](#containers), so turn that on first, including the projects 
   from an existing `.env` (read in the browser, as docker compose reads it: comments,
   `export`, quotes and multi-line values): names already listed get the new value, new
   names are added, and lines that are not variables are reported.
-- **Folder** (optional): keeps related projects together, e.g. the services of one product:
-  on the Projects page (folders open and close, with a search) and on the server, where the
+- **Folder** (optional): keeps related projects together, e.g. the services of one product.
+  The Projects page shows the folders first: **New folder** creates one, opening a folder
+  lists its projects, and **New project here** adds one straight into it; a folder can be
+  renamed (its projects follow) and deleted when empty. On the server the
   files go to `<projects dir>/<folder>/<name>` (spaces and other signs become `-`). Changing a
   deployed project's folder moves it on its next deploy: `docker compose down` where it was
   (volumes kept), the directory with its data folders is moved, then it starts again. The

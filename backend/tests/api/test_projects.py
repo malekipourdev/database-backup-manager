@@ -358,3 +358,33 @@ def test_deploy_into_the_projects_folder(containers_client, agent_commands, monk
     monkeypatch.setattr(AgentClient, "capabilities", lambda self: {"deploy_modes": ["deploy"]})
     refused = deploy(containers_client, project["id"])
     assert (refused["status"], refused["error_code"]) == ("failed", "agent_outdated")
+
+
+def test_folder_rows(auth_client):
+    created = auth_client.post("/api/project-folders", json={"name": "  Air  plus "})
+    assert created.status_code == 201
+    folder = created.json()
+    assert folder["name"] == "Air plus" and folder["projects"] == 0
+    # Same directory on the server ("Air-plus"): refused.
+    assert auth_client.post("/api/project-folders", json={"name": "Air-plus"}).json()["code"] == (
+        "folder_exists"
+    )
+    assert auth_client.post("/api/project-folders", json={"name": "a/b"}).status_code == 422
+    create(auth_client, name="api", folder="Air plus")
+    create(auth_client, name="crm", folder="Back office")  # its folder row appears by itself
+    listed = {f["name"]: f["projects"] for f in auth_client.get("/api/project-folders").json()}
+    assert listed == {"Air plus": 1, "Back office": 1}
+    assert auth_client.post("/api/project-folders", json={"name": "api"}).json()["code"] == (
+        "folder_is_a_project"
+    )
+
+    renamed = auth_client.patch(f"/api/project-folders/{folder['id']}", json={"name": "ایرپلاس"})
+    assert renamed.json() == {**folder, "name": "ایرپلاس", "projects": 1}
+    projects = {p["name"]: p["folder"] for p in auth_client.get("/api/projects").json()}
+    assert projects["api"] == "ایرپلاس"
+
+    busy = auth_client.delete(f"/api/project-folders/{folder['id']}")
+    assert (busy.status_code, busy.json()["code"]) == (409, "folder_not_empty")
+    empty = auth_client.post("/api/project-folders", json={"name": "Later"}).json()
+    assert auth_client.delete(f"/api/project-folders/{empty['id']}").status_code == 204
+    assert auth_client.delete(f"/api/project-folders/{empty['id']}").status_code == 404

@@ -314,8 +314,16 @@ def test_certificates(web, host):
 
 
 def test_split_files():
-    out = "==MBP-FILE== /p/a\nAAA\n==MBP-FILE== /p/b\n==MBP-UNREADABLE==\n==MBP-FILE== /p/c\nC\n"
-    assert split_files(out, "/p") == {"/a": "AAA\n", "/b": None, "/c": "C\n"}
+    out = (
+        "==MBP-FILE== /p/a\nAAA\n\n==MBP-FILE== /p/b\n==MBP-UNREADABLE==\n"
+        "==MBP-FILE== /p/c\nC\n==MBP-FILE== /p/d\n==MBP-BROKEN== ../x\n"
+    )
+    assert split_files(out, "/p") == {
+        "/a": "AAA\n",
+        "/b": None,
+        "/c": "C",
+        "/d": {"broken": "../x"},
+    }
 
 
 def test_certbot(web, host):
@@ -396,3 +404,40 @@ def test_docker_host_runner():
 
 def test_demux():
     assert demux(frame(1, b"a") + frame(2, b"b") + frame(1, b"c")) == ("ac", "b")
+
+
+# --- files the mount cannot give ---
+
+
+def test_files_outside_the_mount_are_read_on_the_host(host, tmp_path):
+    import shutil
+
+    # The real sites live outside /etc; sites-enabled links there.
+    host.write("/srv/sites/blog", "server { server_name blog.example; root /srv/blog; }")
+    host.link("/etc/nginx/sites-enabled/blog", "../../../srv/sites/blog")
+    # A link to a file that was deleted: nginx -t fails on it.
+    host.link("/etc/nginx/sites-enabled/gone", "../sites-available/gone")
+    # The agent's mount holds the host's /etc only.
+    mount = tmp_path / "mount"
+    shutil.copytree(host.root / "etc", mount / "etc", symlinks=True)
+    web = WebManager(str(mount), host.runner, Jobs(background=False))
+
+    [nginx] = web.scan()["servers"]
+    names = {n for site in nginx["sites"] for n in site["names"]}
+    assert "blog.example" in names
+    problems = nginx["problems"]
+    assert problems == [
+        {
+            "kind": "broken_link",
+            "path": "/etc/nginx/sites-enabled/gone",
+            "target": "../sites-available/gone",
+        }
+    ]
+
+    # Removing it: only true broken links, then test and reload.
+    result = web.remove_broken_links("nginx", ["/etc/nginx/sites-enabled/gone"])
+    assert result["ok"] is True and result["removed"] == ["/etc/nginx/sites-enabled/gone"]
+    assert not host.exists("/etc/nginx/sites-enabled/gone")
+    assert "systemctl reload nginx" in host.calls()
+    with pytest.raises(WebError):
+        web.remove_broken_links("nginx", ["/etc/passwd"])

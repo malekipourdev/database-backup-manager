@@ -3,6 +3,7 @@
 import json
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mbp.agent.deploy import (
@@ -16,7 +17,7 @@ from mbp.agent.deploy import (
 from mbp.api.errors import ApiError
 from mbp.db import utcnow
 from mbp.logging import register_secret
-from mbp.models import DbInstance, Deployment, Project, Server
+from mbp.models import DbInstance, Deployment, Project, ProjectFolder, Server
 from mbp.repositories.project_repository import ProjectRepository
 from mbp.repositories.server_repository import ServerRepository
 from mbp.security import crypto
@@ -44,6 +45,12 @@ def credential_of(project: Project) -> str | None:
     value = crypto.decrypt(project.credential_encrypted)
     register_secret(value)
     return value
+
+
+def ensure_folder(db: Session, name: str | None) -> None:
+    """The row of a folder a project was given by name (no commit)."""
+    if name and db.scalar(select(ProjectFolder).where(ProjectFolder.name == name)) is None:
+        db.add(ProjectFolder(name=name, created_at=utcnow()))
 
 
 class ProjectService:
@@ -162,6 +169,7 @@ class ProjectService:
             self._apply_env(project, data["env"])
         if not project.backup_instance_id:
             project.backup_databases = []
+        ensure_folder(self.db, project.folder)
         if project.build_server_id == project.server_id:
             project.build_server_id = None  # building where it runs is the default
         self.db.commit()

@@ -109,9 +109,17 @@ ls -1 "$dir" | sort -r | tail -n +"$((keep + 1))" | while read -r old; do rm -f 
 CAT_SH = r"""
 for f in "$@"; do
   printf '==MBP-FILE== %s\n' "$f"
-  cat -- "$f" 2>/dev/null || printf '==MBP-UNREADABLE==\n'
+  if [ -L "$f" ] && [ ! -e "$f" ]; then
+    printf '==MBP-BROKEN== %s\n' "$(readlink -- "$f")"
+  elif cat -- "$f" 2>/dev/null; then
+    printf '\n'  # the next marker starts a line, even after a file without a final newline
+  else
+    printf '==MBP-UNREADABLE==\n'
+  fi
 done
 """
+# How many rounds of reading files on the host a scan may take (includes inside them).
+SCAN_ROUNDS = 3
 SOCKETS_SH = r"""
 r=$MBP_ROOT
 for f in "$r"/run/php/*.sock "$r"/run/php-fpm/*.sock "$r"/var/run/php-fpm/*.sock; do
@@ -324,6 +332,29 @@ class WebManager:
 
     def reader(self) -> Reader:
         return Reader(self.root)
+
+    def scan(self) -> dict:
+        """The web servers and their sites, reading on the host what the mount cannot give.
+
+        Files outside the mounted /etc (a sites-available that is a link elsewhere) or not
+        readable by the agent are read by the helper; a link to nothing is reported as one.
+        """
+        preloaded: dict = {}
+        result: dict = {}
+        for _ in range(SCAN_ROUNDS + 1):
+            missing: set[str] = set()
+            result = scan(self.root, preloaded, missing)
+            todo = sorted(missing - preloaded.keys())
+            if not todo:
+                break
+            try:
+                out = self.sh(CAT_SH, *[self.host(p) for p in todo])
+            except DockerError:
+                break  # no helper: report what the mount gave
+            found = split_files(out.stdout, self.runner.prefix)
+            for path in todo:
+                preloaded[path] = found.get(path)
+        return result
 
     def flavor(self, kind: str) -> Flavor:
         reader = self.reader()
@@ -546,7 +577,7 @@ class WebManager:
     def _site(self, flavor: Flavor, path: str) -> dict:
         """The scan's view of a file (the first site defined in it)."""
         real = self.owned(flavor, path)
-        for server in scan(self.root)["servers"]:
+        for server in self.scan()["servers"]:
             if server["kind"] != flavor.kind:
                 continue
             for site in server["sites"]:
@@ -624,7 +655,7 @@ class WebManager:
                 return {"ok": True, "code": None, "output": ""}
             sites = [
                 s
-                for server in scan(self.root)["servers"]
+                for server in self.scan()["servers"]
                 if server["kind"] == flavor.kind
                 for s in server["sites"]
                 if s["file"] == real
@@ -671,7 +702,7 @@ class WebManager:
         # Listen on IPv6 only where the server's own sites do (some hosts have no IPv6).
         ipv6 = any(
             "[::" in listen
-            for server in scan(self.root)["servers"]
+            for server in self.scan()["servers"]
             if server["kind"] == "nginx"
             for site in server["sites"]
             if site["enabled"]
@@ -690,11 +721,41 @@ class WebManager:
         result = self.apply(flavor, steps)
         return {**result, "path": path}
 
+    def remove_broken_links(self, kind: str, paths: list[str]) -> dict:
+        """Removes links to missing files from the enabled directories, then tests and reloads.
+
+        Such a link makes the configuration test (and so every reload) fail.
+        """
+        flavor = self.flavor(kind)
+        allowed = tuple(f"{flavor.conf_dir}/{d}/" for d in ("sites-enabled", "conf-enabled"))
+        changes: list[Change] = []
+        reader = self.reader()
+        candidates = []
+        for path in dict.fromkeys(paths):
+            if not path.startswith(allowed) or "/../" in f"{path}/" or path.count("/") != 4:
+                raise WebError("path_not_allowed", 403)
+            local = reader.local(path)
+            if os.path.islink(local):
+                candidates.append((path, os.readlink(local)))
+        if not candidates:
+            return {"ok": True, "code": None, "output": "", "removed": []}
+        found = split_files(
+            self.sh(CAT_SH, *[self.host(p) for p, _ in candidates]).stdout, self.runner.prefix
+        )
+        removed = []
+        for path, target in candidates:
+            if isinstance(found.get(path), dict):  # still a link to nothing on the host
+                changes.append(Change([self.rm(path)], [self.ln(target, path)]))
+                removed.append(path)
+        if not changes:
+            return {"ok": True, "code": None, "output": "", "removed": []}
+        return {**self.apply(flavor, changes), "removed": removed}
+
     # --- logs ---
 
     def log_paths(self, kind: str) -> set[str]:
         paths: set[str] = set()
-        for server in scan(self.root)["servers"]:
+        for server in self.scan()["servers"]:
             if server["kind"] != kind:
                 continue
             for site in server["sites"]:
@@ -718,7 +779,7 @@ class WebManager:
         paths = sorted(
             {
                 site["certificate"]
-                for server in scan(self.root)["servers"]
+                for server in self.scan()["servers"]
                 for site in server["sites"]
                 if site.get("certificate") and "$" not in site["certificate"]
             }
@@ -735,7 +796,9 @@ class WebManager:
             result = self.sh(CAT_SH, *[self.host(p) for p in missing])
             for path, text in split_files(result.stdout, self.runner.prefix).items():
                 found[path] = (
-                    cert_info(text) if text is not None else {"error": "certificate_unreadable"}
+                    cert_info(text)
+                    if isinstance(text, str)
+                    else {"error": "certificate_unreadable"}
                 )
         for path in paths:
             found.setdefault(path, {"error": "certificate_unreadable"})
@@ -837,24 +900,31 @@ def parse_status(result: HostResult) -> dict:
     }
 
 
-def split_files(stdout: str, prefix: str) -> dict[str, str | None]:
-    """CAT_SH's output: host path -> text (None if unreadable)."""
-    out: dict[str, str | None] = {}
+def split_files(stdout: str, prefix: str) -> dict[str, str | dict | None]:
+    """CAT_SH's output: host path -> text, None (unreadable) or {"broken": link target}."""
+    out: dict[str, str | dict | None] = {}
     current = None
     lines: list[str] = []
+
+    def text() -> str:
+        return "".join(lines).removesuffix("\n")  # the newline CAT_SH adds after each file
+
     for line in stdout.splitlines(keepends=True):
         if line.startswith("==MBP-FILE== "):
             if current is not None:
-                out[current] = "".join(lines)
+                out[current] = text()
             current = line[len("==MBP-FILE== ") :].rstrip("\n").removeprefix(prefix)
             lines = []
         elif line.rstrip("\n") == "==MBP-UNREADABLE==" and current is not None:
             out[current] = None
             current = None
+        elif line.startswith("==MBP-BROKEN== ") and current is not None:
+            out[current] = {"broken": line[len("==MBP-BROKEN== ") :].rstrip("\n")}
+            current = None
         else:
             lines.append(line)
     if current is not None:
-        out[current] = "".join(lines)
+        out[current] = text()
     return out
 
 

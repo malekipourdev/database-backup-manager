@@ -200,7 +200,10 @@
     "no_images": "The build made no images.",
     "invalid_mode": "This agent does not know that kind of deploy; update it.",
     "folder_is_a_project": "A project has the same name as this folder; choose another folder name.",
-    "move_failed": "The project could not be moved to its new folder."
+    "move_failed": "The project could not be moved to its new folder.",
+    "folder_exists": "A folder with this name (or the same folder on the server) already exists.",
+    "folder_not_empty": "Only an empty folder can be deleted.",
+    "folder_not_found": "This folder no longer exists."
   },
   "validation": {
     "required": "This field is required.",
@@ -1214,7 +1217,30 @@
       "empty": "No variables were found in it.",
       "tooLarge": "That file is too large for a .env file."
     },
-    "path": "On the server"
+    "path": "On the server",
+    "folders": {
+      "title": "Folders",
+      "new": "New folder",
+      "create": "Create folder",
+      "name": "Folder name",
+      "nameHint": "Any language; it is also the folder of these projects' files on the server.",
+      "count": "{{n}} project(s)",
+      "elsewhere": "{{n}} on other servers",
+      "failed": "{{n}} failed",
+      "deploying": "{{n}} deploying",
+      "allGood": "All deployed",
+      "empty": "Empty",
+      "inside": "Projects in this folder. New projects added here go into it.",
+      "manage": "Manage folder",
+      "rename": "Rename folder",
+      "delete": "Delete folder",
+      "notEmpty": "Only an empty folder can be deleted.",
+      "addHere": "New project here",
+      "emptyTitle": "This folder is empty",
+      "emptyHint": "Add a project here; its files on the server go into this folder.",
+      "renamedHint": "Renamed. Each project's files move to the new folder on its next deploy.",
+      "deleteConfirm": "Delete the folder “{{name}}”?"
+    }
   },
   "servers": {
     "title": "Servers",
@@ -1345,7 +1371,8 @@
       "sites": "Sites",
       "checks": "Health checks",
       "activity": "Activity",
-      "settings": "Settings"
+      "settings": "Settings",
+      "problems": "Problems"
     },
     "result": {
       "ok": "Done: the configuration was tested and the web server reloaded.",
@@ -1509,6 +1536,45 @@
       "check_timeout_seconds": "Wait for an answer (seconds)",
       "check_failures": "Failed checks in a row before an alert",
       "saved": "Settings saved."
+    },
+    "problems": {
+      "count": "{{n}} configuration problem(s) — show",
+      "none": "No problems in the configuration",
+      "noneHint": "Every file the web servers load was read, and every link points to a file.",
+      "mainError": "{{name}}'s main configuration could not be read",
+      "tooDeep": "Includes nested too deeply",
+      "reasons": {
+        "not_found": "Not found",
+        "permission_denied": "Permission denied",
+        "too_large": "Too large to read",
+        "unreadable": "Unreadable on the server too"
+      },
+      "broken": {
+        "short": "Broken links",
+        "title": "Broken links in the enabled sites",
+        "hint": "These links in sites-enabled point to files that no longer exist: leftovers of deleted sites. Depending on the version, the configuration test can fail on them (the “Test configuration” button tells); either way they are safe to remove.",
+        "link": "Link",
+        "target": "Points to (missing)",
+        "remove": "Remove broken links",
+        "removeFor": "Remove broken links ({{name}})",
+        "confirm": "Remove {{n}} broken link(s)? Only the links are removed; then the configuration is tested and reloaded, and if the test fails they are put back."
+      },
+      "unreadable": {
+        "short": "Unreadable files",
+        "title": "Files that could not be read",
+        "hint": "The web server loads these files, but neither the agent nor the server could read them; their sites are missing from the list."
+      },
+      "include": {
+        "short": "Missing includes",
+        "title": "Included files that do not exist",
+        "hint": "An Include / include directive names a file that is not there. Apache stops on a missing Include (IncludeOptional is fine); nginx stops on a missing include without wildcards.",
+        "in": "in"
+      },
+      "other": {
+        "short": "Other",
+        "title": "Other problems",
+        "hint": "Things the panel could not follow while reading the configuration."
+      }
     }
   },
   "help": {

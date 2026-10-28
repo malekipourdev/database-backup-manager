@@ -924,6 +924,40 @@ class ProjectEnvItem(BaseModel):
     value: SecretStr | None = Field(default=None, max_length=32768)
 
 
+def clean_folder(value: str | None) -> str | None:
+    """A folder name with its spaces tidied; None for empty. ValueError if not allowed."""
+    value = " ".join((value or "").split()) or None
+    if value is not None and (
+        "/" in value or any(ord(c) < 32 or 0x7F <= ord(c) < 0xA0 for c in value)
+    ):
+        raise ValueError("invalid_folder")
+    return value
+
+
+class ProjectFolderIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        cleaned = clean_folder(value)
+        if cleaned is None:
+            raise ValueError("required")
+        return cleaned
+
+
+class ProjectFolderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    created_at: datetime
+    # Projects in it, on every server.
+    projects: int = 0
+
+
 class ProjectIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -953,12 +987,7 @@ class ProjectIn(BaseModel):
     @field_validator("folder")
     @classmethod
     def _folder(cls, value: str | None) -> str | None:
-        value = " ".join((value or "").split()) or None
-        if value is not None and (
-            "/" in value or any(ord(c) < 32 or 0x7F <= ord(c) < 0xA0 for c in value)
-        ):
-            raise ValueError("invalid_folder")
-        return value
+        return clean_folder(value)
 
     @field_validator("web_domains")
     @classmethod
@@ -1176,12 +1205,27 @@ class WebSite(BaseModel):
     logs: dict[str, str | None] = {}
 
 
+class WebProblem(BaseModel):
+    # broken_link | unreadable | include_missing | too_deep | other
+    kind: str
+    path: str | None = None
+    # broken_link: where the link points.
+    target: str | None = None
+    # unreadable: not_found | permission_denied | too_large | unreadable
+    reason: str | None = None
+    # include_missing / too_deep: the file and line of the include.
+    source: str | None = None
+    line: int | None = None
+    message: str | None = None
+
+
 class WebServer(BaseModel):
     kind: str
     config: str
     # Why the main configuration file could not be read, if it could not.
     error: str | None = None
     warnings: list[str] = []
+    problems: list[WebProblem] = []
     files: int = 0
     sites: list[WebSite] = []
 
@@ -1220,6 +1264,8 @@ class WebResult(BaseModel):
     code: str | None = None
     output: str = ""
     path: str | None = None
+    # remove_broken_links: the links removed.
+    removed: list[str] | None = None
 
 
 class WebTestResult(BaseModel):
@@ -1243,6 +1289,10 @@ class WebFileWrite(BaseModel):
 
 class WebPathIn(BaseModel):
     path: str = Field(max_length=500)
+
+
+class WebPathsIn(BaseModel):
+    paths: list[str] = Field(min_length=1, max_length=200)
 
 
 class WebRestoreIn(WebPathIn):

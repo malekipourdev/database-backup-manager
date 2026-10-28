@@ -31,6 +31,19 @@ const NGINX = {
   config: "/etc/nginx/nginx.conf",
   error: null,
   warnings: ["included file not found: /etc/nginx/x.conf (/etc/nginx/nginx.conf:9)"],
+  problems: [
+    {
+      kind: "include_missing",
+      path: "/etc/nginx/x.conf",
+      source: "/etc/nginx/nginx.conf",
+      line: 9,
+    },
+    {
+      kind: "broken_link",
+      path: "/etc/nginx/sites-enabled/gone",
+      target: "../sites-available/gone",
+    },
+  ],
   files: 4,
   sites: [
     site({ names: ["shop.example"], redirect: "https://$host$request_uri" }),
@@ -256,7 +269,9 @@ describe("WebServersPage", () => {
     expect(screen.getByTestId("domain-blog.example")).toHaveTextContent("Maintenance");
     expect(screen.getByTestId("domain-catch-all")).toBeInTheDocument();
     const card = screen.getByTestId("webserver-nginx");
-    expect(card).toHaveTextContent("/etc/nginx/x.conf");
+    expect(within(card).getByTestId("problems-nginx")).toHaveTextContent(
+      "2 configuration problem(s)",
+    );
     expect(await within(card).findByText("Running")).toBeInTheDocument();
     expect(within(card).getByText("1.24.0")).toBeInTheDocument();
     expect(await screen.findByText("certbot 2.9.0")).toBeInTheDocument();
@@ -267,6 +282,30 @@ describe("WebServersPage", () => {
     await userEvent.type(screen.getByPlaceholderText(/Search domain/), "blog");
     await waitFor(() =>
       expect(screen.queryByTestId("domain-shop.example")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("lists configuration problems and removes broken links safely", async () => {
+    const { calls } = api({
+      "POST /webservers/nginx/broken-links/remove": {
+        status: 200,
+        body: { ok: true, code: null, output: "", removed: ["/etc/nginx/sites-enabled/gone"] },
+      },
+    });
+    renderPage();
+    await userEvent.click(await screen.findByTestId("problems-nginx"));
+    const problems = await screen.findByTestId("problems");
+    expect(problems).toHaveTextContent("Broken links in the enabled sites");
+    expect(problems).toHaveTextContent("../sites-available/gone");
+    expect(problems).toHaveTextContent("Included files that do not exist");
+    expect(problems).toHaveTextContent("/etc/nginx/nginx.conf:9");
+    await userEvent.click(within(problems).getByRole("button", { name: "Remove broken links" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove broken links" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.url.includes("/broken-links/remove"))?.body).toEqual({
+        paths: ["/etc/nginx/sites-enabled/gone"],
+      }),
     );
   });
 

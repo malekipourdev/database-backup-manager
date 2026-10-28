@@ -382,3 +382,27 @@ def test_a_deploy_configures_the_projects_domains(containers_client, nginx, db):
     log = containers_client.get(f"/api/deployments/{again['id']}").json()["log"]
     assert "already configured" in log
     get_sessionmaker()().close()
+
+
+def test_broken_links_are_listed_and_removed(containers_client, nginx, db):
+    nginx.link("/etc/nginx/sites-enabled/gone.conf", "../sites-available/gone.conf")
+    [server] = containers_client.get("/api/webservers").json()["servers"]
+    assert server["problems"] == [
+        {
+            "kind": "broken_link",
+            "path": "/etc/nginx/sites-enabled/gone.conf",
+            "target": "../sites-available/gone.conf",
+            "reason": None,
+            "source": None,
+            "line": None,
+            "message": None,
+        }
+    ]
+    done = containers_client.post(
+        "/api/webservers/nginx/broken-links/remove",
+        json={"paths": ["/etc/nginx/sites-enabled/gone.conf"]},
+    ).json()
+    assert done["ok"] is True and done["removed"] == ["/etc/nginx/sites-enabled/gone.conf"]
+    assert not nginx.exists("/etc/nginx/sites-enabled/gone.conf")
+    assert containers_client.get("/api/webservers").json()["servers"][0]["problems"] == []
+    assert actions(db)[-1][0] == "remove_broken_links"

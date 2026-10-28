@@ -7,6 +7,7 @@ from mbp.models.instance import DbInstance
 from mbp.models.login_attempt import LoginAttempt
 from mbp.models.notification import AlertState, NotificationLog, NotificationSettings
 from mbp.models.project import Deployment, Project
+from mbp.models.project_folder import ProjectFolder
 from mbp.models.remote_storage import RemoteStorageSettings
 from mbp.models.schedule import BackupSchedule
 from mbp.models.selection import DbSelection
@@ -33,6 +34,7 @@ __all__ = [
     "NotificationLog",
     "NotificationSettings",
     "Project",
+    "ProjectFolder",
     "RemoteStorageSettings",
     "Server",
     "WebAction",

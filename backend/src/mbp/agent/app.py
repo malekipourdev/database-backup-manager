@@ -37,7 +37,6 @@ from mbp.agent.docker import (
 from mbp.agent.host import HostProbe
 from mbp.agent.hostexec import DockerHostRunner
 from mbp.agent.webmanage import WebManager
-from mbp.agent.webserver import scan as scan_webservers
 from mbp.backups import dump_command
 from mbp.security import agent_auth
 from mbp.security.agent_token import agent_token
@@ -118,6 +117,10 @@ class WebFile(BaseModel):
 
 class WebPath(BaseModel):
     path: str = Field(max_length=500)
+
+
+class WebPaths(BaseModel):
+    paths: list[str] = Field(max_length=200)
 
 
 class WebRestore(WebPath):
@@ -409,7 +412,11 @@ def create_agent_app(
 
     @app.get("/v1/webservers", dependencies=auth)
     def webservers() -> dict:
-        return scan_webservers(settings.host_root)
+        return web.scan()
+
+    @app.post("/v1/webservers/{kind}/broken-links/remove", dependencies=auth)
+    def web_remove_broken(kind: WebKind, body: WebPaths) -> dict:
+        return web.remove_broken_links(kind, body.paths)
 
     @app.get("/v1/webservers/status", dependencies=auth)
     def web_status() -> dict:
