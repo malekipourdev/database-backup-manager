@@ -42,8 +42,10 @@
       "settings": "settings S3 remote storage retention compression",
       "bots": "bot bale telegram chat admins link code",
       "account": "two-step 2FA google authenticator password recovery",
-      "webservers": "nginx apache apache2 httpd domains sites virtual host vhost ssl https"
-    }
+      "webservers": "nginx apache apache2 httpd domains sites virtual host vhost ssl https",
+      "api": "api key token webhook integration swagger openapi rest developer"
+    },
+    "api": "External API"
   },
   "language": {
     "label": "Language",
@@ -203,7 +205,10 @@
     "move_failed": "The project could not be moved to its new folder.",
     "folder_exists": "A folder with this name (or the same folder on the server) already exists.",
     "folder_not_empty": "Only an empty folder can be deleted.",
-    "folder_not_found": "This folder no longer exists."
+    "folder_not_found": "This folder no longer exists.",
+    "api_key_not_found": "API key not found.",
+    "webhook_not_found": "Webhook not found.",
+    "delivery_not_found": "Delivery not found."
   },
   "validation": {
     "required": "This field is required.",
@@ -1012,6 +1017,7 @@
       "ok": "Done",
       "sources": {
         "panel": "Panel",
+        "api": "API",
         "bale": "Bale bot",
         "telegram": "Telegram bot"
       }
@@ -1507,6 +1513,7 @@
       "output": "Output",
       "sources": {
         "panel": "Panel",
+        "api": "API",
         "deploy": "Deploy"
       },
       "actions": {
@@ -1629,6 +1636,268 @@
       "containersUnavailable": "Containers are not available: {{reason}}",
       "deploy": "The last deploy of “{{name}}” failed",
       "database": "The connection test of “{{name}}” fails"
+    }
+  },
+  "api": {
+    "title": "External API",
+    "subtitle": "Let your own software use everything the panel does: keys, webhooks and documentation.",
+    "baseUrl": "API address",
+    "swagger": "Swagger UI",
+    "redoc": "ReDoc",
+    "openapi": "OpenAPI (JSON)",
+    "disabledTitle": "The external API is off",
+    "disabledBody": "Every key is refused until it is turned on again under Settings.",
+    "refresh": "Refresh",
+    "ms": "{{n}} ms",
+    "secretSaved": "I have saved it",
+    "stats": {
+      "keys": "Active keys",
+      "requests": "Requests (24 h)",
+      "errors": "Errors (24 h)",
+      "hooks": "Webhooks",
+      "failingHooks": "Failing webhooks"
+    },
+    "tabs": {
+      "keys": "Keys",
+      "webhooks": "Webhooks",
+      "log": "Request log",
+      "reference": "Reference",
+      "settings": "Settings"
+    },
+    "presets": {
+      "read": "Read only",
+      "custom": "Custom",
+      "full": "Full access",
+      "readHint": "Can see everything, change nothing.",
+      "customHint": "Choose, area by area, what the key may read or change.",
+      "fullHint": "Can do everything the admin can.",
+      "fullWarning": "This key can change and delete anything, like you. Give it only to software you fully trust, and limit where it can be used from."
+    },
+    "scopes": {
+      "none": "None",
+      "read": "Read",
+      "write": "Read & write",
+      "counts": "{{read}} read, {{write}} write operations",
+      "download": "Download backup files",
+      "downloadShort": "Download",
+      "downloadWarning": "Downloading backups gives the key all the data in your databases.",
+      "more": "+{{n}}"
+    },
+    "keys": {
+      "hint": "Each key lets one piece of software call the API with the access you choose. The key itself is shown only once.",
+      "new": "New key",
+      "newTitle": "New API key",
+      "editTitle": "Edit “{{name}}”",
+      "name": "Name",
+      "nameHint": "Who uses it, e.g. “Shop website”.",
+      "access": "Access",
+      "ips": "Allowed addresses",
+      "ipsHint": "IP addresses or networks (CIDR); empty: anywhere.",
+      "ipsPlaceholder": "203.0.113.7, 10.0.0.0/8",
+      "rate": "Requests per minute",
+      "rateHint": "0: no limit.",
+      "expiry": "Expires",
+      "expiryNever": "Never",
+      "expiryDays": "In {{n}} days",
+      "expiryYear": "In a year",
+      "expiryDate": "On a date…",
+      "expiryOn": "Date",
+      "expiryKeepDate": "Keep ({{date}})",
+      "expiryKeepNever": "Keep (never)",
+      "password": "Your password",
+      "passwordHint": "Confirms it is you: the key can do whatever its access allows.",
+      "create": "Create key",
+      "saved": "Key saved.",
+      "secretTitle": "Key “{{name}}”",
+      "secretHint": "Copy the key now and keep it somewhere safe: it will not be shown again.",
+      "tryIt": "Try it",
+      "rotate": "Rotate key",
+      "rotateTitle": "Rotate “{{name}}”",
+      "rotateBody": "A new key is made with the same settings, and the current one stops working at once.",
+      "deleteTitle": "Delete “{{name}}”?",
+      "deleteBody": "Software using this key will be refused from now on. This cannot be undone.",
+      "disable": "Disable",
+      "enable": "Enable",
+      "more": "More",
+      "viewLog": "Requests",
+      "empty": "No keys yet",
+      "emptyHint": "Create a key to let your own software use the panel.",
+      "lastUsed": "Last used",
+      "lastIp": "From",
+      "never": "Never",
+      "requests24h": "Requests (24 h)",
+      "errorsN": "{{n}} errors",
+      "perMinute": "{{n}} / minute",
+      "unlimited": "No limit",
+      "anywhere": "Anywhere",
+      "status": {
+        "active": "Active",
+        "disabled": "Disabled",
+        "expired": "Expired"
+      }
+    },
+    "webhooks": {
+      "hint": "The panel sends each event (backup failed, deploy done, site down…) to these addresses as signed JSON.",
+      "new": "New webhook",
+      "newTitle": "New webhook",
+      "editTitle": "Edit “{{name}}”",
+      "name": "Name",
+      "url": "Address",
+      "urlHint": "Receives a POST for each event; HTTPS recommended.",
+      "urlPlaceholder": "https://example.com/mbp-events",
+      "events": "Events",
+      "allEvents": "All events",
+      "someEvents": "Chosen events",
+      "pickEvents": "Pick events",
+      "ping": "Test (ping)",
+      "enabled": "On",
+      "create": "Create webhook",
+      "saved": "Webhook saved.",
+      "secretTitle": "Signing secret of “{{name}}”",
+      "secretHint": "Use it to check the X-MBP-Signature header of each request. It will not be shown again.",
+      "verify": "Checking the signature (Python)",
+      "test": "Test",
+      "testOk": "Delivered (HTTP {{status}}).",
+      "testFailed": "Not delivered: {{detail}}",
+      "deliveries": "Deliveries",
+      "deliveriesTitle": "Deliveries of “{{name}}”",
+      "deliveriesHint": "The last 200 deliveries, newest first.",
+      "noDeliveries": "Nothing sent yet.",
+      "details": "Details",
+      "hide": "Hide",
+      "payload": "Payload",
+      "attempts": "{{n}} attempts",
+      "redeliver": "Send again",
+      "rotate": "Rotate secret",
+      "lastDelivery": "Last delivery",
+      "notYet": "Nothing sent yet",
+      "failing": "{{n}} failed in a row",
+      "deleteTitle": "Delete “{{name}}”?",
+      "deleteBody": "No more events will be sent to this address.",
+      "empty": "No webhooks yet",
+      "emptyHint": "Add one to be told about events instead of asking the API.",
+      "status": {
+        "pending": "Sending",
+        "sent": "Sent",
+        "failed": "Failed"
+      }
+    },
+    "log": {
+      "key": "Key",
+      "allKeys": "All keys",
+      "errorsOnly": "Errors only",
+      "time": "Time",
+      "request": "Request",
+      "result": "Result",
+      "ip": "Address",
+      "duration": "Duration",
+      "empty": "No requests yet.",
+      "more": "Load more"
+    },
+    "reference": {
+      "quickStart": "Quick start",
+      "quickStartHint": "Put your key in MBP_KEY and try one of these.",
+      "langs": {
+        "curl": "curl",
+        "js": "JavaScript",
+        "python": "Python",
+        "webhook": "Webhook signature"
+      },
+      "topics": {
+        "auth": {
+          "title": "Authentication",
+          "body": "Send the key in “Authorization: Bearer …” or “X-API-Key”. No cookie or CSRF header is needed."
+        },
+        "scopes": {
+          "title": "Access",
+          "body": "Each area has read and write; GET reads, other methods write. Downloading backups has its own permission."
+        },
+        "errors": {
+          "title": "Errors and limits",
+          "body": "Errors are JSON {code, detail, fields}. Over the per-minute limit you get 429 with Retry-After."
+        }
+      },
+      "endpoints": "Endpoints",
+      "endpointsHint": "{{n}} operations, with the access each needs.",
+      "search": "Search endpoints",
+      "loadError": "The API description could not be loaded.",
+      "full": "Request and response formats, and trying them out:"
+    },
+    "settings": {
+      "enabled": "External API on",
+      "enabledHint": "Off refuses every key at once; the documentation stays reachable.",
+      "origins": "Allowed origins (browsers)",
+      "originsHint": "Web pages on these origins may call the API directly. Not needed for server-to-server calls.",
+      "originsPlaceholder": "https://app.example.com",
+      "retention": "Keep the request log (days)",
+      "retentionHint": "Older entries are deleted.",
+      "proxyHint": "Another proxy in front of the panel (e.g. nginx on the host)? Set MBP_EXTRA_PROXY_HOPS in .env so address limits see the caller's real address (see the guide).",
+      "saved": "Settings saved."
+    },
+    "validation": {
+      "invalid_origin": "Use the form https://app.example.com (no path).",
+      "invalid_url": "Enter an http:// or https:// address.",
+      "wrong_password": "The password is wrong.",
+      "value_error": "Not a valid IP address or network.",
+      "unknown": "Unknown value."
+    },
+    "areas": {
+      "api": {
+        "label": "The key itself",
+        "hint": "Who is calling, and the catalog"
+      },
+      "servers": {
+        "label": "Servers",
+        "hint": "Servers and their agents"
+      },
+      "instances": {
+        "label": "Databases",
+        "hint": "Database servers, databases, selection"
+      },
+      "backups": {
+        "label": "Backups",
+        "hint": "Start, list, delete, upload backups"
+      },
+      "backup-settings": {
+        "label": "Backup settings",
+        "hint": "Compression, encryption, file names"
+      },
+      "schedules": {
+        "label": "Schedules",
+        "hint": "Automatic backups"
+      },
+      "storage": {
+        "label": "Remote storage & retention",
+        "hint": "S3 storage and retention rules"
+      },
+      "containers": {
+        "label": "Containers",
+        "hint": "List, logs, start/stop/restart"
+      },
+      "projects": {
+        "label": "Projects",
+        "hint": "Projects, folders, deploys"
+      },
+      "webservers": {
+        "label": "Web servers",
+        "hint": "nginx/Apache sites, files, certificates, checks"
+      },
+      "notifications": {
+        "label": "Alerts",
+        "hint": "Alert rules and log"
+      },
+      "bots": {
+        "label": "Bots",
+        "hint": "Bale/Telegram bots and admins"
+      },
+      "webhooks": {
+        "label": "Webhooks",
+        "hint": "The API's webhooks"
+      },
+      "health": {
+        "label": "Health",
+        "hint": "Is the panel up"
+      }
     }
   }
 }

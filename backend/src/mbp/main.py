@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from mbp.api import (
+    api_access,
     auth,
     backup_settings,
     backups,
@@ -17,9 +18,13 @@ from mbp.api import (
     schedules,
     servers,
     storage,
+    v1,
+    webhooks,
     webservers,
 )
 from mbp.api.errors import register_error_handlers
+from mbp.apiaccess.middleware import ApiV1Middleware
+from mbp.apiaccess.webhooks import WebhookDispatcher
 from mbp.backups.runner import BackupRunner
 from mbp.backups.scheduler import BackupScheduler
 from mbp.backups.store import get_store
@@ -62,6 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     set_registry(agents)
     notifier = Notifier(sessions)
     runner.notifier = notifier
+    webhooks = WebhookDispatcher(sessions)
+    notifier.webhooks = webhooks
+    app.state.webhooks = webhooks
     app.state.notifier = notifier
     monitor = AlertMonitor(sessions, notifier, settings.backup_root)
     web_monitor = WebMonitor(sessions, notifier, agents)
@@ -105,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         web_monitor.close()
         runner.stop()
         notifier.close()
+        webhooks.close()
         set_registry(None)
         agents.close()
         agent.close()
@@ -123,24 +132,35 @@ def create_app() -> FastAPI:
     )
     register_error_handlers(app)
 
-    # Unauthenticated: health check (no data) and login only. Everything else requires
-    # a valid session and the CSRF header (Constitution Principle I).
+    # Unauthenticated: health check (no data), login, and the external API's documentation.
+    # Everything else requires a valid session and the CSRF header (Constitution Principle
+    # I), or, under /api/v1, an API key with the needed scope.
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(auth.public_router, prefix=API_PREFIX)
     protected = [Depends(require_session), Depends(require_csrf)]
     app.include_router(auth.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(instances.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(backups.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(backup_settings.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(schedules.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(storage.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(bots.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(notifications.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(containers.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(projects.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(project_folders.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(servers.router, prefix=API_PREFIX, dependencies=protected)
-    app.include_router(webservers.router, prefix=API_PREFIX, dependencies=protected)
+    app.include_router(api_access.router, prefix=API_PREFIX, dependencies=protected)
+    # Everything below is also the external API, /api/v1, with API keys instead of the
+    # session (see mbp.api.v1).
+    features = [
+        instances.router,
+        backups.router,
+        backup_settings.router,
+        schedules.router,
+        storage.router,
+        bots.router,
+        notifications.router,
+        containers.router,
+        projects.router,
+        project_folders.router,
+        servers.router,
+        webservers.router,
+        webhooks.router,
+    ]
+    for router in features:
+        app.include_router(router, prefix=API_PREFIX, dependencies=protected)
+    v1.include_v1(app, features)
+    app.add_middleware(ApiV1Middleware)
     return app
 
 

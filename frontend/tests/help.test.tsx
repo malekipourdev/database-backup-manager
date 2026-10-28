@@ -20,6 +20,7 @@ const ICONS = new Set([
   "servers",
   "containers",
   "projects",
+  "api",
   "account",
   "maintenance",
   "faq",
@@ -38,6 +39,7 @@ const PAGES = [
   /^\/bots$/,
   /^\/settings\/backups$/,
   /^\/account$/,
+  /^\/api-access$/,
 ];
 
 function structure(guide: HelpCategory[]) {
@@ -47,7 +49,7 @@ function structure(guide: HelpCategory[]) {
 describe("the guide", () => {
   it("has the same topics in both languages", () => {
     expect(structure(GUIDES.fa)).toEqual(structure(GUIDES.en));
-    expect(GUIDES.fa.length).toBe(11);
+    expect(GUIDES.fa.length).toBe(12);
     expect(allArticles(GUIDES.fa).length).toBeGreaterThan(40);
   });
 

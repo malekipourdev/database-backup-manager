@@ -1,3 +1,4 @@
+import ipaddress
 import re
 from datetime import datetime
 from typing import Literal
@@ -1457,3 +1458,245 @@ class WebCheckIn(BaseModel):
 
 class WebCheckUpdate(BaseModel):
     enabled: bool
+
+
+# --- External API: keys, settings, request log, webhooks ---
+
+
+def _clean_list(values: list[str]) -> list[str]:
+    seen: list[str] = []
+    for value in values:
+        value = value.strip()
+        if value and value not in seen:
+            seen.append(value)
+    return seen
+
+
+def validate_networks(values: list[str]) -> list[str]:
+    out = []
+    for value in _clean_list(values):
+        try:
+            out.append(str(ipaddress.ip_network(value, strict=False)))
+        except ValueError:
+            raise ValueError("invalid_ip") from None
+    return out
+
+
+def validate_origins(values: list[str]) -> list[str]:
+    out = []
+    for value in _clean_list(values):
+        value = value.rstrip("/")
+        if value != "*" and not re.fullmatch(r"https?://[A-Za-z0-9.\-\[\]:]+", value):
+            raise ValueError("invalid_origin")
+        out.append(value)
+    return out
+
+
+class ApiSettingsIO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    cors_origins: list[str] = Field(default_factory=list, max_length=50)
+    log_retention_days: int = Field(default=30, ge=1, le=365)
+
+    _origins = field_validator("cors_origins")(validate_origins)
+
+
+class ApiKeyFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    scopes: list[str] = Field(min_length=1, max_length=64)
+    allowed_ips: list[str] = Field(default_factory=list, max_length=50)
+    rate_limit: int = Field(default=600, ge=0, le=100000)
+    expires_at: datetime | None = None
+
+    _name = field_validator("name")(validate_name)
+    _ips = field_validator("allowed_ips")(validate_networks)
+
+
+class ApiKeyCreate(ApiKeyFields):
+    """The admin's password confirms it: the new key can do whatever its scopes allow."""
+
+    password: SecretStr = Field(min_length=1, max_length=1024)
+
+
+class ApiKeyUpdate(BaseModel):
+    """Omitted fields are kept; `expires_at: null` removes the expiry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    scopes: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    allowed_ips: list[str] | None = Field(default=None, max_length=50)
+    rate_limit: int | None = Field(default=None, ge=0, le=100000)
+    expires_at: datetime | None = None
+    enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str | None) -> str | None:
+        return None if value is None else validate_name(value)
+
+    @field_validator("allowed_ips")
+    @classmethod
+    def _ips(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else validate_networks(value)
+
+
+class ApiKeyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    prefix: str
+    scopes: list[str]
+    allowed_ips: list[str]
+    rate_limit: int
+    enabled: bool
+    expires_at: datetime | None
+    expired: bool = False
+    created_at: datetime
+    rotated_at: datetime | None
+    last_used_at: datetime | None
+    last_used_ip: str | None
+    request_count: int
+    # Over the last 24 hours, from the request log.
+    requests_24h: int = 0
+    errors_24h: int = 0
+
+
+class ApiKeySecret(BaseModel):
+    """The only time the key itself is shown."""
+
+    key: ApiKeyOut
+    secret: str
+
+
+class ApiRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    key_id: int
+    key_name: str = ""
+    created_at: datetime
+    method: str
+    path: str
+    status: int
+    ip: str
+    duration_ms: int
+    error: str | None
+
+
+class ApiRequestPage(BaseModel):
+    items: list[ApiRequestOut]
+    # Pass as `before` for the next (older) page; null on the last page.
+    next_before: int | None
+
+
+class ApiAreaOut(BaseModel):
+    area: str
+    read: int
+    write: int
+
+
+class ApiCatalog(BaseModel):
+    """What keys and webhooks can be given: areas with their operation counts, every scope,
+    every webhook event."""
+
+    base_path: str
+    areas: list[ApiAreaOut]
+    scopes: list[str]
+    events: list[str]
+
+
+class ApiMe(BaseModel):
+    """The key making the request."""
+
+    id: int
+    name: str
+    prefix: str
+    scopes: list[str]
+    allowed_ips: list[str]
+    rate_limit: int
+    expires_at: datetime | None
+    admin: str
+    ip: str
+
+
+class WebhookFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    url: str = Field(min_length=1, max_length=500)
+    events: list[str] = Field(min_length=1, max_length=64)
+    enabled: bool = True
+
+    _name = field_validator("name")(validate_name)
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str) -> str:
+        value = value.strip()
+        if not re.match(_URL_RE, value):
+            raise ValueError("invalid_url")
+        return value
+
+
+class WebhookUpdate(BaseModel):
+    """Omitted fields are kept."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    url: str | None = Field(default=None, min_length=1, max_length=500)
+    events: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str | None) -> str | None:
+        return None if value is None else validate_name(value)
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str | None) -> str | None:
+        return None if value is None else WebhookFields._url(value)
+
+
+class WebhookOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    url: str
+    events: list[str]
+    enabled: bool
+    created_at: datetime
+    last_delivery_at: datetime | None
+    last_status: str | None
+    failures: int
+
+
+class WebhookSecret(BaseModel):
+    """The only time the signing secret is shown (on creation and after a rotation)."""
+
+    webhook: WebhookOut
+    secret: str
+
+
+class WebhookDeliveryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    webhook_id: int
+    uuid: str
+    created_at: datetime
+    event: str
+    payload: dict
+    status: Literal["pending", "sent", "failed"]
+    attempts: int
+    response_status: int | None
+    detail: str | None
+    duration_ms: int | None
+    finished_at: datetime | None

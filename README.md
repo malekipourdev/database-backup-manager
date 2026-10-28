@@ -865,6 +865,27 @@ The certificate stays in its volume, so the panel keeps trusting it. To remove t
 made next time: connect again), and delete the server in the panel once it has no projects or
 databases.
 
+## External API
+
+Everything the dashboard does is also an HTTP API for your own software, at `/api/v1`: the same
+endpoints as the dashboard's (so nothing is missing), authenticated with API keys instead of the
+session. Only signing in, two-step verification and the keys themselves are dashboard-only.
+
+- **Keys** (menu → System → External API): each has scopes (`<area>:read`, `<area>:write`,
+  `backups:download`, or `*`), optional allowed addresses (CIDR), a per-minute rate limit and an
+  expiry; it can be rotated, disabled or deleted. Only a SHA-256 of the key is stored; it is shown
+  once. Creating or rotating a key needs your password. Send it as
+  `Authorization: Bearer mbp_…` or `X-API-Key: mbp_…`.
+- **Webhooks**: every event (backup, deploy, container, site and certificate alerts…) as a signed
+  `POST` (`X-MBP-Signature: sha256=HMAC(secret, "<timestamp>.<body>")`), retried twice; deliveries
+  can be listed and sent again. Manageable through the API too (`webhooks` scope).
+- **Request log**, **CORS origins** for browser callers, and a switch that refuses every key at once.
+- **Documentation**: `/api/v1/docs` (Swagger UI), `/api/v1/redoc`, `/api/v1/openapi.json`, and the
+  "External API" chapter of the in-panel guide.
+
+Behind another proxy (e.g. nginx on the host with TLS), set `MBP_EXTRA_PROXY_HOPS=1` in `.env` so
+address limits see the caller's real address.
+
 ## Two-step verification (Google Authenticator)
 
 Sign-in can also ask for a 6-digit code from an authenticator app on your phone (Google

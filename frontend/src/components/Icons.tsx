@@ -18,6 +18,7 @@ export {
   CloudSlash,
   Cube,
   ClockCountdown,
+  Code,
   Copy,
   Database,
   FileDashed,

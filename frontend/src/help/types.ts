@@ -13,6 +13,7 @@ export type HelpIcon =
   | "servers"
   | "containers"
   | "projects"
+  | "api"
   | "account"
   | "maintenance"
   | "faq";

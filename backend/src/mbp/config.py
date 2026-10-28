@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     container_monitor_seconds: int = Field(default=60, ge=0)
     # How often due site health checks run and (every few hours) certificates are read.
     web_monitor_seconds: int = Field(default=60, ge=0)
+    # Proxies in front of the panel's own one (e.g. nginx on the host with TLS): how many
+    # X-Forwarded-For entries to skip from the end to find the caller's address.
+    extra_proxy_hops: int = Field(default=0, ge=0, le=5)
     # Master switch for the Bale/Telegram bots (e.g. off on a standby copy of the panel).
     bots_enabled: bool = True
 

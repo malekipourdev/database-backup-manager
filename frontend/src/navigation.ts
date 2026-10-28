@@ -4,6 +4,7 @@ import {
   Archive,
   Bell,
   ClockCountdown,
+  Code,
   Cube,
   Database,
   GearSix,
@@ -93,6 +94,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "nav.groups.system",
     items: [
       { to: "/account", label: "nav.account", icon: ShieldCheck, keywords: "nav.keywords.account" },
+      { to: "/api-access", label: "nav.api", icon: Code, keywords: "nav.keywords.api" },
       { to: "/help", label: "nav.help", icon: Question },
     ],
   },
