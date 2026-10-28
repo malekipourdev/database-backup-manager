@@ -115,17 +115,8 @@ def downgrade() -> None:
         batch_op.drop_column("web_target")
         batch_op.drop_column("web_domains")
 
-    with op.batch_alter_table("web_check_results", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_web_check_results_check_id"))
-
+    # Dropping a table drops its indexes; MySQL refuses to drop an index a foreign key still needs.
     op.drop_table("web_check_results")
-    with op.batch_alter_table("web_checks", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_web_checks_server_id"))
-
     op.drop_table("web_checks")
-    with op.batch_alter_table("web_actions", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_web_actions_server_id"))
-        batch_op.drop_index(batch_op.f("ix_web_actions_created_at"))
-
     op.drop_table("web_actions")
     op.drop_table("webserver_settings")
