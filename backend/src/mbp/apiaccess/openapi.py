@@ -91,6 +91,7 @@ date, turned off, or rotated (a new secret, same settings).
 Software that acts for its own users can name the person in each request:
 `X-MBP-On-Behalf-Of: Sara Ahmadi`. The panel records it in the request log and in its activity
 logs (`Sara Ahmadi (API: <key name>)`); what the request may do still depends on the key alone.
+A name in another script is sent percent-encoded as UTF-8 (`%D8%B3%D8%A7%D8%B1%D8%A7`).
 
 ## Scopes
 

@@ -6,6 +6,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
+from urllib.parse import unquote
 
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -150,8 +151,10 @@ def require_api_key(request: Request, db: Session = Depends(get_db)) -> ApiKey:
 
 def on_behalf_of(request: Request) -> str | None:
     """`X-MBP-On-Behalf-Of`: the person the calling software acts for (its own user), which
-    the panel only records: the key alone decides what the request may do."""
-    value = " ".join(request.headers.get(ON_BEHALF_HEADER, "").split())
+    the panel only records: the key alone decides what the request may do. Headers carry
+    ASCII only, so a name in another script is sent percent-encoded (UTF-8)."""
+    raw = unquote(request.headers.get(ON_BEHALF_HEADER, ""), errors="replace")
+    value = " ".join("".join(c for c in raw if c.isprintable()).split())
     return value[:ON_BEHALF_MAX] or None
 
 

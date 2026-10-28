@@ -398,3 +398,8 @@ def test_the_log_shows_who_requests_were_made_for(auth_client, db, admin, world)
     assert auth_client.get("/api/v1/servers", headers=headers).status_code == 200
     items = auth_client.get("/api/api-access/requests").json()["items"]
     assert items[0]["on_behalf_of"] == "Sara"
+    # Names in other scripts arrive percent-encoded.
+    headers = {**bearer(secret), "X-MBP-On-Behalf-Of": "%D8%B3%D8%A7%D8%B1%D8%A7%20%3Cs%40x.ir%3E"}
+    assert auth_client.get("/api/v1/servers", headers=headers).status_code == 200
+    items = auth_client.get("/api/api-access/requests").json()["items"]
+    assert items[0]["on_behalf_of"] == "سارا <s@x.ir>"
