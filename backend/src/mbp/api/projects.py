@@ -12,11 +12,11 @@ from mbp.api.schemas import (
     ProjectState,
 )
 from mbp.api.scope import ServerScope, server_scope
+from mbp.apiaccess.keys import Actor, current_actor
 from mbp.db import get_db
-from mbp.models import AdminAccount, Project, Server
+from mbp.models import Project, Server
 from mbp.projects.service import ProjectService, env_of
 from mbp.repositories.project_repository import ProjectRepository
-from mbp.security.sessions import require_session
 
 router = APIRouter(tags=["projects"])
 
@@ -120,12 +120,12 @@ def deploy_project(
     project_id: int,
     body: DeployIn,
     request: Request,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     db: Session = Depends(get_db),
 ) -> DeploymentSummary:
     service = ProjectService(db)
     deployment = service.request_deploy(
-        service.get(project_id), ref=body.ref or None, trigger="panel", actor=admin.username
+        service.get(project_id), ref=body.ref or None, trigger=who.source, actor=who.name
     )
     request.app.state.deploy_runner.submit(deployment.id)
     return DeploymentSummary.model_validate(deployment)

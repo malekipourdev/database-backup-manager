@@ -44,10 +44,10 @@ from mbp.api.schemas import (
     WebStatusList,
     WebTestResult,
 )
+from mbp.apiaccess.keys import Actor, current_actor
 from mbp.db import get_db, utcnow
-from mbp.models import AdminAccount, Server, WebCheck
+from mbp.models import Server, WebCheck
 from mbp.repositories.webserver_repository import WebServerRepository
-from mbp.security.sessions import require_session
 from mbp.webservers.service import WebServerService
 
 router = APIRouter(tags=["webservers"])
@@ -140,11 +140,16 @@ def test(kind: WebKind, svc: WebServerService = Depends(service)) -> dict:
 def control(
     kind: WebKind,
     action: Literal["reload", "restart"],
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
-        kind, action, "", lambda: svc.agent.web_control(kind, action), actor=admin.username
+        kind,
+        action,
+        "",
+        lambda: svc.agent.web_control(kind, action),
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -152,7 +157,7 @@ def control(
 def write_file(
     kind: WebKind,
     body: WebFileWrite,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
@@ -160,7 +165,8 @@ def write_file(
         "edit",
         body.path,
         lambda: svc.agent.web_write(kind, body.path, body.content, body.sha256),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -168,7 +174,7 @@ def write_file(
 def restore(
     kind: WebKind,
     body: WebRestoreIn,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
@@ -176,7 +182,8 @@ def restore(
         "restore",
         f"{body.path} @ {body.backup}",
         lambda: svc.agent.web_restore(kind, body.path, body.backup),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -184,7 +191,7 @@ def restore(
 def set_enabled(
     kind: WebKind,
     body: WebEnabledIn,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
@@ -192,7 +199,8 @@ def set_enabled(
         "enable" if body.enabled else "disable",
         body.path,
         lambda: svc.agent.web_enabled(kind, body.path, body.enabled),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -200,7 +208,7 @@ def set_enabled(
 def set_maintenance(
     kind: WebKind,
     body: WebMaintenanceIn,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
@@ -208,7 +216,8 @@ def set_maintenance(
         "maintenance_on" if body.on else "maintenance_off",
         body.path,
         lambda: svc.agent.web_maintenance(kind, body.path, body.on),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -216,7 +225,7 @@ def set_maintenance(
 def remove_broken_links(
     kind: WebKind,
     body: WebPathsIn,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.change(
@@ -224,7 +233,8 @@ def remove_broken_links(
         "remove_broken_links",
         " ".join(body.paths)[:500],
         lambda: svc.agent.web_remove_broken(kind, body.paths),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
@@ -233,7 +243,7 @@ def create_site(
     kind: WebKind,
     body: WebSiteCreate,
     response: Response,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     result = svc.change(
@@ -241,7 +251,8 @@ def create_site(
         "create",
         " ".join(body.domains),
         lambda: svc.agent.web_create(kind, body.model_dump()),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
     if not result.get("ok"):
         response.status_code = 200
@@ -252,7 +263,7 @@ def create_site(
 def certbot_issue(
     kind: WebKind,
     body: CertbotIssueIn,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     payload = body.model_dump()
@@ -262,14 +273,15 @@ def certbot_issue(
         "certbot_issue",
         " ".join(body.domains),
         lambda: svc.agent.web_certbot_issue(kind, payload),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
 @router.post("/webservers/{kind}/certbot/install", response_model=WebJob, status_code=202)
 def certbot_install(
     kind: WebKind,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: WebServerService = Depends(service),
 ) -> dict:
     return svc.start_job(
@@ -277,16 +289,22 @@ def certbot_install(
         "certbot_install",
         "certbot",
         lambda: svc.agent.web_certbot_install(kind),
-        actor=admin.username,
+        actor=who.name,
+        source=who.source,
     )
 
 
 @router.post("/webservers/-/certbot/renew", response_model=WebJob, status_code=202)
 def certbot_renew(
-    admin: AdminAccount = Depends(require_session), svc: WebServerService = Depends(service)
+    who: Actor = Depends(current_actor), svc: WebServerService = Depends(service)
 ) -> dict:
     return svc.start_job(
-        "certbot", "certbot_renew", "", svc.agent.web_certbot_renew, actor=admin.username
+        "certbot",
+        "certbot_renew",
+        "",
+        svc.agent.web_certbot_renew,
+        actor=who.name,
+        source=who.source,
     )
 
 

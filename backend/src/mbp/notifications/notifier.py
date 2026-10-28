@@ -24,6 +24,10 @@ class BotBroadcaster(Protocol):
     def broadcast(self, platform: str, event: Event) -> str: ...
 
 
+class EventSubscribers(Protocol):
+    def dispatch(self, event: Event, created_at: datetime | None = None) -> list[int]: ...
+
+
 class Notifier:
     def __init__(
         self,
@@ -36,6 +40,8 @@ class Notifier:
     ) -> None:
         self.session_factory = session_factory
         self.bots = bots
+        # The external API's webhooks (mbp.apiaccess.webhooks).
+        self.webhooks: EventSubscribers | None = None
         self.clock = clock
         self.webhook_transport = webhook_transport
         self._executor = (
@@ -68,17 +74,21 @@ class Notifier:
     def _emit(self, event: Event, forced_channels: list[str] | None, wait: bool) -> int | None:
         with self.session_factory() as db:
             settings = NotificationRepository(db).get_settings()
+            now = self.clock()
+            suppressed = event.severity != "info" and self._in_cooldown(
+                db, event.subject, now - timedelta(minutes=settings.cooldown_minutes)
+            )
             if forced_channels is None:
+                # The external API's webhooks choose their events themselves: the alert
+                # rules don't apply to them, the cooldown does.
+                if self.webhooks is not None and not suppressed:
+                    self.webhooks.dispatch(event, now)
                 rule = merged_rules(settings.rules).get(event.type)
                 if rule is None or not rule["enabled"]:
                     return None
                 targets = rule["channels"]
             else:
                 targets = forced_channels
-            now = self.clock()
-            suppressed = event.severity != "info" and self._in_cooldown(
-                db, event.subject, now - timedelta(minutes=settings.cooldown_minutes)
-            )
             entry = NotificationLog(
                 created_at=now,
                 event=event.type,

@@ -848,6 +848,574 @@ in `/etc/docker/daemon.json`, then `systemctl restart docker`.
 - Builds that download packages (npm, pip, apt) may need mirrors in the project's own Dockerfile.
 - If Telegram is blocked, set a proxy for the bot ([guide](#bots-setup)) or use Bale.
 
+@@category api api External API
+
+@@article api /api-access
+@title External API: what it is
+@summary Drive everything the panel does from your own software, with its own look.
+The panel's dashboard is one way to use DevOps Manager. The **external API** is the other: your own website, admin panel, mobile app or script can do **everything** the dashboard does — add servers and databases, take and download backups, deploy projects, start and stop containers, manage nginx/Apache sites and certificates, set alerts — and show it with its own design.
+
+Nothing is left out: the external API is made of the very same endpoints the dashboard uses, so every feature is in both, now and in every future version. Only signing in to the panel, two-step verification and the API keys themselves stay in the dashboard.
+
+## The parts
+
+| Part        | What it does                                                                 | Where                                   |
+| ----------- | ---------------------------------------------------------------------------- | --------------------------------------- |
+| Keys        | Who may call the API, and what they may do                                   | [API page → Keys](/api-access)          |
+| Scopes      | Read or write, area by area                                                  | In each key                             |
+| Webhooks    | The panel calls **you** when something happens (backup failed, deploy done…) | API page → Webhooks                     |
+| Request log | Every call made with a key: time, address, result                            | API page → Request log                  |
+| Reference   | Every endpoint, searchable, with the scope it needs                          | API page → Reference, Swagger UI, ReDoc |
+| Settings    | Turn the API off at once, browser origins (CORS), how long the log is kept   | API page → Settings                     |
+
+## The address
+
+Every endpoint is under `https://<your panel>/api/v1`. The full machine-readable description is at `/api/v1/openapi.json`: import it into Postman or Insomnia, or generate a client library for your language with an OpenAPI generator. `/api/v1/docs` (Swagger UI) lets you try every endpoint from the browser; `/api/v1/redoc` is a readable reference.
+
+> The panel is bound to `127.0.0.1` by default ([Access to the panel](#access)). For other software to reach the API, put the panel behind HTTPS on a domain, or call it from the same server or through a tunnel.
+
+## Five minutes to the first call
+
+1. Open [the API page](/api-access) and press **New key**. Give it a name (e.g. the name of the software using it), choose **Read only**, enter your password, and create it.
+2. Copy the key: it is shown **only this once**.
+3. Call the API:
+
+```bash
+curl -H "Authorization: Bearer mbp_…" https://panel.example.com/api/v1/me
+curl -H "Authorization: Bearer mbp_…" https://panel.example.com/api/v1/projects
+```
+
+The first answer tells you about the key; the second lists your projects. Next: [Keys and scopes](#api-keys), [Making requests](#api-requests), [Common tasks](#api-examples).
+
+@@article api-keys /api-access
+@title Keys and scopes
+@summary Create keys, give each only what it needs, limit where it is used from.
+A key is a long secret starting with `mbp_`. The panel stores only a fingerprint of it, so **it is shown once**, when it is created or rotated; if it is lost, rotate it.
+
+## Creating a key
+
+On [the API page](/api-access), **Keys → New key**:
+
+- **Name** — who uses it ("Shop website", "Monitoring"). It appears in the request log and in the activity logs.
+- **Access** — **Read only** (can see everything, change nothing), **Full access** (everything, like the admin), or **Custom** (chosen area by area).
+- **Allowed addresses** — optional. IP addresses or networks (`203.0.113.7`, `10.0.0.0/8`, `2001:db8::/32`); requests from anywhere else get `403 ip_not_allowed`. Set it whenever the caller has a fixed address.
+- **Requests per minute** — the key's rate limit (0 = no limit).
+- **Expiry** — never, 30/90 days, a year, or a date. An expired key gets `401 api_key_expired`.
+- **Your password** — confirms it is you: a key can do whatever its scopes allow.
+
+## Scopes
+
+Each area has a **read** and a **write** level; write includes read. In the API they are written `area:read` / `area:write`; `*` is full access.
+
+| Area                         | Scope name        | Covers                                          |
+| ---------------------------- | ----------------- | ----------------------------------------------- |
+| Servers                      | `servers`         | Servers and their agents                        |
+| Databases                    | `instances`       | Database servers, their databases, selection    |
+| Backups                      | `backups`         | Start, list, delete, upload backups             |
+| Backup settings              | `backup-settings` | Compression, encryption, file names             |
+| Schedules                    | `schedules`       | Automatic backups                               |
+| Remote storage and retention | `storage`         | S3 storage, retention                           |
+| Containers                   | `containers`      | List, logs, start/stop/restart                  |
+| Projects                     | `projects`        | Projects, folders, deploys                      |
+| Web servers                  | `webservers`      | nginx/Apache sites, files, certificates, checks |
+| Alerts                       | `notifications`   | Alert rules and log                             |
+| Bots                         | `bots`            | Bale/Telegram bots and admins                   |
+| Webhooks                     | `webhooks`        | The API's webhooks                              |
+
+GET requests read; POST, PUT, PATCH and DELETE write — except the two previews (file-name pattern, cron), which only need read.
+
+> ! **Downloading backup files** needs its own scope, `backups:download` (a checkbox under Backups): a database dump holds all its data. Give it only to software that really stores the backups.
+
+A request without the needed scope gets `403 insufficient_scope`, and `detail` names the missing scope. Each endpoint's scope is shown in the reference.
+
+## Managing keys
+
+From a key's menu:
+
+- **Edit** — name, scopes, addresses, limit, expiry; takes effect at once. The secret does not change.
+- **Rotate** — a new secret with the same settings; the old one stops working **at once**. Do it whenever a key may have leaked, and from time to time.
+- **Disable / Enable** — stop a key for a while without deleting it.
+- **Requests** — its calls in the request log.
+- **Delete** — permanently.
+
+Each key shows when and from where it was last used, and its requests and errors in the last 24 hours.
+
+## Good practice
+
+- One key per piece of software: you can then see, limit and revoke each on its own.
+- The fewest scopes that work; **Full access** only when really needed.
+- Allowed addresses for servers that call the API.
+- Keep keys in environment variables or a secret store, never in code repositories or front-end code.
+- A key acts **as the admin who created it**. Its changes appear in the activity logs (web servers, containers, deploys) as `admin (API: key name)` with the source **API**.
+- Keys cannot create or change keys: that needs the dashboard and your password.
+
+@@article api-requests /api-access
+@title Making requests
+@summary Headers, servers, long-running work, errors, rate limits.
+
+## The key
+
+Send it with every request, in either header:
+
+```
+Authorization: Bearer mbp_…
+X-API-Key: mbp_…
+```
+
+No cookie or CSRF header is needed. Without a key: `401 api_key_missing`; with a wrong or rotated one: `401 api_key_invalid`.
+
+## Format
+
+JSON in and out (UTF-8), with `Content-Type: application/json` on bodies. Times are ISO 8601 in UTC (`2026-01-01T08:00:00Z`). In a PATCH, fields left out are kept. Success is `200`, `201` (created), `202` (started in the background) or `204` (no body).
+
+## Several servers
+
+The panel can manage several servers ([Servers](#servers-overview)). `GET /servers` lists them with their IDs. Endpoints about one server's things (databases, backups, containers, projects, web servers) take a `server` query parameter: `GET /containers?server=2`. Without it they mean the panel's own server (lists: all servers).
+
+## Paging
+
+Lists that grow without end are paged: `GET /backups/runs?page=2&page_size=50` returns `items`, `total`, `page`, `page_size`; `GET /notifications/log` the same.
+
+## Long-running work
+
+Some actions start work in the background and answer `202` at once with something to follow:
+
+| Start                               | Follow until done                                                     |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `POST /instances/{id}/backups`      | `GET /backups/runs/{run_id}` → `status` becomes `success` or `failed` |
+| `POST /schedules/{id}/run`          | same, for each run it started                                         |
+| `POST /projects/{id}/deploy`        | `GET /deployments/{id}` → `status`; `log` grows meanwhile             |
+| certificates, certbot install/renew | `GET /webservers/-/jobs/{job_id}`                                     |
+
+Poll every 2–5 seconds — or subscribe a [webhook](#api-webhooks) and be told when it ends.
+
+## Errors
+
+Every error has the same JSON body:
+
+```json
+{ "code": "insufficient_scope", "detail": "projects:write" }
+```
+
+| Status  | Meaning                                         | Codes                                                                                                                                  |
+| ------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 401     | No key, or not a valid one                      | `api_key_missing`, `api_key_invalid`, `api_key_expired`                                                                                |
+| 403     | The key may not do this                         | `insufficient_scope`, `ip_not_allowed`, `api_key_disabled`, `api_disabled`; refusals of the panel itself (e.g. `webservers_read_only`) |
+| 404     | Not found                                       | `project_not_found`, `run_not_found`, …                                                                                                |
+| 409     | Conflict                                        | e.g. a name already used, `agent_outdated`                                                                                             |
+| 422     | Invalid input                                   | `validation_error` with `fields`: field → error code                                                                                   |
+| 429     | Too many requests                               | `rate_limited`                                                                                                                         |
+| 502–504 | A server's agent could not be reached or failed | `agent_unreachable`, …                                                                                                                 |
+
+Base your code on `code`, not on the text of `detail`.
+
+## Rate limits
+
+Every answer carries `X-RateLimit-Limit` (the key's per-minute limit), `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds until the minute restarts). Over the limit you get `429` with `Retry-After`: wait that many seconds.
+
+## Compatibility
+
+`v1` stays compatible: fields and endpoints may be added, never removed or changed in meaning. Ignore fields you don't know. A breaking change would come as `/api/v2`, next to `v1`.
+
+@@article api-webhooks /api-access
+@title Webhooks: the panel calls you
+@summary Get events (backup failed, deploy done, site down…) as signed requests.
+Instead of asking the API again and again, let the panel tell you: a webhook is an address of yours that receives a `POST` for each event.
+
+## Adding one
+
+[API page](/api-access) → **Webhooks → New webhook** (or `POST /webhooks` with a key that has `webhooks:write`): a name, the HTTPS address, and the events — **All events** (including ones added later) or a chosen list. The answer shows the **signing secret** once; keep it with your receiving code.
+
+## Events
+
+| Event                                                                                  | When                             |
+| -------------------------------------------------------------------------------------- | -------------------------------- |
+| `backup_succeeded`, `backup_failed`                                                    | A backup finished                |
+| `upload_failed`                                                                        | Upload to remote storage failed  |
+| `stale_backup`                                                                         | No recent successful backup      |
+| `disk_low`                                                                             | Little free space for backups    |
+| `schedule_problem`, `retention_error`                                                  | A schedule or retention problem  |
+| `deploy_succeeded`, `deploy_failed`                                                    | A deploy finished                |
+| `container_down`, `container_restarting`, `container_unhealthy`, `container_resources` | A container problem              |
+| `host_resources`, `agent_unreachable`                                                  | A server problem                 |
+| `site_down`, `cert_expiring`                                                           | A website or certificate problem |
+| `recovered`                                                                            | A problem above is over          |
+| `daily_summary`                                                                        | The daily summary                |
+| `ping`                                                                                 | The **Test** button              |
+
+Webhooks get the events they subscribe to whatever the [alert rules](#notifications) say; repeats of the same alert within the alert cooldown are not sent again.
+
+## What arrives
+
+```json
+{
+  "id": "6f1c0e3a-8d1e-4f63-9a0c-2f5e1b7c9d10",
+  "event": "backup_failed",
+  "created_at": "2026-01-01T08:00:00+00:00",
+  "severity": "error",
+  "subject": "backup_failed:3:shop",
+  "message": "Backup of shop on prod failed: …",
+  "params": { "instance": "prod", "db": "shop", "reason": "…" },
+  "run_id": 42,
+  "source": "devops-manager"
+}
+```
+
+Headers: `X-MBP-Event` (the event), `X-MBP-Delivery` (the payload's `id`; the same on retries, so you can ignore duplicates), `X-MBP-Timestamp` (Unix seconds) and `X-MBP-Signature`.
+
+## Checking the signature
+
+`X-MBP-Signature` is `sha256=` followed by the hex HMAC-SHA256 of `<timestamp>.<raw body>` with the secret. Check it on the **raw** body (before parsing JSON) and reject old timestamps, so nobody can fake or replay events:
+
+```python
+import hashlib, hmac, time
+
+def verify(secret: str, body: bytes, timestamp: str, signature: str) -> bool:
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256)
+    return hmac.compare_digest("sha256=" + mac.hexdigest(), signature)
+```
+
+```js
+const crypto = require("crypto");
+function verify(secret, rawBody, timestamp, signature) {
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const mac = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const expected = Buffer.from(`sha256=${mac}`);
+  const given = Buffer.from(signature);
+  return expected.length === given.length && crypto.timingSafeEqual(expected, given);
+}
+```
+
+```php
+function verify(string $secret, string $body, string $timestamp, string $signature): bool {
+    if (abs(time() - (int) $timestamp) > 300) return false;
+    $mac = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
+    return hash_equals('sha256=' . $mac, $signature);
+}
+// $body = file_get_contents('php://input');
+// $signature = $_SERVER['HTTP_X_MBP_SIGNATURE']; $timestamp = $_SERVER['HTTP_X_MBP_TIMESTAMP'];
+```
+
+## Answering
+
+Answer with any `2xx` within 10 seconds (do slow work afterwards). Otherwise the delivery is tried again after 10 seconds and after a minute. Each webhook shows its last result and how many deliveries failed in a row.
+
+**Deliveries** (in the webhook's menu) lists the last 200 with their payload, the answer and the time taken; **Send again** repeats one (with a new delivery ID). **Rotate secret** makes a new signing secret; the old one stops at once.
+
+@@article api-browser /api-access
+@title From a browser, behind a proxy
+@summary Allowed origins (CORS), address limits behind proxies, switching the API off.
+
+## Calling from a web page
+
+Calls from your own server need nothing more. A web page that calls the API directly from the browser must be allowed: [API page](/api-access) → **Settings → Allowed origins**, add its origin, e.g. `https://app.example.com` (scheme and host, no path). `*` allows every site.
+
+> ! A key in a web page can be read by anyone who opens that page. Give such a key only read scopes for what the page shows, or better, call the API from your own backend and keep the key there.
+
+## Address limits behind a proxy
+
+The panel's own nginx passes the caller's address to the backend. If you put **another** proxy in front (for example nginx on the host with your domain and HTTPS), the address seen would be that proxy's. Tell the panel how many proxies are in front of its own one, in `.env`:
+
+```bash
+MBP_EXTRA_PROXY_HOPS=1
+```
+
+then `docker compose up -d`. Check with `GET /api/v1/me`: its `ip` must be your real address. Only then use **Allowed addresses** on keys.
+
+## Switching everything off
+
+**Settings → External API on** off refuses every key at once (`403 api_disabled`) — useful if you suspect a leak. The documentation stays reachable. Turning it back on restores all keys as they were.
+
+## The request log
+
+Every request made with a key is logged: time, key, method and path, result, address and duration — including refused ones (wrong scope, wrong address, over the limit). Filter it by key or show only errors. Entries older than the days set in **Settings** (30 by default) are deleted.
+
+@@article api-examples /api-access
+@title Common tasks
+@summary Ready-made calls for what integrations do most.
+In these examples `$API` is `https://panel.example.com/api/v1` and `$KEY` your key; `-H "Authorization: Bearer $KEY"` is left out for brevity on all but the first.
+
+## A client in a few lines
+
+```js
+const API = "https://panel.example.com/api/v1";
+async function api(path, init = {}) {
+  const res = await fetch(API + path, {
+    ...init,
+    headers: { Authorization: `Bearer ${process.env.MBP_KEY}`, "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw await res.json(); // {code, detail, fields}
+  return res.status === 204 ? null : res.json();
+}
+```
+
+```python
+import os, httpx
+api = httpx.Client(base_url="https://panel.example.com/api/v1",
+                   headers={"Authorization": f"Bearer {os.environ['MBP_KEY']}"}, timeout=60)
+```
+
+## A dashboard of your own
+
+```bash
+curl -H "Authorization: Bearer $KEY" $API/servers        # servers and their state
+curl $API/containers/-/info?server=1                     # CPU, memory, disk
+curl $API/containers?server=1                            # containers
+curl "$API/backups/runs?page_size=10"                    # latest backups
+curl $API/webservers/-/certificates                      # certificates and expiry
+curl $API/webservers/-/checks                            # site health and uptime
+```
+
+## Back up a database and wait
+
+```python
+started = api.post("/instances/1/backups", json={"scope": "single", "database": "shop"}).json()
+run_id = started["created"][0]["id"]
+while (run := api.get(f"/backups/runs/{run_id}").json())["status"] not in ("success", "failed"):
+    time.sleep(3)
+if run["status"] == "success":
+    with api.stream("GET", f"/backups/runs/{run_id}/download") as r, open(run["file_name"], "wb") as f:
+        for chunk in r.iter_bytes():
+            f.write(chunk)
+```
+
+(Downloading needs `backups:download`.) `{"scope": "all"}` backs up every selected database of the server.
+
+## Deploy from CI
+
+At the end of your CI pipeline (GitHub Actions, GitLab CI…), with a key that has only `projects:write`:
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $MBP_KEY" -H "Content-Type: application/json" \
+     -d "{\"ref\": \"$GIT_COMMIT\"}" https://panel.example.com/api/v1/projects/3/deploy
+```
+
+The answer has the deployment's `id`; follow `GET /deployments/{id}` or wait for the `deploy_succeeded` / `deploy_failed` webhook.
+
+## Restart a container, read its logs
+
+```bash
+curl -X POST "$API/containers/web-1/restart?server=2"
+curl "$API/containers/web-1/logs?server=2&tail=200"
+```
+
+## A new website with HTTPS
+
+```bash
+curl -X POST $API/webservers/nginx/sites -d '{"template": "proxy", "domains": ["shop.example.com"], "target": "http://127.0.0.1:3000"}'
+curl -X POST $API/webservers/nginx/certbot/issue -d '{"domains": ["shop.example.com"]}'
+curl $API/webservers/-/jobs/<job_id>                      # until it is done
+```
+
+Every change to a web server is tested before it is kept and rolled back if the test fails ([Editing safely](#webservers-edit)).
+
+## Hear about problems
+
+```bash
+curl -X POST $API/webhooks -d '{"name": "ops", "url": "https://ops.example.com/mbp", "events": ["backup_failed", "deploy_failed", "site_down", "container_down"]}'
+```
+
+Exact request bodies of every endpoint: Swagger UI (`/api/v1/docs`), which can also send the requests for you.
+
+@@article api-reference /api-access
+@title Endpoint list
+@summary Every endpoint of the API with what it does and the scope it needs.
+Paths are under `/api/v1`. `{kind}` is `nginx` or `apache`; `{ref}` a container's name or ID. The request and response formats of each are in Swagger UI (`/api/v1/docs`) and in `/api/v1/openapi.json`.
+
+## The key itself
+
+| Method | Path       | What it does                                                                   | Scope |
+| ------ | ---------- | ------------------------------------------------------------------------------ | ----- |
+| GET    | `/me`      | The key making the request: scopes, limits, the admin it acts as, your address | —     |
+| GET    | `/catalog` | Every area with its operation counts, every scope, every webhook event         | —     |
+
+## Servers
+
+| Method | Path                           | What it does                               | Scope           |
+| ------ | ------------------------------ | ------------------------------------------ | --------------- |
+| GET    | `/servers`                     | Servers and their agents' state            | `servers:read`  |
+| POST   | `/servers`                     | Add a server (returns its install command) | `servers:write` |
+| GET    | `/servers/{server_id}`         | One server                                 | `servers:read`  |
+| PATCH  | `/servers/{server_id}`         | Rename or change a server                  | `servers:write` |
+| DELETE | `/servers/{server_id}`         | Remove a server                            | `servers:write` |
+| POST   | `/servers/{server_id}/connect` | Check the connection to its agent          | `servers:write` |
+| POST   | `/servers/{server_id}/token`   | A new agent token                          | `servers:write` |
+
+## Databases
+
+| Method | Path                                       | What it does                                            | Scope             |
+| ------ | ------------------------------------------ | ------------------------------------------------------- | ----------------- |
+| GET    | `/instances`                               | List database servers (`?server=` for one server)       | `instances:read`  |
+| POST   | `/instances`                               | Add a database server (tested first)                    | `instances:write` |
+| POST   | `/instances/test-connection`               | Test connection details before saving                   | `instances:write` |
+| GET    | `/instances/{instance_id}`                 | One database server                                     | `instances:read`  |
+| PATCH  | `/instances/{instance_id}`                 | Change a database server (omitted fields kept)          | `instances:write` |
+| DELETE | `/instances/{instance_id}`                 | Remove a database server                                | `instances:write` |
+| POST   | `/instances/{instance_id}/test-connection` | Test a saved database server                            | `instances:write` |
+| GET    | `/instances/{instance_id}/databases`       | Its databases, with sizes and whether they are selected | `instances:read`  |
+| PUT    | `/instances/{instance_id}/selection`       | Choose the databases to back up                         | `instances:write` |
+
+## Backups
+
+| Method | Path                               | What it does                                                                | Scope              |
+| ------ | ---------------------------------- | --------------------------------------------------------------------------- | ------------------ |
+| POST   | `/instances/{instance_id}/backups` | Start a backup: `{"scope":"all"}` or `{"scope":"single","database":"shop"}` | `backups:write`    |
+| GET    | `/backups/runs`                    | Backup history, paged and filterable                                        | `backups:read`     |
+| GET    | `/backups/runs/{run_id}`           | One backup run (poll it until `success`/`failed`)                           | `backups:read`     |
+| DELETE | `/backups/runs/{run_id}`           | Delete a backup (`?remote=true` also the remote copy)                       | `backups:write`    |
+| POST   | `/backups/runs/{run_id}/upload`    | Upload (again) to remote storage                                            | `backups:write`    |
+| GET    | `/backups/runs/{run_id}/download`  | Download the backup file (streamed)                                         | `backups:download` |
+
+## Backup settings
+
+| Method | Path                                       | What it does                                                | Scope                   |
+| ------ | ------------------------------------------ | ----------------------------------------------------------- | ----------------------- |
+| GET    | `/backup-settings`                         | Global backup settings: compression, encryption, file names | `backup-settings:read`  |
+| PUT    | `/backup-settings`                         | Change the global backup settings                           | `backup-settings:write` |
+| POST   | `/backup-settings/preview`                 | Preview a file-name pattern                                 | `backup-settings:read`  |
+| GET    | `/instances/{instance_id}/backup-settings` | One database server's own settings                          | `backup-settings:read`  |
+| PUT    | `/instances/{instance_id}/backup-settings` | Change one database server's own settings                   | `backup-settings:write` |
+
+## Schedules
+
+| Method | Path                                 | What it does                            | Scope             |
+| ------ | ------------------------------------ | --------------------------------------- | ----------------- |
+| GET    | `/schedules`                         | Every schedule                          | `schedules:read`  |
+| POST   | `/schedules/preview`                 | The next run times of a cron expression | `schedules:read`  |
+| GET    | `/instances/{instance_id}/schedules` | One database server's schedules         | `schedules:read`  |
+| POST   | `/instances/{instance_id}/schedules` | Add a schedule                          | `schedules:write` |
+| GET    | `/schedules/{schedule_id}`           | One schedule                            | `schedules:read`  |
+| PUT    | `/schedules/{schedule_id}`           | Change a schedule                       | `schedules:write` |
+| DELETE | `/schedules/{schedule_id}`           | Delete a schedule                       | `schedules:write` |
+| POST   | `/schedules/{schedule_id}/run`       | Run a schedule now                      | `schedules:write` |
+
+## Remote storage and retention
+
+| Method | Path                                      | What it does                             | Scope           |
+| ------ | ----------------------------------------- | ---------------------------------------- | --------------- |
+| GET    | `/remote-storage`                         | Remote (S3) storage settings (no secret) | `storage:read`  |
+| PUT    | `/remote-storage`                         | Change remote storage                    | `storage:write` |
+| DELETE | `/remote-storage/secret`                  | Forget the stored secret key             | `storage:write` |
+| POST   | `/remote-storage/test`                    | Test remote storage                      | `storage:write` |
+| GET    | `/retention`                              | Retention rules                          | `storage:read`  |
+| PUT    | `/retention`                              | Change retention rules                   | `storage:write` |
+| GET    | `/instances/{instance_id}/storage-policy` | One database server's storage policy     | `storage:read`  |
+| PUT    | `/instances/{instance_id}/storage-policy` | Change it                                | `storage:write` |
+| POST   | `/retention/apply`                        | Apply retention now                      | `storage:write` |
+
+## Containers
+
+| Method | Path                         | What it does                          | Scope              |
+| ------ | ---------------------------- | ------------------------------------- | ------------------ |
+| GET    | `/containers`                | Containers of a server                | `containers:read`  |
+| GET    | `/containers/-/info`         | The server: Docker, CPU, memory, disk | `containers:read`  |
+| GET    | `/containers/-/stats`        | Live usage of every container         | `containers:read`  |
+| GET    | `/containers/-/settings`     | Container alert settings and locks    | `containers:read`  |
+| PUT    | `/containers/-/settings`     | Change them                           | `containers:write` |
+| GET    | `/containers/-/actions`      | Who started/stopped what, and when    | `containers:read`  |
+| GET    | `/containers/{ref}`          | One container in detail               | `containers:read`  |
+| GET    | `/containers/{ref}/stats`    | Its live usage                        | `containers:read`  |
+| GET    | `/containers/{ref}/logs`     | Its logs (`?tail=`)                   | `containers:read`  |
+| POST   | `/containers/{ref}/{action}` | `start`, `stop` or `restart`          | `containers:write` |
+
+## Projects and folders
+
+| Method | Path                                 | What it does                                              | Scope            |
+| ------ | ------------------------------------ | --------------------------------------------------------- | ---------------- |
+| GET    | `/projects`                          | Projects (`?server=`)                                     | `projects:read`  |
+| POST   | `/projects`                          | Create a project                                          | `projects:write` |
+| GET    | `/projects/{project_id}`             | One project                                               | `projects:read`  |
+| PUT    | `/projects/{project_id}`             | Change a project                                          | `projects:write` |
+| DELETE | `/projects/{project_id}`             | Delete a project (`?down=true` also stops its containers) | `projects:write` |
+| POST   | `/projects/{project_id}/deploy`      | Deploy (body `{"ref": "main"}` optional)                  | `projects:write` |
+| GET    | `/projects/{project_id}/deployments` | Its deployments                                           | `projects:read`  |
+| GET    | `/projects/{project_id}/state`       | Its containers on the server                              | `projects:read`  |
+| GET    | `/deployments/{deployment_id}`       | One deployment with its log (poll it)                     | `projects:read`  |
+| GET    | `/project-folders`                   | Project folders                                           | `projects:read`  |
+| POST   | `/project-folders`                   | Create a folder                                           | `projects:write` |
+| PATCH  | `/project-folders/{folder_id}`       | Rename a folder                                           | `projects:write` |
+| DELETE | `/project-folders/{folder_id}`       | Delete an empty folder                                    | `projects:write` |
+
+## Web servers
+
+| Method | Path                                     | What it does                                            | Scope              |
+| ------ | ---------------------------------------- | ------------------------------------------------------- | ------------------ |
+| GET    | `/webservers`                            | nginx/Apache and all their sites                        | `webservers:read`  |
+| GET    | `/webservers/-/status`                   | Are they running, versions                              | `webservers:read`  |
+| GET    | `/webservers/-/certificates`             | TLS certificates and their expiry                       | `webservers:read`  |
+| GET    | `/webservers/-/php-sockets`              | PHP-FPM sockets (for new PHP sites)                     | `webservers:read`  |
+| GET    | `/webservers/-/certbot`                  | Is certbot installed                                    | `webservers:read`  |
+| GET    | `/webservers/-/jobs/{job_id}`            | A background job (certificate, install); poll it        | `webservers:read`  |
+| GET    | `/webservers/{kind}/file`                | Read a configuration file (`?path=`)                    | `webservers:read`  |
+| PUT    | `/webservers/{kind}/file`                | Write it: backed up, tested, rolled back on error       | `webservers:write` |
+| GET    | `/webservers/{kind}/backups`             | Backups of a file                                       | `webservers:read`  |
+| GET    | `/webservers/{kind}/backup`              | Read one backup                                         | `webservers:read`  |
+| GET    | `/webservers/{kind}/logs`                | The last lines of a log (`?path=&lines=`)               | `webservers:read`  |
+| POST   | `/webservers/{kind}/test`                | Test the configuration (`nginx -t`)                     | `webservers:write` |
+| POST   | `/webservers/{kind}/control/{action}`    | `reload` or `restart`                                   | `webservers:write` |
+| POST   | `/webservers/{kind}/restore`             | Put a backup back                                       | `webservers:write` |
+| POST   | `/webservers/{kind}/enabled`             | Enable or disable a site                                | `webservers:write` |
+| POST   | `/webservers/{kind}/maintenance`         | Maintenance mode on/off                                 | `webservers:write` |
+| POST   | `/webservers/{kind}/broken-links/remove` | Remove broken links                                     | `webservers:write` |
+| POST   | `/webservers/{kind}/sites`               | New site from a template (proxy, PHP, static, redirect) | `webservers:write` |
+| POST   | `/webservers/{kind}/certbot/issue`       | Get a Let's Encrypt certificate (job)                   | `webservers:write` |
+| POST   | `/webservers/{kind}/certbot/install`     | Install certbot (job)                                   | `webservers:write` |
+| POST   | `/webservers/-/certbot/renew`            | Renew certificates (job)                                | `webservers:write` |
+| GET    | `/webservers/-/settings`                 | Web server settings (read-only, checks, ACME e-mail)    | `webservers:read`  |
+| PUT    | `/webservers/-/settings`                 | Change them                                             | `webservers:write` |
+| GET    | `/webservers/-/actions`                  | Activity log of changes                                 | `webservers:read`  |
+| GET    | `/webservers/-/checks`                   | Health checks with uptime                               | `webservers:read`  |
+| POST   | `/webservers/-/checks`                   | Add a health check                                      | `webservers:write` |
+| PATCH  | `/webservers/-/checks/{check_id}`        | Change a health check                                   | `webservers:write` |
+| DELETE | `/webservers/-/checks/{check_id}`        | Delete a health check                                   | `webservers:write` |
+| POST   | `/webservers/-/checks/{check_id}/run`    | Run a health check now                                  | `webservers:write` |
+
+## Alerts
+
+| Method | Path                      | What it does                       | Scope                 |
+| ------ | ------------------------- | ---------------------------------- | --------------------- |
+| GET    | `/notifications/settings` | Alert rules and thresholds         | `notifications:read`  |
+| PUT    | `/notifications/settings` | Change them                        | `notifications:write` |
+| POST   | `/notifications/test`     | Send a test alert                  | `notifications:write` |
+| GET    | `/notifications/log`      | Alerts raised, and where they went | `notifications:read`  |
+
+## Bots
+
+| Method | Path                          | What it does                         | Scope        |
+| ------ | ----------------------------- | ------------------------------------ | ------------ |
+| GET    | `/bots`                       | Bale and Telegram bots               | `bots:read`  |
+| PUT    | `/bots/{platform}`            | Set up a bot (`bale` or `telegram`)  | `bots:write` |
+| DELETE | `/bots/{platform}/token`      | Remove a bot's token                 | `bots:write` |
+| POST   | `/bots/{platform}/test`       | Test a bot's token                   | `bots:write` |
+| POST   | `/bots/{platform}/link-codes` | A one-time code to link a chat admin | `bots:write` |
+| GET    | `/bot-admins`                 | Bot admins                           | `bots:read`  |
+| POST   | `/bot-admins`                 | Add a bot admin                      | `bots:write` |
+| PATCH  | `/bot-admins/{admin_id}`      | Change a bot admin                   | `bots:write` |
+| DELETE | `/bot-admins/{admin_id}`      | Remove a bot admin                   | `bots:write` |
+
+## Webhooks
+
+| Method | Path                                           | What it does                             | Scope            |
+| ------ | ---------------------------------------------- | ---------------------------------------- | ---------------- |
+| GET    | `/webhooks/-/events`                           | Every event a webhook can subscribe to   | `webhooks:read`  |
+| GET    | `/webhooks`                                    | Webhooks                                 | `webhooks:read`  |
+| POST   | `/webhooks`                                    | Add a webhook (returns its secret, once) | `webhooks:write` |
+| GET    | `/webhooks/{webhook_id}`                       | One webhook                              | `webhooks:read`  |
+| PATCH  | `/webhooks/{webhook_id}`                       | Change a webhook                         | `webhooks:write` |
+| DELETE | `/webhooks/{webhook_id}`                       | Delete a webhook                         | `webhooks:write` |
+| POST   | `/webhooks/{webhook_id}/rotate-secret`         | A new signing secret                     | `webhooks:write` |
+| POST   | `/webhooks/{webhook_id}/test`                  | Send a `ping` now                        | `webhooks:write` |
+| GET    | `/webhooks/{webhook_id}/deliveries`            | Its latest deliveries (`?status=failed`) | `webhooks:read`  |
+| POST   | `/webhooks/deliveries/{delivery_id}/redeliver` | Send a delivery again                    | `webhooks:write` |
+
+## Health
+
+| Method | Path      | What it does                    | Scope |
+| ------ | --------- | ------------------------------- | ----- |
+| GET    | `/health` | Is the panel up (no key needed) | —     |
+
 @@category account account Account and security
 
 @@article two-factor /account

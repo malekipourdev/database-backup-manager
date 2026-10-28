@@ -15,7 +15,13 @@ UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
 def require_session(request: Request, db: Session = Depends(get_db)) -> AdminAccount:
-    """Resolve the signed-in admin from the session cookie, or reject with 401."""
+    """Resolve the signed-in admin from the session cookie, or reject with 401.
+
+    On the external API (/api/v1) the key was checked first and stands in for the session.
+    """
+    api_admin = getattr(request.state, "api_admin", None)
+    if api_admin is not None:
+        return api_admin
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise ApiError(401, "not_authenticated")

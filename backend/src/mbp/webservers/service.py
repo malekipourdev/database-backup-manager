@@ -95,13 +95,20 @@ class WebServerService:
         return view
 
     def start_job(
-        self, kind: str, action: str, target: str, call: Callable[[], dict], *, actor: str
+        self,
+        kind: str,
+        action: str,
+        target: str,
+        call: Callable[[], dict],
+        *,
+        actor: str,
+        source: str = "panel",
     ) -> dict:
         def run() -> dict:
             view = call()
             return {**view, "job_id": view["id"]}
 
-        return self.change(kind, action, target, run, actor=actor)
+        return self.change(kind, action, target, run, actor=actor, source=source)
 
     def _audit(
         self,

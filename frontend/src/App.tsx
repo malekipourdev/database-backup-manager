@@ -28,6 +28,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { WebServersPage } from "./pages/WebServersPage";
+import { ApiAccessPage } from "./pages/ApiAccessPage";
 import { notifications } from "@mantine/notifications";
 import { cssVariablesResolver, theme } from "./theme/theme";
 
@@ -103,6 +104,7 @@ export function AppRoutes() {
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/projects/:id/edit" element={<ProjectFormPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/api-access" element={<ApiAccessPage />} />
           <Route path="/help" element={<HelpPage />} />
           <Route path="/help/:articleId" element={<HelpPage />} />
           <Route path="/settings/backups" element={<BackupSettingsPage />} />

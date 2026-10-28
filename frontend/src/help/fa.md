@@ -848,6 +848,574 @@ docker compose up -d --build
 - ساخت‌هایی که بسته دانلود می‌کنند (npm، pip، apt) ممکن است در Dockerfile خود پروژه به mirror نیاز داشته باشند.
 - اگر تلگرام فیلتر است، برای ربات پراکسی تنظیم کنید ([راهنما](#bots-setup)) یا از بله استفاده کنید.
 
+@@category api api API خارجی
+
+@@article api /api-access
+@title API خارجی چیست
+@summary همه‌ی کارهای پنل را از نرم‌افزار خودتان و با ظاهر خودتان انجام دهید.
+داشبورد پنل یکی از راه‌های کار با DevOps Manager است؛ **API خارجی** راه دیگر است: وب‌سایت، پنل مدیریت، اپلیکیشن موبایل یا اسکریپت خودتان می‌تواند **همه‌ی** کارهای داشبورد را انجام دهد — افزودن سرور و پایگاه داده، گرفتن و دانلود پشتیبان، دیپلوی پروژه، روشن و خاموش کردن کانتینرها، مدیریت سایت‌ها و گواهی‌های nginx/Apache، تنظیم هشدارها — و آن را با طراحی خودش نشان دهد.
+
+چیزی جا نمی‌ماند: API خارجی از همان endpointهایی ساخته شده که خود داشبورد استفاده می‌کند، پس هر امکانی در هر دو هست، الان و در همه‌ی نسخه‌های بعدی. فقط ورود به پنل، تأیید دومرحله‌ای و خودِ کلیدهای API در داشبورد می‌مانند.
+
+## اجزا
+
+| بخش               | کارش                                                                          | کجا                                  |
+| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------ |
+| کلیدها            | چه کسی می‌تواند API را صدا بزند و چه کاری مجاز است                            | [صفحه‌ی API ← کلیدها](/api-access)   |
+| دسترسی‌ها (scope) | خواندن یا نوشتن، بخش به بخش                                                   | داخل هر کلید                         |
+| وب‌هوک‌ها         | پنل وقتی اتفاقی می‌افتد **شما** را خبر می‌کند (پشتیبان ناموفق، پایان دیپلوی…) | صفحه‌ی API ← وب‌هوک‌ها               |
+| گزارش درخواست‌ها  | هر فراخوانی با کلید: زمان، نشانی، نتیجه                                       | صفحه‌ی API ← گزارش درخواست‌ها        |
+| مرجع              | همه‌ی endpointها، قابل جستجو، با دسترسی لازم                                  | صفحه‌ی API ← مرجع، Swagger UI، ReDoc |
+| تنظیمات           | خاموش کردن فوری API، مبدأهای مرورگر (CORS)، مدت نگهداری گزارش                 | صفحه‌ی API ← تنظیمات                 |
+
+## نشانی
+
+همه‌ی endpointها زیر `https://<پنل شما>/api/v1` هستند. توضیح کامل و ماشین‌خوان در `/api/v1/openapi.json` است: آن را در Postman یا Insomnia وارد کنید، یا با یک OpenAPI generator برای زبان خودتان کتابخانه‌ی کلاینت بسازید. `/api/v1/docs` (Swagger UI) امکان امتحان هر endpoint را در مرورگر می‌دهد و `/api/v1/redoc` مرجعی خواناست.
+
+> پنل به‌طور پیش‌فرض فقط روی `127.0.0.1` در دسترس است ([دسترسی به پنل](#access)). برای اینکه نرم‌افزار دیگری به API برسد، پنل را پشت HTTPS روی یک دامنه بگذارید، یا از همان سرور یا از راه تونل صدا بزنید.
+
+## اولین فراخوانی در پنج دقیقه
+
+1. [صفحه‌ی API](/api-access) را باز کنید و **کلید جدید** را بزنید. یک نام بدهید (مثلاً نام نرم‌افزاری که از آن استفاده می‌کند)، **فقط خواندن** را انتخاب کنید، رمز عبورتان را بزنید و بسازید.
+2. کلید را کپی کنید: **فقط همین یک بار** نشان داده می‌شود.
+3. API را صدا بزنید:
+
+```bash
+curl -H "Authorization: Bearer mbp_…" https://panel.example.com/api/v1/me
+curl -H "Authorization: Bearer mbp_…" https://panel.example.com/api/v1/projects
+```
+
+پاسخ اول درباره‌ی خود کلید است و دومی پروژه‌هایتان را فهرست می‌کند. ادامه: [کلیدها و دسترسی‌ها](#api-keys)، [ارسال درخواست](#api-requests)، [کارهای رایج](#api-examples).
+
+@@article api-keys /api-access
+@title کلیدها و دسترسی‌ها
+@summary کلید بسازید، به هرکدام فقط همان دسترسی لازم را بدهید و محل استفاده‌اش را محدود کنید.
+کلید یک رشته‌ی محرمانه‌ی بلند است که با `mbp_` شروع می‌شود. پنل فقط اثرِ انگشت آن را نگه می‌دارد، پس **فقط یک بار** — هنگام ساخت یا چرخاندن — نشان داده می‌شود؛ اگر گم شد، آن را بچرخانید.
+
+## ساخت کلید
+
+در [صفحه‌ی API](/api-access)، **کلیدها ← کلید جدید**:
+
+- **نام** — چه کسی استفاده می‌کند («سایت فروشگاه»، «مانیتورینگ»). در گزارش درخواست‌ها و گزارش فعالیت‌ها دیده می‌شود.
+- **دسترسی** — **فقط خواندن** (همه‌چیز را می‌بیند، چیزی را تغییر نمی‌دهد)، **دسترسی کامل** (همه‌چیز، مثل ادمین) یا **سفارشی** (بخش به بخش).
+- **نشانی‌های مجاز** — اختیاری. نشانی IP یا شبکه (`203.0.113.7`، `10.0.0.0/8`، `2001:db8::/32`)؛ درخواست از جای دیگر پاسخ `403 ip_not_allowed` می‌گیرد. هر وقت فراخواننده نشانی ثابت دارد این را تنظیم کنید.
+- **درخواست در دقیقه** — محدودیت نرخ کلید (۰ = بی‌محدودیت).
+- **انقضا** — هرگز، ۳۰/۹۰ روز، یک سال، یا یک تاریخ. کلید منقضی پاسخ `401 api_key_expired` می‌گیرد.
+- **رمز عبور شما** — تأیید می‌کند خودتان هستید: کلید هر کاری را که دسترسی‌هایش اجازه دهد می‌تواند انجام دهد.
+
+## دسترسی‌ها (scope)
+
+هر بخش سطح **خواندن** و **نوشتن** دارد؛ نوشتن خواندن را هم شامل می‌شود. در API به صورت `area:read` / `area:write` نوشته می‌شوند؛ `*` یعنی دسترسی کامل.
+
+| بخش                 | نام در API        | شامل                                                |
+| ------------------- | ----------------- | --------------------------------------------------- |
+| سرورها              | `servers`         | سرورها و عامل‌هایشان                                |
+| پایگاه‌های داده     | `instances`       | سرورهای پایگاه داده، پایگاه‌ها، انتخاب              |
+| پشتیبان‌ها          | `backups`         | شروع، فهرست، حذف و بارگذاری پشتیبان                 |
+| تنظیمات پشتیبان     | `backup-settings` | فشرده‌سازی، رمزگذاری، نام فایل                      |
+| زمان‌بندی‌ها        | `schedules`       | پشتیبان‌گیری خودکار                                 |
+| فضای ابری و نگهداری | `storage`         | فضای S3، نگهداری                                    |
+| کانتینرها           | `containers`      | فهرست، لاگ، روشن/خاموش/ری‌استارت                    |
+| پروژه‌ها            | `projects`        | پروژه‌ها، پوشه‌ها، دیپلوی                           |
+| وب‌سرورها           | `webservers`      | سایت‌ها، فایل‌ها، گواهی‌ها و بررسی‌های nginx/Apache |
+| هشدارها             | `notifications`   | قواعد و گزارش هشدار                                 |
+| ربات‌ها             | `bots`            | ربات‌های بله/تلگرام و ادمین‌ها                      |
+| وب‌هوک‌ها           | `webhooks`        | وب‌هوک‌های API                                      |
+
+درخواست‌های GET خواندن‌اند و POST، PUT، PATCH و DELETE نوشتن — جز دو پیش‌نمایش (الگوی نام فایل و cron) که فقط خواندن می‌خواهند.
+
+> ! **دانلود فایل‌های پشتیبان** دسترسی جداگانه‌ی `backups:download` می‌خواهد (تیک زیر پشتیبان‌ها): فایل dump همه‌ی داده‌های پایگاه را دارد. آن را فقط به نرم‌افزاری بدهید که واقعاً پشتیبان‌ها را نگه می‌دارد.
+
+درخواستی که دسترسی لازم را ندارد پاسخ `403 insufficient_scope` می‌گیرد و `detail` نام دسترسی کم را می‌گوید. دسترسی هر endpoint در مرجع نوشته شده است.
+
+## مدیریت کلیدها
+
+از منوی هر کلید:
+
+- **ویرایش** — نام، دسترسی‌ها، نشانی‌ها، محدودیت و انقضا؛ فوراً اعمال می‌شود. خود کلید عوض نمی‌شود.
+- **چرخاندن** — کلید محرمانه‌ی جدید با همان تنظیمات؛ کلید قبلی **همان لحظه** از کار می‌افتد. هر وقت احتمال لو رفتن هست و هر از گاهی این کار را بکنید.
+- **غیرفعال / فعال** — متوقف کردن موقت بدون حذف.
+- **درخواست‌ها** — فراخوانی‌های آن در گزارش درخواست‌ها.
+- **حذف** — برای همیشه.
+
+هر کلید نشان می‌دهد آخرین بار کی و از کجا استفاده شده و در ۲۴ ساعت گذشته چند درخواست و چند خطا داشته است.
+
+## توصیه‌ها
+
+- برای هر نرم‌افزار یک کلید جدا: هر کدام را جداگانه می‌بینید، محدود و باطل می‌کنید.
+- کمترین دسترسی‌ای که کار را راه بیندازد؛ **دسترسی کامل** فقط وقتی واقعاً لازم است.
+- برای سرورهایی که API را صدا می‌زنند نشانی‌های مجاز را تنظیم کنید.
+- کلیدها را در متغیرهای محیطی یا انبار اسرار نگه دارید، هرگز در مخزن کد یا کد سمت مرورگر.
+- کلید **به جای ادمینی که آن را ساخته** کار می‌کند. تغییراتش در گزارش فعالیت‌ها (وب‌سرور، کانتینر، دیپلوی) با نام `admin (API: نام کلید)` و منبع **API** ثبت می‌شود.
+- کلید نمی‌تواند کلید بسازد یا تغییر دهد: این کار داشبورد و رمز عبور شما را می‌خواهد.
+
+@@article api-requests /api-access
+@title ارسال درخواست
+@summary هدرها، چند سرور، کارهای طولانی، خطاها، محدودیت نرخ.
+
+## کلید
+
+آن را با هر درخواست در یکی از این دو هدر بفرستید:
+
+```
+Authorization: Bearer mbp_…
+X-API-Key: mbp_…
+```
+
+کوکی یا هدر CSRF لازم نیست. بدون کلید: `401 api_key_missing`؛ با کلید اشتباه یا چرخانده‌شده: `401 api_key_invalid`.
+
+## قالب
+
+ورودی و خروجی JSON (UTF-8)، با `Content-Type: application/json` برای بدنه. زمان‌ها ISO 8601 به وقت UTC هستند (`2026-01-01T08:00:00Z`). در PATCH فیلدهای نفرستاده دست نمی‌خورند. موفقیت یعنی `200`، `201` (ساخته شد)، `202` (در پس‌زمینه شروع شد) یا `204` (بدون بدنه).
+
+## چند سرور
+
+پنل می‌تواند چند سرور را مدیریت کند ([سرورها](#servers-overview)). `GET /servers` آن‌ها را با شناسه فهرست می‌کند. endpointهای مربوط به یک سرور (پایگاه داده، پشتیبان، کانتینر، پروژه، وب‌سرور) پارامتر `server` می‌گیرند: `GET /containers?server=2`. بدون آن، منظور سرور خود پنل است (در فهرست‌ها: همه‌ی سرورها).
+
+## صفحه‌بندی
+
+فهرست‌هایی که پایان ندارند صفحه‌بندی دارند: `GET /backups/runs?page=2&page_size=50` مقدارهای `items`، `total`، `page` و `page_size` را برمی‌گرداند؛ `GET /notifications/log` هم همین‌طور.
+
+## کارهای طولانی
+
+بعضی کارها در پس‌زمینه شروع می‌شوند و فوراً با `202` و چیزی برای پیگیری پاسخ می‌دهند:
+
+| شروع                           | پیگیری تا پایان                                                         |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `POST /instances/{id}/backups` | `GET /backups/runs/{run_id}` ← `status` به `success` یا `failed` می‌رسد |
+| `POST /schedules/{id}/run`     | همین، برای هر اجرا                                                      |
+| `POST /projects/{id}/deploy`   | `GET /deployments/{id}` ← `status`؛ `log` در این مدت بلندتر می‌شود      |
+| گواهی، نصب/تمدید certbot       | `GET /webservers/-/jobs/{job_id}`                                       |
+
+هر ۲ تا ۵ ثانیه بپرسید — یا یک [وب‌هوک](#api-webhooks) بگذارید تا پایان کار به شما خبر داده شود.
+
+## خطاها
+
+همه‌ی خطاها بدنه‌ی JSON یکسانی دارند:
+
+```json
+{ "code": "insufficient_scope", "detail": "projects:write" }
+```
+
+| وضعیت   | معنی                               | کدها                                                                                                                     |
+| ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 401     | کلید نیست یا معتبر نیست            | `api_key_missing`، `api_key_invalid`، `api_key_expired`                                                                  |
+| 403     | کلید اجازه‌ی این کار را ندارد      | `insufficient_scope`، `ip_not_allowed`، `api_key_disabled`، `api_disabled`؛ و ردهای خود پنل (مثل `webservers_read_only`) |
+| 404     | پیدا نشد                           | `project_not_found`، `run_not_found`، …                                                                                  |
+| 409     | تداخل                              | مثلاً نام تکراری، `agent_outdated`                                                                                       |
+| 422     | ورودی نامعتبر                      | `validation_error` همراه `fields`: نام فیلد ← کد خطا                                                                     |
+| 429     | درخواست بیش از حد                  | `rate_limited`                                                                                                           |
+| 502–504 | عامل سرور در دسترس نبود یا خطا داد | `agent_unreachable`، …                                                                                                   |
+
+منطق برنامه‌تان را بر پایه‌ی `code` بنویسید، نه متن `detail`.
+
+## محدودیت نرخ
+
+هر پاسخ هدرهای `X-RateLimit-Limit` (محدودیت دقیقه‌ای کلید)، `X-RateLimit-Remaining` و `X-RateLimit-Reset` (ثانیه تا شروع دقیقه‌ی بعد) را دارد. بیش از حد که بفرستید `429` همراه `Retry-After` می‌گیرید: همان چند ثانیه صبر کنید.
+
+## سازگاری
+
+`v1` سازگار می‌ماند: فیلد و endpoint ممکن است اضافه شود، اما هرگز حذف نمی‌شود یا معنی‌اش عوض نمی‌شود. فیلدهای ناشناخته را نادیده بگیرید. تغییر ناسازگار به صورت `/api/v2` در کنار `v1` می‌آید.
+
+@@article api-webhooks /api-access
+@title وب‌هوک‌ها: پنل شما را صدا می‌زند
+@summary رویدادها (پشتیبان ناموفق، پایان دیپلوی، از کار افتادن سایت…) را به صورت درخواست امضاشده بگیرید.
+به جای اینکه مدام از API بپرسید، بگذارید پنل خبرتان کند: وب‌هوک نشانی‌ای از شماست که برای هر رویداد یک `POST` می‌گیرد.
+
+## افزودن
+
+[صفحه‌ی API](/api-access) ← **وب‌هوک‌ها ← وب‌هوک جدید** (یا `POST /webhooks` با کلیدی که `webhooks:write` دارد): یک نام، نشانی HTTPS و رویدادها — **همه‌ی رویدادها** (حتی آن‌هایی که بعداً اضافه می‌شوند) یا فهرستی انتخابی. پاسخ **رمز امضا** را یک بار نشان می‌دهد؛ آن را کنار کد دریافت‌کننده‌تان نگه دارید.
+
+## رویدادها
+
+| رویداد                                                                                 | چه وقت                           |
+| -------------------------------------------------------------------------------------- | -------------------------------- |
+| `backup_succeeded`، `backup_failed`                                                    | یک پشتیبان تمام شد               |
+| `upload_failed`                                                                        | بارگذاری در فضای ابری ناموفق بود |
+| `stale_backup`                                                                         | پشتیبان موفق تازه‌ای نیست        |
+| `disk_low`                                                                             | فضای خالی پشتیبان کم است         |
+| `schedule_problem`، `retention_error`                                                  | مشکل زمان‌بندی یا نگهداری        |
+| `deploy_succeeded`، `deploy_failed`                                                    | یک دیپلوی تمام شد                |
+| `container_down`، `container_restarting`، `container_unhealthy`، `container_resources` | مشکل کانتینر                     |
+| `host_resources`، `agent_unreachable`                                                  | مشکل سرور                        |
+| `site_down`، `cert_expiring`                                                           | مشکل سایت یا گواهی               |
+| `recovered`                                                                            | یکی از مشکلات بالا برطرف شد      |
+| `daily_summary`                                                                        | خلاصه‌ی روزانه                   |
+| `ping`                                                                                 | دکمه‌ی **آزمایش**                |
+
+وب‌هوک‌ها رویدادهایی را که مشترکشان هستند، فارغ از [قواعد هشدار](#notifications)، می‌گیرند؛ تکرار همان هشدار در مدت فاصله‌ی هشدارها دوباره فرستاده نمی‌شود.
+
+## آنچه می‌رسد
+
+```json
+{
+  "id": "6f1c0e3a-8d1e-4f63-9a0c-2f5e1b7c9d10",
+  "event": "backup_failed",
+  "created_at": "2026-01-01T08:00:00+00:00",
+  "severity": "error",
+  "subject": "backup_failed:3:shop",
+  "message": "Backup of shop on prod failed: …",
+  "params": { "instance": "prod", "db": "shop", "reason": "…" },
+  "run_id": 42,
+  "source": "devops-manager"
+}
+```
+
+هدرها: `X-MBP-Event` (رویداد)، `X-MBP-Delivery` (همان `id` بدنه؛ در تلاش دوباره هم یکسان است تا تکراری‌ها را کنار بگذارید)، `X-MBP-Timestamp` (ثانیه‌ی یونیکس) و `X-MBP-Signature`.
+
+## بررسی امضا
+
+`X-MBP-Signature` برابر `sha256=` و پس از آن HMAC-SHA256 هگزِ `<timestamp>.<بدنه‌ی خام>` با رمز امضاست. آن را روی بدنه‌ی **خام** (پیش از تبدیل JSON) بررسی کنید و زمان‌های قدیمی را رد کنید تا کسی نتواند رویداد جعلی یا تکراری بفرستد:
+
+```python
+import hashlib, hmac, time
+
+def verify(secret: str, body: bytes, timestamp: str, signature: str) -> bool:
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256)
+    return hmac.compare_digest("sha256=" + mac.hexdigest(), signature)
+```
+
+```js
+const crypto = require("crypto");
+function verify(secret, rawBody, timestamp, signature) {
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const mac = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const expected = Buffer.from(`sha256=${mac}`);
+  const given = Buffer.from(signature);
+  return expected.length === given.length && crypto.timingSafeEqual(expected, given);
+}
+```
+
+```php
+function verify(string $secret, string $body, string $timestamp, string $signature): bool {
+    if (abs(time() - (int) $timestamp) > 300) return false;
+    $mac = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
+    return hash_equals('sha256=' . $mac, $signature);
+}
+// $body = file_get_contents('php://input');
+// $signature = $_SERVER['HTTP_X_MBP_SIGNATURE']; $timestamp = $_SERVER['HTTP_X_MBP_TIMESTAMP'];
+```
+
+## پاسخ دادن
+
+ظرف ۱۰ ثانیه با یک `2xx` پاسخ دهید (کار سنگین را بعد انجام دهید). وگرنه ارسال پس از ۱۰ ثانیه و پس از یک دقیقه دوباره امتحان می‌شود. هر وب‌هوک آخرین نتیجه و تعداد ارسال‌های ناموفق پشت‌سرهم را نشان می‌دهد.
+
+**ارسال‌ها** (در منوی وب‌هوک) ۲۰۰ ارسال آخر را با بدنه، پاسخ و زمان صرف‌شده نشان می‌دهد؛ **ارسال دوباره** یکی را تکرار می‌کند (با شناسه‌ی جدید). **چرخاندن رمز** رمز امضای تازه می‌سازد و رمز قبلی همان لحظه از کار می‌افتد.
+
+@@article api-browser /api-access
+@title از مرورگر، پشت پراکسی
+@summary مبدأهای مجاز (CORS)، محدودیت نشانی پشت پراکسی، خاموش کردن API.
+
+## فراخوانی از صفحه‌ی وب
+
+فراخوانی از سرور خودتان به چیز دیگری نیاز ندارد. صفحه‌ی وبی که مستقیماً از مرورگر API را صدا می‌زند باید مجاز شود: [صفحه‌ی API](/api-access) ← **تنظیمات ← مبدأهای مجاز**، مبدأ آن را اضافه کنید، مثلاً `https://app.example.com` (پروتکل و دامنه، بدون مسیر). `*` همه‌ی سایت‌ها را مجاز می‌کند.
+
+> ! کلیدی که در صفحه‌ی وب باشد را هر کسی که آن صفحه را باز کند می‌تواند ببیند. به چنین کلیدی فقط دسترسی خواندنِ همان چیزهایی را بدهید که صفحه نشان می‌دهد؛ یا بهتر، API را از بک‌اند خودتان صدا بزنید و کلید را همان‌جا نگه دارید.
+
+## محدودیت نشانی پشت پراکسی
+
+nginx خود پنل نشانی فراخواننده را به بک‌اند می‌رساند. اگر پراکسی **دیگری** جلوی آن بگذارید (مثلاً nginx روی خود سرور با دامنه و HTTPS)، نشانیِ دیده‌شده مال همان پراکسی می‌شود. در `.env` بگویید چند پراکسی جلوی پراکسی خود پنل است:
+
+```bash
+MBP_EXTRA_PROXY_HOPS=1
+```
+
+سپس `docker compose up -d`. با `GET /api/v1/me` بررسی کنید: `ip` باید نشانی واقعی شما باشد. فقط پس از آن **نشانی‌های مجاز** را روی کلیدها تنظیم کنید.
+
+## خاموش کردن همه‌چیز
+
+خاموش کردن **تنظیمات ← API خارجی روشن** همه‌ی کلیدها را همان لحظه رد می‌کند (`403 api_disabled`) — برای وقتی که به لو رفتن مشکوکید. مستندات همچنان در دسترس می‌ماند. با روشن کردن دوباره همه‌ی کلیدها مثل قبل کار می‌کنند.
+
+## گزارش درخواست‌ها
+
+هر درخواستی که با کلید انجام شود ثبت می‌شود: زمان، کلید، متد و مسیر، نتیجه، نشانی و مدت — حتی ردشده‌ها (دسترسی ناکافی، نشانی غیرمجاز، بیش از حد). بر اساس کلید فیلتر کنید یا فقط خطاها را ببینید. موارد قدیمی‌تر از روزهای تعیین‌شده در **تنظیمات** (پیش‌فرض ۳۰) پاک می‌شوند.
+
+@@article api-examples /api-access
+@title کارهای رایج
+@summary فراخوانی‌های آماده برای کارهایی که یکپارچه‌سازی‌ها بیشتر انجام می‌دهند.
+در این مثال‌ها `$API` برابر `https://panel.example.com/api/v1` و `$KEY` کلید شماست؛ برای کوتاهی، `-H "Authorization: Bearer $KEY"` جز در اولی نوشته نشده است.
+
+## یک کلاینت در چند خط
+
+```js
+const API = "https://panel.example.com/api/v1";
+async function api(path, init = {}) {
+  const res = await fetch(API + path, {
+    ...init,
+    headers: { Authorization: `Bearer ${process.env.MBP_KEY}`, "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw await res.json(); // {code, detail, fields}
+  return res.status === 204 ? null : res.json();
+}
+```
+
+```python
+import os, httpx
+api = httpx.Client(base_url="https://panel.example.com/api/v1",
+                   headers={"Authorization": f"Bearer {os.environ['MBP_KEY']}"}, timeout=60)
+```
+
+## داشبورد اختصاصی خودتان
+
+```bash
+curl -H "Authorization: Bearer $KEY" $API/servers        # servers and their state
+curl $API/containers/-/info?server=1                     # CPU, memory, disk
+curl $API/containers?server=1                            # containers
+curl "$API/backups/runs?page_size=10"                    # latest backups
+curl $API/webservers/-/certificates                      # certificates and expiry
+curl $API/webservers/-/checks                            # site health and uptime
+```
+
+## پشتیبان گرفتن و منتظر ماندن
+
+```python
+started = api.post("/instances/1/backups", json={"scope": "single", "database": "shop"}).json()
+run_id = started["created"][0]["id"]
+while (run := api.get(f"/backups/runs/{run_id}").json())["status"] not in ("success", "failed"):
+    time.sleep(3)
+if run["status"] == "success":
+    with api.stream("GET", f"/backups/runs/{run_id}/download") as r, open(run["file_name"], "wb") as f:
+        for chunk in r.iter_bytes():
+            f.write(chunk)
+```
+
+(دانلود به `backups:download` نیاز دارد.) `{"scope": "all"}` از همه‌ی پایگاه‌های انتخاب‌شده‌ی آن سرور پشتیبان می‌گیرد.
+
+## دیپلوی از CI
+
+در پایان pipeline (GitHub Actions، GitLab CI و…)، با کلیدی که فقط `projects:write` دارد:
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $MBP_KEY" -H "Content-Type: application/json" \
+     -d "{\"ref\": \"$GIT_COMMIT\"}" https://panel.example.com/api/v1/projects/3/deploy
+```
+
+پاسخ `id` دیپلوی را دارد؛ `GET /deployments/{id}` را دنبال کنید یا منتظر وب‌هوک `deploy_succeeded` / `deploy_failed` بمانید.
+
+## ری‌استارت کانتینر و خواندن لاگ
+
+```bash
+curl -X POST "$API/containers/web-1/restart?server=2"
+curl "$API/containers/web-1/logs?server=2&tail=200"
+```
+
+## سایت جدید با HTTPS
+
+```bash
+curl -X POST $API/webservers/nginx/sites -d '{"template": "proxy", "domains": ["shop.example.com"], "target": "http://127.0.0.1:3000"}'
+curl -X POST $API/webservers/nginx/certbot/issue -d '{"domains": ["shop.example.com"]}'
+curl $API/webservers/-/jobs/<job_id>                      # until it is done
+```
+
+هر تغییر وب‌سرور پیش از ماندگار شدن آزموده و در صورت شکست برگردانده می‌شود ([ویرایش امن](#webservers-edit)).
+
+## باخبر شدن از مشکلات
+
+```bash
+curl -X POST $API/webhooks -d '{"name": "ops", "url": "https://ops.example.com/mbp", "events": ["backup_failed", "deploy_failed", "site_down", "container_down"]}'
+```
+
+بدنه‌ی دقیق درخواست هر endpoint در Swagger UI (`/api/v1/docs`) هست که می‌تواند درخواست‌ها را برایتان بفرستد.
+
+@@article api-reference /api-access
+@title فهرست endpointها
+@summary همه‌ی endpointهای API با کارشان و دسترسی لازم.
+مسیرها زیر `/api/v1` هستند. `{kind}` برابر `nginx` یا `apache` است و `{ref}` نام یا شناسه‌ی کانتینر. قالب درخواست و پاسخ هر کدام در Swagger UI (`/api/v1/docs`) و در `/api/v1/openapi.json` آمده است.
+
+## خودِ کلید
+
+| متد | مسیر       | کار                                                                                | دسترسی |
+| --- | ---------- | ---------------------------------------------------------------------------------- | ------ |
+| GET | `/me`      | کلیدِ همین درخواست: دسترسی‌ها، محدودیت‌ها، ادمینی که به جایش کار می‌کند، نشانی شما | —      |
+| GET | `/catalog` | همه‌ی بخش‌ها با تعداد عملیات، همه‌ی دسترسی‌ها، همه‌ی رویدادهای وب‌هوک              | —      |
+
+## سرورها
+
+| متد    | مسیر                           | کار                                    | دسترسی          |
+| ------ | ------------------------------ | -------------------------------------- | --------------- |
+| GET    | `/servers`                     | سرورها و وضعیت عامل آن‌ها              | `servers:read`  |
+| POST   | `/servers`                     | افزودن سرور (فرمان نصب را برمی‌گرداند) | `servers:write` |
+| GET    | `/servers/{server_id}`         | یک سرور                                | `servers:read`  |
+| PATCH  | `/servers/{server_id}`         | تغییر نام یا نشانی سرور                | `servers:write` |
+| DELETE | `/servers/{server_id}`         | حذف سرور                               | `servers:write` |
+| POST   | `/servers/{server_id}/connect` | بررسی اتصال به عامل آن                 | `servers:write` |
+| POST   | `/servers/{server_id}/token`   | توکن جدید عامل                         | `servers:write` |
+
+## پایگاه‌های داده
+
+| متد    | مسیر                                       | کار                                                      | دسترسی            |
+| ------ | ------------------------------------------ | -------------------------------------------------------- | ----------------- |
+| GET    | `/instances`                               | فهرست سرورهای پایگاه داده (`?server=` برای یک سرور)      | `instances:read`  |
+| POST   | `/instances`                               | افزودن سرور پایگاه داده (اول آزموده می‌شود)              | `instances:write` |
+| POST   | `/instances/test-connection`               | آزمودن اطلاعات اتصال پیش از ذخیره                        | `instances:write` |
+| GET    | `/instances/{instance_id}`                 | یک سرور پایگاه داده                                      | `instances:read`  |
+| PATCH  | `/instances/{instance_id}`                 | ویرایش سرور پایگاه داده (فیلدهای نفرستاده دست نمی‌خورند) | `instances:write` |
+| DELETE | `/instances/{instance_id}`                 | حذف سرور پایگاه داده                                     | `instances:write` |
+| POST   | `/instances/{instance_id}/test-connection` | آزمودن اتصال سرور ذخیره‌شده                              | `instances:write` |
+| GET    | `/instances/{instance_id}/databases`       | پایگاه‌های داده‌ی آن با اندازه و انتخاب‌شده بودن         | `instances:read`  |
+| PUT    | `/instances/{instance_id}/selection`       | انتخاب پایگاه‌های داده برای پشتیبان‌گیری                 | `instances:write` |
+
+## پشتیبان‌ها
+
+| متد    | مسیر                               | کار                                                                            | دسترسی             |
+| ------ | ---------------------------------- | ------------------------------------------------------------------------------ | ------------------ |
+| POST   | `/instances/{instance_id}/backups` | شروع پشتیبان‌گیری: `{"scope":"all"}` یا `{"scope":"single","database":"shop"}` | `backups:write`    |
+| GET    | `/backups/runs`                    | تاریخچه‌ی پشتیبان‌ها، صفحه‌بندی و فیلترشده                                     | `backups:read`     |
+| GET    | `/backups/runs/{run_id}`           | یک اجرای پشتیبان (تا `success` یا `failed` بپرسید)                             | `backups:read`     |
+| DELETE | `/backups/runs/{run_id}`           | حذف پشتیبان (`?remote=true` نسخه‌ی ابری را هم)                                 | `backups:write`    |
+| POST   | `/backups/runs/{run_id}/upload`    | بارگذاری (دوباره) در فضای ابری                                                 | `backups:write`    |
+| GET    | `/backups/runs/{run_id}/download`  | دانلود فایل پشتیبان (به‌صورت جریانی)                                           | `backups:download` |
+
+## تنظیمات پشتیبان
+
+| متد  | مسیر                                       | کار                                                 | دسترسی                  |
+| ---- | ------------------------------------------ | --------------------------------------------------- | ----------------------- |
+| GET  | `/backup-settings`                         | تنظیمات کلی پشتیبان: فشرده‌سازی، رمزگذاری، نام فایل | `backup-settings:read`  |
+| PUT  | `/backup-settings`                         | تغییر تنظیمات کلی پشتیبان                           | `backup-settings:write` |
+| POST | `/backup-settings/preview`                 | پیش‌نمایش الگوی نام فایل                            | `backup-settings:read`  |
+| GET  | `/instances/{instance_id}/backup-settings` | تنظیمات اختصاصی یک سرور پایگاه داده                 | `backup-settings:read`  |
+| PUT  | `/instances/{instance_id}/backup-settings` | تغییر تنظیمات اختصاصی یک سرور پایگاه داده           | `backup-settings:write` |
+
+## زمان‌بندی‌ها
+
+| متد    | مسیر                                 | کار                               | دسترسی            |
+| ------ | ------------------------------------ | --------------------------------- | ----------------- |
+| GET    | `/schedules`                         | همه‌ی زمان‌بندی‌ها                | `schedules:read`  |
+| POST   | `/schedules/preview`                 | زمان‌های اجرای بعدی یک عبارت cron | `schedules:read`  |
+| GET    | `/instances/{instance_id}/schedules` | زمان‌بندی‌های یک سرور پایگاه داده | `schedules:read`  |
+| POST   | `/instances/{instance_id}/schedules` | افزودن زمان‌بندی                  | `schedules:write` |
+| GET    | `/schedules/{schedule_id}`           | یک زمان‌بندی                      | `schedules:read`  |
+| PUT    | `/schedules/{schedule_id}`           | ویرایش زمان‌بندی                  | `schedules:write` |
+| DELETE | `/schedules/{schedule_id}`           | حذف زمان‌بندی                     | `schedules:write` |
+| POST   | `/schedules/{schedule_id}/run`       | اجرای فوری زمان‌بندی              | `schedules:write` |
+
+## فضای ابری و نگهداری
+
+| متد    | مسیر                                      | کار                               | دسترسی          |
+| ------ | ----------------------------------------- | --------------------------------- | --------------- |
+| GET    | `/remote-storage`                         | تنظیمات فضای ابری S3 (بدون رمز)   | `storage:read`  |
+| PUT    | `/remote-storage`                         | تغییر فضای ابری                   | `storage:write` |
+| DELETE | `/remote-storage/secret`                  | پاک کردن کلید محرمانه‌ی ذخیره‌شده | `storage:write` |
+| POST   | `/remote-storage/test`                    | آزمودن فضای ابری                  | `storage:write` |
+| GET    | `/retention`                              | قواعد نگهداری                     | `storage:read`  |
+| PUT    | `/retention`                              | تغییر قواعد نگهداری               | `storage:write` |
+| GET    | `/instances/{instance_id}/storage-policy` | سیاست نگهداری یک سرور پایگاه داده | `storage:read`  |
+| PUT    | `/instances/{instance_id}/storage-policy` | تغییر آن                          | `storage:write` |
+| POST   | `/retention/apply`                        | اجرای فوری قواعد نگهداری          | `storage:write` |
+
+## کانتینرها
+
+| متد  | مسیر                         | کار                                      | دسترسی             |
+| ---- | ---------------------------- | ---------------------------------------- | ------------------ |
+| GET  | `/containers`                | کانتینرهای یک سرور                       | `containers:read`  |
+| GET  | `/containers/-/info`         | مشخصات سرور: داکر، پردازنده، حافظه، دیسک | `containers:read`  |
+| GET  | `/containers/-/stats`        | مصرف لحظه‌ای همه‌ی کانتینرها             | `containers:read`  |
+| GET  | `/containers/-/settings`     | تنظیمات هشدار و قفل کانتینرها            | `containers:read`  |
+| PUT  | `/containers/-/settings`     | تغییر آن‌ها                              | `containers:write` |
+| GET  | `/containers/-/actions`      | چه کسی چه چیزی را کی روشن/خاموش کرد      | `containers:read`  |
+| GET  | `/containers/{ref}`          | جزئیات یک کانتینر                        | `containers:read`  |
+| GET  | `/containers/{ref}/stats`    | مصرف لحظه‌ای آن                          | `containers:read`  |
+| GET  | `/containers/{ref}/logs`     | لاگ‌های آن (`?tail=`)                    | `containers:read`  |
+| POST | `/containers/{ref}/{action}` | `start`، `stop` یا `restart`             | `containers:write` |
+
+## پروژه‌ها و پوشه‌ها
+
+| متد    | مسیر                                 | کار                                                     | دسترسی           |
+| ------ | ------------------------------------ | ------------------------------------------------------- | ---------------- |
+| GET    | `/projects`                          | پروژه‌ها (`?server=`)                                   | `projects:read`  |
+| POST   | `/projects`                          | ساخت پروژه                                              | `projects:write` |
+| GET    | `/projects/{project_id}`             | یک پروژه                                                | `projects:read`  |
+| PUT    | `/projects/{project_id}`             | ویرایش پروژه                                            | `projects:write` |
+| DELETE | `/projects/{project_id}`             | حذف پروژه (`?down=true` کانتینرهایش را هم متوقف می‌کند) | `projects:write` |
+| POST   | `/projects/{project_id}/deploy`      | دیپلوی (بدنه‌ی اختیاری `{"ref": "main"}`)               | `projects:write` |
+| GET    | `/projects/{project_id}/deployments` | دیپلوی‌های آن                                           | `projects:read`  |
+| GET    | `/projects/{project_id}/state`       | کانتینرهای آن روی سرور                                  | `projects:read`  |
+| GET    | `/deployments/{deployment_id}`       | یک دیپلوی با لاگ آن (پیگیری کنید)                       | `projects:read`  |
+| GET    | `/project-folders`                   | پوشه‌های پروژه                                          | `projects:read`  |
+| POST   | `/project-folders`                   | ساخت پوشه                                               | `projects:write` |
+| PATCH  | `/project-folders/{folder_id}`       | تغییر نام پوشه                                          | `projects:write` |
+| DELETE | `/project-folders/{folder_id}`       | حذف پوشه‌ی خالی                                         | `projects:write` |
+
+## وب‌سرورها
+
+| متد    | مسیر                                     | کار                                                 | دسترسی             |
+| ------ | ---------------------------------------- | --------------------------------------------------- | ------------------ |
+| GET    | `/webservers`                            | nginx/Apache و همه‌ی سایت‌ها                        | `webservers:read`  |
+| GET    | `/webservers/-/status`                   | در حال اجرا بودن و نسخه‌ها                          | `webservers:read`  |
+| GET    | `/webservers/-/certificates`             | گواهی‌های TLS و انقضای آن‌ها                        | `webservers:read`  |
+| GET    | `/webservers/-/php-sockets`              | سوکت‌های PHP-FPM (برای سایت PHP)                    | `webservers:read`  |
+| GET    | `/webservers/-/certbot`                  | نصب بودن certbot                                    | `webservers:read`  |
+| GET    | `/webservers/-/jobs/{job_id}`            | یک کار پس‌زمینه (گواهی، نصب)؛ پیگیری کنید           | `webservers:read`  |
+| GET    | `/webservers/{kind}/file`                | خواندن فایل پیکربندی (`?path=`)                     | `webservers:read`  |
+| PUT    | `/webservers/{kind}/file`                | نوشتن آن: پشتیبان، آزمون، برگشت خودکار در خطا       | `webservers:write` |
+| GET    | `/webservers/{kind}/backups`             | پشتیبان‌های یک فایل                                 | `webservers:read`  |
+| GET    | `/webservers/{kind}/backup`              | خواندن یک پشتیبان                                   | `webservers:read`  |
+| GET    | `/webservers/{kind}/logs`                | خطوط آخر یک لاگ (`?path=&lines=`)                   | `webservers:read`  |
+| POST   | `/webservers/{kind}/test`                | آزمون پیکربندی (`nginx -t`)                         | `webservers:write` |
+| POST   | `/webservers/{kind}/control/{action}`    | `reload` یا `restart`                               | `webservers:write` |
+| POST   | `/webservers/{kind}/restore`             | بازگرداندن یک پشتیبان                               | `webservers:write` |
+| POST   | `/webservers/{kind}/enabled`             | فعال یا غیرفعال کردن سایت                           | `webservers:write` |
+| POST   | `/webservers/{kind}/maintenance`         | روشن/خاموش کردن حالت تعمیر                          | `webservers:write` |
+| POST   | `/webservers/{kind}/broken-links/remove` | حذف لینک‌های شکسته                                  | `webservers:write` |
+| POST   | `/webservers/{kind}/sites`               | سایت جدید از قالب (پراکسی، PHP، ایستا، تغییر مسیر)  | `webservers:write` |
+| POST   | `/webservers/{kind}/certbot/issue`       | گرفتن گواهی Let's Encrypt (کار پس‌زمینه)            | `webservers:write` |
+| POST   | `/webservers/{kind}/certbot/install`     | نصب certbot (کار پس‌زمینه)                          | `webservers:write` |
+| POST   | `/webservers/-/certbot/renew`            | تمدید گواهی‌ها (کار پس‌زمینه)                       | `webservers:write` |
+| GET    | `/webservers/-/settings`                 | تنظیمات وب‌سرور (فقط‌خواندنی، بررسی‌ها، ایمیل ACME) | `webservers:read`  |
+| PUT    | `/webservers/-/settings`                 | تغییر آن‌ها                                         | `webservers:write` |
+| GET    | `/webservers/-/actions`                  | گزارش تغییرات                                       | `webservers:read`  |
+| GET    | `/webservers/-/checks`                   | بررسی‌های سلامت با درصد دسترس‌پذیری                 | `webservers:read`  |
+| POST   | `/webservers/-/checks`                   | افزودن بررسی سلامت                                  | `webservers:write` |
+| PATCH  | `/webservers/-/checks/{check_id}`        | ویرایش بررسی سلامت                                  | `webservers:write` |
+| DELETE | `/webservers/-/checks/{check_id}`        | حذف بررسی سلامت                                     | `webservers:write` |
+| POST   | `/webservers/-/checks/{check_id}/run`    | اجرای فوری بررسی سلامت                              | `webservers:write` |
+
+## هشدارها
+
+| متد  | مسیر                      | کار                          | دسترسی                |
+| ---- | ------------------------- | ---------------------------- | --------------------- |
+| GET  | `/notifications/settings` | قواعد و آستانه‌های هشدار     | `notifications:read`  |
+| PUT  | `/notifications/settings` | تغییر آن‌ها                  | `notifications:write` |
+| POST | `/notifications/test`     | فرستادن هشدار آزمایشی        | `notifications:write` |
+| GET  | `/notifications/log`      | هشدارهای ارسال‌شده و مقصدشان | `notifications:read`  |
+
+## ربات‌ها
+
+| متد    | مسیر                          | کار                                    | دسترسی       |
+| ------ | ----------------------------- | -------------------------------------- | ------------ |
+| GET    | `/bots`                       | ربات‌های بله و تلگرام                  | `bots:read`  |
+| PUT    | `/bots/{platform}`            | راه‌اندازی ربات (`bale` یا `telegram`) | `bots:write` |
+| DELETE | `/bots/{platform}/token`      | حذف توکن ربات                          | `bots:write` |
+| POST   | `/bots/{platform}/test`       | آزمودن توکن ربات                       | `bots:write` |
+| POST   | `/bots/{platform}/link-codes` | کد یک‌بارمصرف برای اتصال ادمین گفتگو   | `bots:write` |
+| GET    | `/bot-admins`                 | ادمین‌های ربات                         | `bots:read`  |
+| POST   | `/bot-admins`                 | افزودن ادمین ربات                      | `bots:write` |
+| PATCH  | `/bot-admins/{admin_id}`      | ویرایش ادمین ربات                      | `bots:write` |
+| DELETE | `/bot-admins/{admin_id}`      | حذف ادمین ربات                         | `bots:write` |
+
+## وب‌هوک‌ها
+
+| متد    | مسیر                                           | کار                                              | دسترسی           |
+| ------ | ---------------------------------------------- | ------------------------------------------------ | ---------------- |
+| GET    | `/webhooks/-/events`                           | همه‌ی رویدادهای قابل اشتراک                      | `webhooks:read`  |
+| GET    | `/webhooks`                                    | وب‌هوک‌ها                                        | `webhooks:read`  |
+| POST   | `/webhooks`                                    | افزودن وب‌هوک (رمز امضا یک‌بار برگردانده می‌شود) | `webhooks:write` |
+| GET    | `/webhooks/{webhook_id}`                       | یک وب‌هوک                                        | `webhooks:read`  |
+| PATCH  | `/webhooks/{webhook_id}`                       | ویرایش وب‌هوک                                    | `webhooks:write` |
+| DELETE | `/webhooks/{webhook_id}`                       | حذف وب‌هوک                                       | `webhooks:write` |
+| POST   | `/webhooks/{webhook_id}/rotate-secret`         | رمز امضای جدید                                   | `webhooks:write` |
+| POST   | `/webhooks/{webhook_id}/test`                  | فرستادن فوری `ping`                              | `webhooks:write` |
+| GET    | `/webhooks/{webhook_id}/deliveries`            | آخرین ارسال‌ها (`?status=failed`)                | `webhooks:read`  |
+| POST   | `/webhooks/deliveries/{delivery_id}/redeliver` | ارسال دوباره                                     | `webhooks:write` |
+
+## سلامت
+
+| متد | مسیر      | کار                       | دسترسی |
+| --- | --------- | ------------------------- | ------ |
+| GET | `/health` | روشن بودن پنل (بدون کلید) | —      |
+
 @@category account account حساب و امنیت
 
 @@article two-factor /account

@@ -17,12 +17,12 @@ from mbp.api.schemas import (
     ContainerStatsOne,
     ServerInfo,
 )
+from mbp.apiaccess.keys import Actor, current_actor
 from mbp.containers.service import ContainerService
 from mbp.db import get_db
-from mbp.models import AdminAccount, Server
+from mbp.models import Server
 from mbp.repositories.container_repository import ContainerRepository
 from mbp.repositories.server_repository import ServerRepository
-from mbp.security.sessions import require_session
 
 router = APIRouter(tags=["containers"])
 Ref = Path(pattern=ContainerRefPattern)
@@ -125,7 +125,7 @@ def container_logs(
 def container_action(
     action: Literal["start", "stop", "restart"],
     ref: str = Ref,
-    admin: AdminAccount = Depends(require_session),
+    who: Actor = Depends(current_actor),
     svc: ContainerService = Depends(service),
 ) -> dict:
-    return {"container": svc.act(ref, action, actor=admin.username, source="panel")}
+    return {"container": svc.act(ref, action, actor=who.name, source=who.source)}

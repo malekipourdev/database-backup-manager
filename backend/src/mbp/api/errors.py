@@ -21,12 +21,14 @@ class ApiError(Exception):
         code: str,
         detail: str | None = None,
         fields: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(code)
         self.status = status
         self.code = code
         self.detail = detail
         self.fields = fields
+        self.headers = headers
 
 
 def _body(code: str, detail: str | None = None, fields: dict[str, str] | None = None) -> dict:
@@ -34,7 +36,11 @@ def _body(code: str, detail: str | None = None, fields: dict[str, str] | None = 
 
 
 async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content=_body(exc.code, exc.detail, exc.fields))
+    return JSONResponse(
+        status_code=exc.status,
+        content=_body(exc.code, exc.detail, exc.fields),
+        headers=exc.headers,
+    )
 
 
 async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

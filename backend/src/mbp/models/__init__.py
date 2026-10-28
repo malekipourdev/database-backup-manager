@@ -1,4 +1,11 @@
 from mbp.models.admin import AdminAccount
+from mbp.models.api_access import (
+    ApiKey,
+    ApiRequestLog,
+    ApiSettings,
+    ApiWebhook,
+    ApiWebhookDelivery,
+)
 from mbp.models.backup_run import BackupRun
 from mbp.models.backup_settings import BackupSettings
 from mbp.models.bot import BotAdmin, BotLinkCode, BotSettings
@@ -18,6 +25,11 @@ from mbp.models.webserver import WebAction, WebCheck, WebCheckResult, WebServerS
 __all__ = [
     "AlertState",
     "AdminAccount",
+    "ApiKey",
+    "ApiRequestLog",
+    "ApiSettings",
+    "ApiWebhook",
+    "ApiWebhookDelivery",
     "AuthSession",
     "BackupRun",
     "BackupSchedule",
