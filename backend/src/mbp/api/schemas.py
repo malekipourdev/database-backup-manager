@@ -1068,6 +1068,8 @@ class ProjectState(BaseModel):
     exists: bool = False
     commit_sha: str | None = None
     commit_message: str | None = None
+    # Where the project's files are on its server.
+    path: str | None = None
 
 
 class DeployIn(BaseModel):

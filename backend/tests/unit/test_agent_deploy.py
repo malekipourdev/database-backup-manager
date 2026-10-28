@@ -233,13 +233,14 @@ def test_remove_runs_down_and_deletes_the_checkout(manager, commands, tmp_path):
     assert not (tmp_path / "projects" / "shop").exists()
 
 
-def test_state(manager):
+def test_state(manager, tmp_path):
     assert manager.state("shop")["exists"] is False
     manager.start(spec(), background=False)
     assert manager.state("shop") == {
         "exists": True,
         "commit_sha": "a" * 40,
         "commit_message": "Add feature",
+        "path": str((tmp_path / "projects" / "shop").resolve()),
     }
 
 
@@ -256,7 +257,12 @@ def test_state_while_the_first_fetch_has_no_commit(manager, commands, tmp_path):
     (tmp_path / "projects" / "shop" / ".git").mkdir(parents=True)
     commands.commit = ("fatal: your current branch 'master' does not have any commits yet", "")
     commands.fail["git log"] = 128
-    assert manager.state("shop") == {"exists": True, "commit_sha": None, "commit_message": None}
+    assert manager.state("shop") == {
+        "exists": True,
+        "commit_sha": None,
+        "commit_message": None,
+        "path": str((tmp_path / "projects" / "shop").resolve()),
+    }
 
 
 # --- building on one server, running on another ---
@@ -303,3 +309,56 @@ def test_unknown_mode(manager):
     with pytest.raises(DockerError) as exc:
         manager.start(spec(mode="shell"), background=False)
     assert exc.value.code == "invalid_mode"
+
+
+# --- folders ---
+
+
+def test_folder_dir():
+    from mbp.agent.deploy import folder_dir
+
+    assert folder_dir(None) is None and folder_dir("") is None
+    assert folder_dir("Airplus") == "Airplus"
+    assert folder_dir("Air plus / back") == "Air-plus-back"
+    assert folder_dir("ایرپلاس") == "ایرپلاس"
+    assert folder_dir("..") is None
+    assert folder_dir("../etc") == "etc"
+
+
+def test_a_project_goes_in_its_folder_and_moves_with_it(manager, commands, tmp_path):
+    root = (tmp_path / "projects").resolve()
+    job = manager.start(spec(folder="Air plus"), background=False)
+    assert job.status == "success", job.lines
+    assert (root / "Air-plus" / "shop" / ".git").exists()
+    up = next(c for c in commands.calls if c["key"] == "compose up")
+    assert up["cwd"] == str(root / "Air-plus" / "shop")
+    (root / "Air-plus" / "shop" / "data").mkdir()
+    (root / "Air-plus" / "shop" / "data" / "db.sqlite").write_text("kept")
+    assert manager.state("shop", "Air plus")["path"] == str(root / "Air-plus" / "shop")
+
+    # Moved to another folder on the next deploy: down where it was, files (data too) moved.
+    commands.calls.clear()
+    job = manager.start(spec(folder="Back office"), background=False)
+    assert job.status == "success", job.lines
+    assert commands.called()[0] == "compose down"
+    down = commands.calls[0]
+    assert down["cwd"] == str(root / "Air-plus" / "shop")
+    assert any(
+        "moving the project from Air-plus/shop to Back-office/shop" in line for line in job.lines
+    )
+    assert (root / "Back-office" / "shop" / "data" / "db.sqlite").read_text() == "kept"
+    assert not (root / "Air-plus" / "shop").exists()
+
+    # Out of every folder again; removing deletes the emptied folder.
+    job = manager.start(spec(folder=None), background=False)
+    assert job.status == "success", job.lines
+    assert (root / "shop" / ".git").exists() and not (root / "Back-office" / "shop").exists()
+    manager.start(spec(project="api", folder="Airplus"), background=False)
+    assert manager.remove("api", "docker-compose.yml", True, "Airplus") == {"removed": True}
+    assert not (root / "Airplus").exists()
+
+
+def test_a_folder_named_like_a_project_is_refused(manager, tmp_path):
+    manager.start(spec(project="airplus"), background=False)
+    job = manager.start(spec(project="api", folder="airplus"), background=False)
+    assert (job.status, job.error_code) == ("failed", "folder_is_a_project")

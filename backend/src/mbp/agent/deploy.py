@@ -52,6 +52,18 @@ SETTLE_SECONDS = 8
 JOB_TTL_SECONDS = 24 * 3600
 
 
+def folder_dir(folder: str | None) -> str | None:
+    """The directory a project folder becomes under the projects root (None: the root).
+
+    Letters of any language, digits, "_", "-" and "."; anything else becomes "-".
+    """
+    if not folder:
+        return None
+    name = re.sub(r"[^\w.-]+", "-", folder.strip())
+    name = re.sub(r"-{2,}", "-", name).strip(".-")[:60]
+    return name or None
+
+
 def valid_project(name: str) -> bool:
     return bool(PROJECT_RE.fullmatch(name))
 
@@ -92,6 +104,8 @@ class DeploySpec:
     auth_type: str = "none"
     credential: str | None = None
     mode: str = "deploy"
+    # The project's folder in the panel: its files go to <root>/<folder>/<project>.
+    folder: str | None = None
 
     def validate(self, allow_file: bool = False) -> None:
         if not valid_project(self.project):
@@ -252,11 +266,61 @@ class DeployManager:
 
     # --- running ---
 
-    def _project_dir(self, name: str) -> Path:
-        path = (self.root / name).resolve()
-        if path.parent != self.root.resolve():
+    def _project_dir(self, name: str, folder: str | None = None) -> Path:
+        root = self.root.resolve()
+        sub = folder_dir(folder)
+        path = (root / sub / name if sub else root / name).resolve()
+        expected = root / sub if sub else root
+        if path.parent != expected or (sub and expected.parent != root):
             raise DockerError("invalid_project", 422)
         return path
+
+    def _located(self, name: str, folder: str | None) -> Path:
+        """Where a project's files are: in its folder, else wherever an earlier deploy put them."""
+        target = self._project_dir(name, folder)
+        if (target / ".git").exists():
+            return target
+        return self._elsewhere(name, target) or target
+
+    def _elsewhere(self, name: str, target: Path) -> Path | None:
+        """A checkout of this project outside `target`: at the root or in another folder."""
+        root = self.root.resolve()
+        candidates = [root / name]
+        if root.exists():
+            candidates += [
+                d / name
+                for d in sorted(root.iterdir())
+                if d.is_dir() and not d.name.startswith(".") and not (d / ".git").exists()
+            ]
+        for path in candidates:
+            if path != target and (path / ".git").exists():
+                return path
+        return None
+
+    def _move(self, job: Job, spec: DeploySpec, target: Path, env: dict[str, str]) -> None:
+        """Moves a project to its folder: down where it was (data kept), then the files."""
+        old = self._elsewhere(spec.project, target)
+        if old is None or target.exists():
+            return
+        parent = target.parent
+        if (parent / ".git").exists():
+            # The folder's name is a project's checkout: never nest a project in another.
+            raise StepFailed("folder_is_a_project", parent.name)
+        self._step(job, "fetch")
+        rel = lambda p: p.relative_to(self.root.resolve())  # noqa: E731
+        self._log(job, [], f"→ moving the project from {rel(old)} to {rel(target)}")
+        if spec.mode != "build":
+            args = ["docker", "compose", "-p", spec.project]
+            if (old / spec.compose_file).exists():
+                args += ["-f", spec.compose_file]
+            self._cmd(
+                job, spec, "up", [*args, "down", "--remove-orphans"], old, env, error="move_failed"
+            )
+        parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.rename(old, target)
+        except OSError as exc:
+            raise StepFailed("move_failed", str(exc)[:200]) from exc
 
     def _log(self, job: Job, secrets: list[str], line: str) -> None:
         for secret in sorted(secrets, key=len, reverse=True):
@@ -358,7 +422,11 @@ class DeployManager:
                 raise StepFailed("projects_dir_not_writable", str(self.root)) from exc
             if not os.access(self.root, os.W_OK):
                 raise StepFailed("projects_dir_not_writable", str(self.root))
-            workdir = self._project_dir(spec.project)
+            workdir = self._project_dir(spec.project, spec.folder)
+            self._move(job, spec, workdir, env)
+            if (workdir.parent / ".git").exists():
+                raise StepFailed("folder_is_a_project", workdir.parent.name)
+            workdir.parent.mkdir(parents=True, exist_ok=True)
             self._fetch(job, spec, workdir, env)
             self._write_env(job, spec, workdir)
             compose = ["docker", "compose", "-p", spec.project, "-f", spec.compose_file]
@@ -568,12 +636,17 @@ class DeployManager:
 
     # --- other operations ---
 
-    def state(self, name: str) -> dict:
+    def state(self, name: str, folder: str | None = None) -> dict:
         if not valid_project(name):
             raise DockerError("invalid_project", 422)
-        workdir = self._project_dir(name)
+        workdir = self._located(name, folder)
         if not (workdir / ".git").exists():
-            return {"exists": False, "commit_sha": None, "commit_message": None}
+            return {
+                "exists": False,
+                "commit_sha": None,
+                "commit_message": None,
+                "path": str(self._project_dir(name, folder)),
+            }
         out: list[str] = []
         env = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -589,14 +662,20 @@ class DeployManager:
         sha = out[0].strip() if code == 0 and out else ""
         if not re.fullmatch(r"[0-9a-f]{40}", sha):
             # E.g. the first deploy is still fetching: no commit checked out yet.
-            return {"exists": True, "commit_sha": None, "commit_message": None}
+            return {
+                "exists": True,
+                "commit_sha": None,
+                "commit_message": None,
+                "path": str(workdir),
+            }
         return {
             "exists": True,
             "commit_sha": sha,
             "commit_message": out[1].strip()[:200] if len(out) > 1 else None,
+            "path": str(workdir),
         }
 
-    def remove(self, name: str, compose_file: str, down: bool) -> dict:
+    def remove(self, name: str, compose_file: str, down: bool, folder: str | None = None) -> dict:
         if not valid_project(name) or not valid_compose_file(compose_file):
             raise DockerError("invalid_project", 422)
         if name in self.protected_projects():
@@ -606,7 +685,7 @@ class DeployManager:
                 raise DockerError("deploy_in_progress", 409)
             self._busy.add(name)
         try:
-            workdir = self._project_dir(name)
+            workdir = self._located(name, folder)
             output: list[str] = []
             if down:
                 env = {
@@ -622,6 +701,9 @@ class DeployManager:
                     raise DockerError("down_failed", 502, "\n".join(output[-5:])[:300])
             if workdir.exists():
                 shutil.rmtree(workdir)
+            parent = workdir.parent
+            if parent != self.root.resolve() and parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()  # the folder's last project
             return {"removed": True}
         finally:
             with self._lock:

@@ -784,7 +784,7 @@ Requirements: the [agent is on](#containers-enable) (on the panel's server), or 
   - **SSH deploy key (recommended):** create one with `ssh-keygen -t ed25519 -N "" -f deploy_key`, add `deploy_key.pub` to the repository as a read-only deploy key (GitHub: Settings → Deploy keys), and paste the private key into the panel.
   - **Token:** a token with read access (GitHub: Contents: read; GitLab/Gitea: `read_repository`).
 - **Environment variables:** written to a `.env` file next to the compose file on every deploy. Use them with `env_file: .env` or `${NAME}`. Values are stored encrypted and never shown again; leave a field empty to keep it. **Upload .env file** or **Paste .env** fills them from an existing `.env`: names already listed get the new value, new ones are added, and lines that are not variables are reported. Nothing is saved until you press Save.
-- **Folder:** optional; keeps related projects together on the Projects page (e.g. one product's services). Only for the panel: files on the server do not move.
+- **Folder:** optional; keeps related projects together (e.g. one product's services), on the Projects page and on the server, in `<projects dir>/<folder>/<name>`. Changing it moves the project on its next deploy (its services restart; data folders move with it). The project page shows where its files are.
 - **Backup before deploy:** pick a database server and databases. With "Stop the deploy if the backup fails", nothing is deployed without a fresh backup.
 
 > Keys and tokens are stored encrypted, never shown again, and masked in logs.
