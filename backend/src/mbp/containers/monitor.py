@@ -106,7 +106,10 @@ class ContainerMonitor:
             db.expunge_all()
         for server in servers:
             try:
-                events.extend(self._check_server(server))
+                found = self._check_server(server)
+                for event in found:
+                    event.server_id = server.id
+                events.extend(found)
             except Exception:
                 logger.exception("Container check of server %s failed", server.name)
         return events

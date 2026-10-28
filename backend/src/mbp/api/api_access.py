@@ -21,6 +21,7 @@ from mbp.api.schemas import (
     ApiSettingsIO,
     PasswordConfirm,
 )
+from mbp.api.scope import known_server_ids
 from mbp.apiaccess import scopes
 from mbp.apiaccess.keys import SHOWN, generate_key, hash_key
 from mbp.apiaccess.openapi import catalog
@@ -126,6 +127,7 @@ def create_key(
         prefix=secret[:SHOWN],
         secret_hash=hash_key(secret),
         scopes=_scopes(body.scopes),
+        server_ids=known_server_ids(db, body.server_ids),
         allowed_ips=body.allowed_ips,
         rate_limit=body.rate_limit,
         enabled=True,
@@ -147,6 +149,8 @@ def update_key(key_id: int, body: ApiKeyUpdate, db: Session = Depends(get_db)) -
         key.name = body.name
     if body.scopes is not None:
         key.scopes = _scopes(body.scopes)
+    if "server_ids" in body.model_fields_set:
+        key.server_ids = known_server_ids(db, body.server_ids)
     if body.allowed_ips is not None:
         key.allowed_ips = body.allowed_ips
     if body.rate_limit is not None:

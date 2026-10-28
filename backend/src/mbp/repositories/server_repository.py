@@ -7,6 +7,15 @@ from mbp.models import DbInstance, Project, Server
 LOCAL_NAME = "main"
 
 
+def instance_server_id(db: Session, instance: DbInstance | None) -> int | None:
+    """The server a database is on: its own, or the panel's for a local one."""
+    if instance is None:
+        return None
+    if instance.server_id is not None:
+        return instance.server_id
+    return ServerRepository(db).local().id
+
+
 class ServerRepository:
     def __init__(self, db: Session) -> None:
         self.db = db

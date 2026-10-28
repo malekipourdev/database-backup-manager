@@ -1507,6 +1507,8 @@ class ApiKeyFields(BaseModel):
 
     name: str = Field(min_length=1, max_length=80)
     scopes: list[str] = Field(min_length=1, max_length=64)
+    # The servers the key reaches; null: every server.
+    server_ids: list[int] | None = Field(default=None, max_length=500)
     allowed_ips: list[str] = Field(default_factory=list, max_length=50)
     rate_limit: int = Field(default=600, ge=0, le=100000)
     expires_at: datetime | None = None
@@ -1522,12 +1524,14 @@ class ApiKeyCreate(ApiKeyFields):
 
 
 class ApiKeyUpdate(BaseModel):
-    """Omitted fields are kept; `expires_at: null` removes the expiry."""
+    """Omitted fields are kept; `expires_at: null` removes the expiry, `server_ids: null`
+    gives the key every server."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=80)
     scopes: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    server_ids: list[int] | None = Field(default=None, max_length=500)
     allowed_ips: list[str] | None = Field(default=None, max_length=50)
     rate_limit: int | None = Field(default=None, ge=0, le=100000)
     expires_at: datetime | None = None
@@ -1551,6 +1555,7 @@ class ApiKeyOut(BaseModel):
     name: str
     prefix: str
     scopes: list[str]
+    server_ids: list[int] | None
     allowed_ips: list[str]
     rate_limit: int
     enabled: bool
@@ -1586,6 +1591,7 @@ class ApiRequestOut(BaseModel):
     ip: str
     duration_ms: int
     error: str | None
+    on_behalf_of: str | None = None
 
 
 class ApiRequestPage(BaseModel):
@@ -1610,6 +1616,12 @@ class ApiCatalog(BaseModel):
     events: list[str]
 
 
+class ApiServerRef(BaseModel):
+    id: int
+    name: str
+    kind: str
+
+
 class ApiMe(BaseModel):
     """The key making the request."""
 
@@ -1617,6 +1629,10 @@ class ApiMe(BaseModel):
     name: str
     prefix: str
     scopes: list[str]
+    # False: the key reaches only `servers` (and none of the panel-wide settings' changes).
+    all_servers: bool
+    # The servers the key reaches.
+    servers: list[ApiServerRef]
     allowed_ips: list[str]
     rate_limit: int
     expires_at: datetime | None
@@ -1630,6 +1646,8 @@ class WebhookFields(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     url: str = Field(min_length=1, max_length=500)
     events: list[str] = Field(min_length=1, max_length=64)
+    # Only events about these servers; null: every event, also the panel-wide ones.
+    server_ids: list[int] | None = Field(default=None, max_length=500)
     enabled: bool = True
 
     _name = field_validator("name")(validate_name)
@@ -1651,6 +1669,8 @@ class WebhookUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     url: str | None = Field(default=None, min_length=1, max_length=500)
     events: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    # `null` (given) sends the events of every server.
+    server_ids: list[int] | None = Field(default=None, max_length=500)
     enabled: bool | None = None
 
     @field_validator("name")
@@ -1671,6 +1691,7 @@ class WebhookOut(BaseModel):
     name: str
     url: str
     events: list[str]
+    server_ids: list[int] | None
     enabled: bool
     created_at: datetime
     last_delivery_at: datetime | None

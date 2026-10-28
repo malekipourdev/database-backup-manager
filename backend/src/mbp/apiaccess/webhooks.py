@@ -27,9 +27,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from mbp.db import utcnow
-from mbp.models import ApiWebhook, ApiWebhookDelivery
+from mbp.models import ApiWebhook, ApiWebhookDelivery, BackupRun, DbInstance, Server
 from mbp.notifications.events import EVENTS, Event
 from mbp.notifications.render import render
+from mbp.repositories.notification_repository import NotificationRepository
+from mbp.repositories.server_repository import instance_server_id
 from mbp.security import crypto
 
 logger = logging.getLogger(__name__)
@@ -57,20 +59,65 @@ def subscribed(webhook: ApiWebhook, event: str) -> bool:
     return ALL_EVENTS in webhook.events or event in webhook.events
 
 
-def event_payload(delivery_id: str, event: Event, created_at: datetime) -> dict:
+def covers(webhook: ApiWebhook, server_id: int | None) -> bool:
+    """A webhook limited to some servers gets only the events about them (none of the
+    panel-wide ones)."""
+    if webhook.server_ids is None:
+        return True
+    return server_id is not None and server_id in webhook.server_ids
+
+
+def event_server(db: Session, event: Event) -> Server | None:
+    """The server an event is about: its own `server_id`, or that of its backup's database."""
+    server_id = event.server_id
+    if server_id is None and event.run_id is not None:
+        run = db.get(BackupRun, event.run_id)
+        instance = db.get(DbInstance, run.instance_id) if run and run.instance_id else None
+        server_id = instance_server_id(db, instance)
+    return db.get(Server, server_id) if server_id is not None else None
+
+
+PING_MESSAGES = {
+    "en": "Test delivery from DevOps Manager.",
+    "fa": "ارسال آزمایشی از DevOps Manager.",
+}
+
+
+def event_messages(event: Event, zone: ZoneInfo) -> dict[str, str]:
+    """The event as the panel's alerts say it, in each language (times in `zone` for "fa")."""
+    if event.type == "ping":
+        return dict(PING_MESSAGES)
+    return {"en": render(event, "en", ZoneInfo("UTC")), "fa": render(event, "fa", zone)}
+
+
+def alert_zone(db: Session) -> ZoneInfo:
+    try:
+        return ZoneInfo(NotificationRepository(db).get_settings().timezone)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def event_payload(
+    delivery_id: str,
+    event: Event,
+    created_at: datetime,
+    server: Server | None = None,
+    zone: ZoneInfo | None = None,
+) -> dict:
+    messages = event_messages(event, zone or ZoneInfo("UTC"))
     return {
         "id": delivery_id,
         "event": event.type,
         "created_at": created_at.isoformat(),
         "severity": event.severity,
         "subject": event.subject,
-        "message": (
-            "Test delivery from DevOps Manager."
-            if event.type == "ping"
-            else render(event, "en", ZoneInfo("UTC"))
-        ),
+        "message": messages["en"],
+        # The same text in each language the panel speaks.
+        "messages": messages,
         "params": event.params,
         "run_id": event.run_id,
+        # The server it is about; null for the whole panel's events.
+        "server": {"id": server.id, "name": server.name} if server is not None else None,
         "source": SOURCE,
     }
 
@@ -108,10 +155,12 @@ class WebhookDispatcher:
             created_at = created_at or utcnow()
             with self.session_factory() as db:
                 hooks = db.scalars(select(ApiWebhook).where(ApiWebhook.enabled.is_(True))).all()
+                server = event_server(db, event)
+                zone = alert_zone(db)
                 ids = [
-                    self._create(db, hook, event, created_at)
+                    self._create(db, hook, event, created_at, server, zone)
                     for hook in hooks
-                    if subscribed(hook, event.type)
+                    if subscribed(hook, event.type) and covers(hook, server.id if server else None)
                 ]
                 db.commit()
         except Exception:
@@ -159,14 +208,21 @@ class WebhookDispatcher:
     # --- internals ---
 
     @staticmethod
-    def _create(db: Session, hook: ApiWebhook, event: Event, created_at: datetime) -> int:
+    def _create(
+        db: Session,
+        hook: ApiWebhook,
+        event: Event,
+        created_at: datetime,
+        server: Server | None = None,
+        zone: ZoneInfo | None = None,
+    ) -> int:
         delivery_id = str(uuid.uuid4())
         row = ApiWebhookDelivery(
             webhook_id=hook.id,
             uuid=delivery_id,
             created_at=created_at,
             event=event.type,
-            payload=event_payload(delivery_id, event, created_at),
+            payload=event_payload(delivery_id, event, created_at, server, zone),
             status="pending",
             attempts=0,
         )

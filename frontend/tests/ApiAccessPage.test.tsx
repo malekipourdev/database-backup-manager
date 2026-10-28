@@ -28,6 +28,7 @@ const KEY = {
   name: "Shop site",
   prefix: "mbp_abcd1234",
   scopes: ["projects:read"],
+  server_ids: [7],
   allowed_ips: ["203.0.113.0/24"],
   rate_limit: 600,
   enabled: true,
@@ -55,6 +56,14 @@ function api(keys = [KEY]) {
       };
     if (url === "/api/api-access/keys") return { status: 200, body: keys };
     if (url === "/api/webhooks") return { status: 200, body: [] };
+    if (url === "/api/servers")
+      return {
+        status: 200,
+        body: [
+          { id: 1, name: "main", kind: "local", paired: true },
+          { id: 7, name: "edge", kind: "remote", paired: true },
+        ],
+      };
     if (url.startsWith("/api/api-access/requests"))
       return {
         status: 200,
@@ -71,6 +80,7 @@ function api(keys = [KEY]) {
               ip: "203.0.113.9",
               duration_ms: 4,
               error: "insufficient_scope",
+              on_behalf_of: "Sara",
             },
           ],
           next_before: null,
@@ -105,6 +115,7 @@ describe("ApiAccessPage", () => {
     expect(card).toHaveTextContent("Projects");
     expect(card).toHaveTextContent("203.0.113.0/24");
     expect(card).toHaveTextContent("1 errors");
+    expect(await within(card).findByText("edge")).toBeInTheDocument();
     expect(screen.getByDisplayValue(/\/api\/v1$/)).toBeInTheDocument();
   });
 
@@ -137,8 +148,38 @@ describe("ApiAccessPage", () => {
       scopes: ["backups:read", "projects:write", "backups:download"],
       password: "pw",
       expires_at: null,
+      server_ids: null,
     });
     expect(await screen.findByDisplayValue("mbp_SECRET-123")).toBeInTheDocument();
+  });
+
+  it("limits a new key to some servers", async () => {
+    const fetchMock = api([]);
+    renderWithProviders(<ApiAccessPage />);
+    expect(await screen.findByTestId("no-keys")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "New key" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText(/^Name/), "tskm");
+    await userEvent.type(within(dialog).getByLabelText(/^Your password/), "pw");
+    const create = within(dialog).getByRole("button", { name: "Create key" });
+    await userEvent.click(within(dialog).getByText("Only some servers"));
+    // A key for no server at all is not offered.
+    expect(create).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole("textbox", { name: "Servers" }));
+    await userEvent.click(await screen.findByRole("option", { name: "edge" }));
+    expect(create).toBeEnabled();
+    await userEvent.click(create);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) => url === "/api/api-access/keys" && init?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const [, init] = fetchMock.mock.calls.find(
+      ([url, i]) => url === "/api/api-access/keys" && i?.method === "POST",
+    )!;
+    expect(bodyOf(init)).toMatchObject({ name: "tskm", server_ids: [7] });
   });
 
   it("shows the request log", async () => {
@@ -148,5 +189,6 @@ describe("ApiAccessPage", () => {
     await waitFor(() => expect(log).toHaveTextContent("/instances"));
     expect(log).toHaveTextContent("403");
     expect(log).toHaveTextContent("insufficient_scope");
+    expect(log).toHaveTextContent("for Sara");
   });
 });

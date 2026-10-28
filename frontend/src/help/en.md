@@ -898,6 +898,7 @@ On [the API page](/api-access), **Keys → New key**:
 
 - **Name** — who uses it ("Shop website", "Monitoring"). It appears in the request log and in the activity logs.
 - **Access** — **Read only** (can see everything, change nothing), **Full access** (everything, like the admin), or **Custom** (chosen area by area).
+- **Servers** — **All servers**, or **Only some servers** (see below).
 - **Allowed addresses** — optional. IP addresses or networks (`203.0.113.7`, `10.0.0.0/8`, `2001:db8::/32`); requests from anywhere else get `403 ip_not_allowed`. Set it whenever the caller has a fixed address.
 - **Requests per minute** — the key's rate limit (0 = no limit).
 - **Expiry** — never, 30/90 days, a year, or a date. An expired key gets `401 api_key_expired`.
@@ -928,6 +929,18 @@ GET requests read; POST, PUT, PATCH and DELETE write — except the two previews
 
 A request without the needed scope gets `403 insufficient_scope`, and `detail` names the missing scope. Each endpoint's scope is shown in the reference.
 
+## Keys limited to some servers
+
+When several pieces of software share the panel — for example each organization of a task-management system with the panel connected to it — give each a key with **Only some servers**. Such a key:
+
+- sees and manages only those servers and what is on them: their databases (with those databases' backups and schedules), containers, projects (with their deploys) and web servers (with their health checks);
+- gets `404` for anything on another server, as if it did not exist, and lists leave other servers out;
+- may name only its own servers in what it sends (a new database or project on another server gets `422`);
+- can **read** the whole panel's settings that are not any one server's (backup settings, remote storage, retention) but **not change** them, and cannot use alerts, bots or webhooks at all: `403 server_restricted`;
+- takes over a server it adds itself.
+
+`GET /me` answers with the key's servers (`all_servers`, `servers`). The key's card shows them; edit the key to change them.
+
 ## Managing keys
 
 From a key's menu:
@@ -947,6 +960,7 @@ Each key shows when and from where it was last used, and its requests and errors
 - Allowed addresses for servers that call the API.
 - Keep keys in environment variables or a secret store, never in code repositories or front-end code.
 - A key acts **as the admin who created it**. Its changes appear in the activity logs (web servers, containers, deploys) as `admin (API: key name)` with the source **API**.
+- Software that acts for its own users can name the person in the `X-MBP-On-Behalf-Of` header; the activity logs then show `that person (API: key name)`, and the request log shows "for that person". It is recorded only: what a request may do depends on the key alone.
 - Keys cannot create or change keys: that needs the dashboard and your password.
 
 @@article api-requests /api-access
@@ -971,6 +985,12 @@ JSON in and out (UTF-8), with `Content-Type: application/json` on bodies. Times 
 ## Several servers
 
 The panel can manage several servers ([Servers](#servers-overview)). `GET /servers` lists them with their IDs. Endpoints about one server's things (databases, backups, containers, projects, web servers) take a `server` query parameter: `GET /containers?server=2`. Without it they mean the panel's own server (lists: all servers).
+
+A key limited to some servers ([Keys and scopes](#api-keys)) sees only its servers: lists hold only them, and anything else answers `404`.
+
+## On behalf of a person
+
+If your software has its own users, send the person's name with each request: `X-MBP-On-Behalf-Of: Sara Ahmadi`. The panel's activity logs and request log then show who it was.
 
 ## Paging
 
@@ -997,15 +1017,15 @@ Every error has the same JSON body:
 { "code": "insufficient_scope", "detail": "projects:write" }
 ```
 
-| Status  | Meaning                                         | Codes                                                                                                                                  |
-| ------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 401     | No key, or not a valid one                      | `api_key_missing`, `api_key_invalid`, `api_key_expired`                                                                                |
-| 403     | The key may not do this                         | `insufficient_scope`, `ip_not_allowed`, `api_key_disabled`, `api_disabled`; refusals of the panel itself (e.g. `webservers_read_only`) |
-| 404     | Not found                                       | `project_not_found`, `run_not_found`, …                                                                                                |
-| 409     | Conflict                                        | e.g. a name already used, `agent_outdated`                                                                                             |
-| 422     | Invalid input                                   | `validation_error` with `fields`: field → error code                                                                                   |
-| 429     | Too many requests                               | `rate_limited`                                                                                                                         |
-| 502–504 | A server's agent could not be reached or failed | `agent_unreachable`, …                                                                                                                 |
+| Status  | Meaning                                         | Codes                                                                                                                                                       |
+| ------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401     | No key, or not a valid one                      | `api_key_missing`, `api_key_invalid`, `api_key_expired`                                                                                                     |
+| 403     | The key may not do this                         | `insufficient_scope`, `ip_not_allowed`, `api_key_disabled`, `api_disabled`, `server_restricted`; refusals of the panel itself (e.g. `webservers_read_only`) |
+| 404     | Not found                                       | `project_not_found`, `run_not_found`, …                                                                                                                     |
+| 409     | Conflict                                        | e.g. a name already used, `agent_outdated`                                                                                                                  |
+| 422     | Invalid input                                   | `validation_error` with `fields`: field → error code                                                                                                        |
+| 429     | Too many requests                               | `rate_limited`                                                                                                                                              |
+| 502–504 | A server's agent could not be reached or failed | `agent_unreachable`, …                                                                                                                                      |
 
 Base your code on `code`, not on the text of `detail`.
 
@@ -1024,7 +1044,7 @@ Instead of asking the API again and again, let the panel tell you: a webhook is 
 
 ## Adding one
 
-[API page](/api-access) → **Webhooks → New webhook** (or `POST /webhooks` with a key that has `webhooks:write`): a name, the HTTPS address, and the events — **All events** (including ones added later) or a chosen list. The answer shows the **signing secret** once; keep it with your receiving code.
+[API page](/api-access) → **Webhooks → New webhook** (or `POST /webhooks` with a key that has `webhooks:write`): a name, the HTTPS address, the events — **All events** (including ones added later) or a chosen list — and the servers: **All servers**, or **Only some servers** to get only the events about them (the whole panel's events, such as `disk_low` and `daily_summary`, then do not arrive). The answer shows the **signing secret** once; keep it with your receiving code.
 
 ## Events
 
@@ -1055,11 +1075,15 @@ Webhooks get the events they subscribe to whatever the [alert rules](#notificati
   "severity": "error",
   "subject": "backup_failed:3:shop",
   "message": "Backup of shop on prod failed: …",
+  "messages": { "en": "Backup of shop on prod failed: …", "fa": "پشتیبان‌گیری از shop …" },
   "params": { "instance": "prod", "db": "shop", "reason": "…" },
   "run_id": 42,
+  "server": { "id": 2, "name": "edge" },
   "source": "devops-manager"
 }
 ```
+
+`messages` holds the same text in each language the panel speaks (`en`, `fa`). `server` is the server the event is about, or `null` for the whole panel's events.
 
 Headers: `X-MBP-Event` (the event), `X-MBP-Delivery` (the payload's `id`; the same on retries, so you can ignore duplicates), `X-MBP-Timestamp` (Unix seconds) and `X-MBP-Signature`.
 

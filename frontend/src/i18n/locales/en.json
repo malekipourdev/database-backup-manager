@@ -1734,7 +1734,10 @@
         "active": "Active",
         "disabled": "Disabled",
         "expired": "Expired"
-      }
+      },
+      "servers": "Servers",
+      "serversAllHint": "The key reaches every server, and can change the whole panel's settings (as far as its access allows).",
+      "serversSomeHint": "The key reaches only these servers and what is on them; other servers do not exist for it. The whole panel's settings it can only read (backup settings, storage) or not see (alerts, bots, webhooks). A server it adds joins it. Use this when several pieces of software share the panel."
     },
     "webhooks": {
       "hint": "The panel sends each event (backup failed, deploy done, site down…) to these addresses as signed JSON.",
@@ -1780,7 +1783,10 @@
         "pending": "Sending",
         "sent": "Sent",
         "failed": "Failed"
-      }
+      },
+      "servers": "Servers",
+      "serversAllHint": "Events of every server, and the whole panel's events (disk space, daily summary).",
+      "serversSomeHint": "Only the events about these servers."
     },
     "log": {
       "key": "Key",
@@ -1792,7 +1798,8 @@
       "ip": "Address",
       "duration": "Duration",
       "empty": "No requests yet.",
-      "more": "Load more"
+      "more": "Load more",
+      "onBehalfOf": "for {{name}}"
     },
     "reference": {
       "quickStart": "Quick start",
@@ -1898,6 +1905,13 @@
         "label": "Health",
         "hint": "Is the panel up"
       }
+    },
+    "servers": {
+      "all": "All servers",
+      "some": "Only some servers",
+      "pick": "Pick servers",
+      "local": "this panel's server",
+      "none": "No servers"
     }
   }
 }

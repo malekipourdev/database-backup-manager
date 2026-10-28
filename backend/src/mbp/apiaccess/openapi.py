@@ -88,6 +88,11 @@ in the panel only.
 A key can be limited to addresses or networks (`203.0.113.7`, `10.0.0.0/8`), given an expiry
 date, turned off, or rotated (a new secret, same settings).
 
+Software that acts for its own users can name the person in each request:
+`X-MBP-On-Behalf-Of: Sara Ahmadi`. The panel records it in the request log and in its activity
+logs (`Sara Ahmadi (API: <key name>)`); what the request may do still depends on the key alone.
+A name in another script is sent percent-encoded as UTF-8 (`%D8%B3%D8%A7%D8%B1%D8%A7`).
+
 ## Scopes
 
 Each area (the tags below) has a `read` and a `write` scope: `projects:read`,
@@ -101,6 +106,16 @@ it gets `403 insufficient_scope`, with the missing scope in `detail`.
 The panel manages several servers. Endpoints about one server's things take a `server`
 query parameter (the server's ID from `GET /servers`); without it they act on the panel's
 own server.
+
+A key can be limited to some servers (several pieces of software can then share one panel,
+each seeing only its own servers). Such a key reaches what is on those servers or belongs to
+them: the servers, their databases with those databases' backups and schedules, their
+containers, projects with their deployments, and web servers with their health checks.
+Anything on another server answers `404` as if it did not exist, lists leave it out, and a
+server named in a body must be one of the key's (`422`). A server added with the key joins
+it. The whole panel's settings can be read (backup settings, remote storage, retention) or
+not at all (alerts, bots, webhooks), and not changed: `403 server_restricted`.
+`GET /me` lists the key's servers.
 
 ## Requests and responses
 
@@ -126,8 +141,8 @@ Or skip the polling: subscribe a webhook to `backup_succeeded`, `backup_failed`,
 | Status | Codes |
 | --- | --- |
 | 401 | `api_key_missing`, `api_key_invalid`, `api_key_expired` |
-| 403 | `insufficient_scope`, `ip_not_allowed`, `api_key_disabled`, `api_disabled`; \
-refusals of the panel itself (e.g. `webservers_read_only`) |
+| 403 | `insufficient_scope`, `ip_not_allowed`, `api_key_disabled`, `api_disabled`, \
+`server_restricted`; refusals of the panel itself (e.g. `webservers_read_only`) |
 | 404 | `<thing>_not_found` |
 | 409 | conflicts, e.g. `name_taken`, `agent_outdated` |
 | 422 | `validation_error`, with `fields`: field name → error code |
@@ -157,11 +172,18 @@ Each event is a `POST` of JSON:
   "severity": "error",
   "subject": "backup_failed:3:shop",
   "message": "Backup of shop on prod failed: …",
+  "messages": {{"en": "Backup of shop on prod failed: …", "fa": "پشتیبان‌گیری از shop …"}},
   "params": {{"instance": "prod", "db": "shop", "reason": "…"}},
   "run_id": 42,
+  "server": {{"id": 2, "name": "edge"}},
   "source": "devops-manager"
 }}
 ```
+
+`messages` holds `message` in each language the panel speaks (`en`, `fa`; Persian times in
+the alert time zone). `server` is the server the event is about (`null` for the whole
+panel's events, such as `disk_low` and `daily_summary`). A webhook can be limited to some
+servers: it then gets only their events.
 
 with the headers `X-MBP-Event`, `X-MBP-Delivery` (the payload's `id`; the same on retries),
 `X-MBP-Timestamp` (Unix seconds) and `X-MBP-Signature`:

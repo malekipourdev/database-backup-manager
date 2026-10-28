@@ -18,6 +18,7 @@ from mbp.models import DbInstance
 from mbp.notifications.events import Event
 from mbp.repositories.notification_repository import NotificationRepository
 from mbp.repositories.schedule_repository import ScheduleRepository
+from mbp.repositories.server_repository import instance_server_id
 from mbp.services.backup_service import BackupService
 from mbp.services.retention_service import RetentionService
 
@@ -225,8 +226,14 @@ class BackupScheduler:
                     "instance": instance.name if instance else "",
                     "result": result,
                 }
+                server_id = instance_server_id(db, instance)
             self.notifier.emit(
-                Event("schedule_problem", f"schedule_problem:{schedule_id}:{result}", params)
+                Event(
+                    "schedule_problem",
+                    f"schedule_problem:{schedule_id}:{result}",
+                    params,
+                    server_id=server_id,
+                )
             )
         return result
 

@@ -473,7 +473,7 @@ class BotHandler(ContainerMenu, ProjectMenu):
     def instances(self, db: Session, ctx: Ctx, page: int, server_id: int = 0) -> Screen:
         """The databases, of every server or (with `server_id`) of one."""
         server = self._server(db, server_id) if server_id else None
-        where = ServerScope(server.id, server.is_local).instances() if server else None
+        where = ServerScope.of(server).instances() if server else None
         items = InstanceService(db).list(where)
         back = [
             button(t(ctx.lang, "btn_back"), f"sh:{server_id}" if server else "bk"),

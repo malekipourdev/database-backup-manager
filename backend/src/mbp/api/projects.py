@@ -11,10 +11,10 @@ from mbp.api.schemas import (
     ProjectOut,
     ProjectState,
 )
-from mbp.api.scope import ServerScope, server_scope
+from mbp.api.scope import ServerScope, check_server_field, restriction, server_scope
 from mbp.apiaccess.keys import Actor, current_actor
 from mbp.db import get_db
-from mbp.models import Project, Server
+from mbp.models import DbInstance, Project, Server
 from mbp.projects.service import ProjectService, env_of
 from mbp.repositories.project_repository import ProjectRepository
 
@@ -61,12 +61,31 @@ def list_projects(
 ) -> list[ProjectOut]:
     repo = ProjectRepository(db)
     last = repo.last_deployments()
-    projects = repo.list_all(scope.server_id if scope else None)
+    projects = repo.list_all(where=scope.projects() if scope else None)
     return [_out(p, repo, last.get(p.id) or False) for p in projects]
 
 
+def _check_servers(db: Session, scope: ServerScope | None, body: ProjectIn) -> None:
+    """With a key limited to some servers: the project's servers and database are its own."""
+    if scope is None:
+        return
+    check_server_field(scope, "server_id", body.server_id)
+    if body.build_server_id is not None:
+        check_server_field(scope, "build_server_id", body.build_server_id)
+    if body.backup_instance_id is not None:
+        instance = db.get(DbInstance, body.backup_instance_id)
+        if instance is not None and not scope.allows_instance(instance):
+            fields = {"backup_instance_id": "instance_not_found"}
+            raise ApiError(422, "validation_error", fields=fields)
+
+
 @router.post("/projects", response_model=ProjectOut, status_code=201)
-def create_project(body: ProjectIn, db: Session = Depends(get_db)) -> ProjectOut:
+def create_project(
+    body: ProjectIn,
+    db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
+) -> ProjectOut:
+    _check_servers(db, scope, body)
     project = ProjectService(db).save(body.to_data())
     return _out(project, ProjectRepository(db))
 
@@ -77,9 +96,16 @@ def get_project(project_id: int, db: Session = Depends(get_db)) -> ProjectOut:
 
 
 @router.put("/projects/{project_id}", response_model=ProjectOut)
-def update_project(project_id: int, body: ProjectIn, db: Session = Depends(get_db)) -> ProjectOut:
+def update_project(
+    project_id: int,
+    body: ProjectIn,
+    db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
+) -> ProjectOut:
     service = ProjectService(db)
     project = service.get(project_id)
+    server_id = body.server_id or project.server_id
+    _check_servers(db, scope, body.model_copy(update={"server_id": server_id}))
     deployed = service.repo.last_deployments().get(project.id)
     if project.name != body.name and deployed:
         # The name is the compose project and directory on the server: renaming would

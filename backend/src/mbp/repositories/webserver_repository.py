@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import datetime
 
 from sqlalchemy import case, delete, func, select
@@ -47,10 +48,18 @@ class WebServerRepository:
         )
 
     def actions_page(
-        self, page: int, page_size: int, server_id: int | None = None
+        self,
+        page: int,
+        page_size: int,
+        server_id: int | None = None,
+        server_ids: Collection[int] | None = None,
     ) -> tuple[list[WebAction], int]:
+        """`server_ids`: only the actions on these servers."""
         stmt = select(WebAction)
         count = select(func.count()).select_from(WebAction)
+        if server_ids is not None:
+            stmt = stmt.where(WebAction.server_id.in_(sorted(server_ids)))
+            count = count.where(WebAction.server_id.in_(sorted(server_ids)))
         if server_id is not None:
             stmt = stmt.where(WebAction.server_id == server_id)
             count = count.where(WebAction.server_id == server_id)

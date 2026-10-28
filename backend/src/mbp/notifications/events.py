@@ -40,6 +40,9 @@ class Event:
     params: dict = field(default_factory=dict)
     run_id: int | None = None
     severity: str = ""
+    # The server the event is about (the panel's own one for its local databases); None:
+    # the whole panel's, or one found from `run_id` (see mbp.apiaccess.webhooks).
+    server_id: int | None = None
 
     def __post_init__(self) -> None:
         if not self.severity:

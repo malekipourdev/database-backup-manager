@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from mbp.models import Deployment, Project
@@ -10,10 +10,14 @@ class ProjectRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_all(self, server_id: int | None = None) -> list[Project]:
+    def list_all(
+        self, server_id: int | None = None, where: ColumnElement[bool] | None = None
+    ) -> list[Project]:
         stmt = select(Project).order_by(Project.name)
         if server_id is not None:
             stmt = stmt.where(Project.server_id == server_id)
+        if where is not None:
+            stmt = stmt.where(where)
         return list(self.db.scalars(stmt))
 
     def get(self, project_id: int) -> Project | None:

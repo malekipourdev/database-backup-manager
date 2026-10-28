@@ -16,6 +16,7 @@ from mbp.api.schemas import (
     WebhookSecret,
     WebhookUpdate,
 )
+from mbp.api.scope import known_server_ids
 from mbp.apiaccess.webhooks import ALL_EVENTS, EVENT_NAMES, WebhookDispatcher, generate_secret
 from mbp.db import get_db, utcnow
 from mbp.logging import register_secret
@@ -73,6 +74,7 @@ def create_webhook(body: WebhookFields, db: Session = Depends(get_db)) -> Webhoo
         name=body.name,
         url=body.url,
         events=_events(body.events),
+        server_ids=known_server_ids(db, body.server_ids),
         enabled=body.enabled,
         secret_encrypted="",
         failures=0,
@@ -99,6 +101,8 @@ def update_webhook(
         hook.url = body.url
     if body.events is not None:
         hook.events = _events(body.events)
+    if "server_ids" in body.model_fields_set:
+        hook.server_ids = known_server_ids(db, body.server_ids)
     if body.enabled is not None:
         hook.enabled = body.enabled
         if body.enabled:

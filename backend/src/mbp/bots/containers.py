@@ -152,7 +152,7 @@ class ContainerMenu:
         lines = [t(lang, "hub_title", name=server.name), address, state]
         if server.docker_version:
             lines.append(t(lang, "hub_docker", version=server.docker_version))
-        databases = InstanceService(db).list(ServerScope(server.id, server.is_local).instances())
+        databases = InstanceService(db).list(ServerScope.of(server).instances())
         lines.append(
             t(
                 lang,

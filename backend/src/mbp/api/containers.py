@@ -17,6 +17,7 @@ from mbp.api.schemas import (
     ContainerStatsOne,
     ServerInfo,
 )
+from mbp.api.scope import ServerScope, key_servers, restriction
 from mbp.apiaccess.keys import Actor, current_actor
 from mbp.containers.service import ContainerService
 from mbp.db import get_db
@@ -29,12 +30,15 @@ Ref = Path(pattern=ContainerRefPattern)
 
 
 def get_server(
-    server: int | None = Query(default=None, ge=1), db: Session = Depends(get_db)
+    request: Request,
+    server: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
 ) -> Server:
     """The `server` query parameter; the panel's own server when it is omitted."""
     repo = ServerRepository(db)
     row = repo.local() if server is None else repo.get(server)
-    if row is None:
+    allowed = key_servers(request)
+    if row is None or (allowed is not None and row.id not in allowed):
         raise ApiError(404, "server_not_found")
     return row
 
@@ -91,9 +95,12 @@ def list_actions(
     container: str | None = Query(default=None, max_length=128),
     server: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
+    scope: ServerScope | None = Depends(restriction),
 ) -> ContainerActionPage:
     """The audit log of every server, or of one (`server`)."""
-    items, total = ContainerRepository(db).actions_page(page, page_size, container, server)
+    items, total = ContainerRepository(db).actions_page(
+        page, page_size, container, server, scope.server_ids if scope else None
+    )
     return ContainerActionPage(
         items=[ContainerActionItem.model_validate(i) for i in items],
         total=total,

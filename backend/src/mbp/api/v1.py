@@ -9,13 +9,17 @@ keys themselves stay dashboard-only.
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy.orm import Session
 
 from mbp.api import health
-from mbp.api.schemas import ApiCatalog, ApiMe
+from mbp.api.schemas import ApiCatalog, ApiMe, ApiServerRef
 from mbp.apiaccess.keys import require_api_key
 from mbp.apiaccess.middleware import V1_PREFIX
 from mbp.apiaccess.openapi import SELF_TAG, TITLE, catalog, get_spec
+from mbp.apiaccess.servers import enforce_servers
+from mbp.db import get_db
 from mbp.models import ApiKey
+from mbp.repositories.server_repository import ServerRepository
 
 OPENAPI_PATH = f"{V1_PREFIX}/openapi.json"
 
@@ -24,13 +28,24 @@ docs = APIRouter(include_in_schema=False)
 
 
 @meta.get("/me", response_model=ApiMe)
-def me(request: Request, key: ApiKey = Depends(require_api_key)) -> ApiMe:
-    """The key making the request: its scopes, limits, and the admin it acts as."""
+def me(
+    request: Request, key: ApiKey = Depends(require_api_key), db: Session = Depends(get_db)
+) -> ApiMe:
+    """The key making the request: its scopes, servers, limits, and the admin it acts as."""
+    repo = ServerRepository(db)
+    repo.local()
+    servers = [
+        ApiServerRef(id=s.id, name=s.name, kind=s.kind)
+        for s in repo.list_all()
+        if key.server_ids is None or s.id in key.server_ids
+    ]
     return ApiMe(
         id=key.id,
         name=key.name,
         prefix=key.prefix,
         scopes=key.scopes,
+        all_servers=key.server_ids is None,
+        servers=servers,
         allowed_ips=key.allowed_ips,
         rate_limit=key.rate_limit,
         expires_at=key.expires_at,
@@ -70,5 +85,5 @@ def include_v1(app: FastAPI, routers: list[APIRouter]) -> None:
     v1.include_router(health.router)
     v1.include_router(meta)
     for router in routers:
-        v1.include_router(router, dependencies=[Depends(require_api_key)])
+        v1.include_router(router, dependencies=[Depends(require_api_key), Depends(enforce_servers)])
     app.include_router(v1)

@@ -876,9 +876,14 @@ session. Only signing in, two-step verification and the keys themselves are dash
   expiry; it can be rotated, disabled or deleted. Only a SHA-256 of the key is stored; it is shown
   once. Creating or rotating a key needs your password. Send it as
   `Authorization: Bearer mbp_…` or `X-API-Key: mbp_…`.
+- **Keys limited to some servers**, so several pieces of software can share one panel: such a key
+  sees only those servers and what is on them (anything else is `404`), may read but not change
+  the whole panel's settings, and cannot use alerts, bots or webhooks (`403 server_restricted`).
+  `X-MBP-On-Behalf-Of: <person>` records who the calling software acted for.
 - **Webhooks**: every event (backup, deploy, container, site and certificate alerts…) as a signed
   `POST` (`X-MBP-Signature: sha256=HMAC(secret, "<timestamp>.<body>")`), retried twice; deliveries
-  can be listed and sent again. Manageable through the API too (`webhooks` scope).
+  can be listed and sent again. A webhook can be limited to some servers' events. Manageable
+  through the API too (`webhooks` scope).
 - **Request log**, **CORS origins** for browser callers, and a switch that refuses every key at once.
 - **Documentation**: `/api/v1/docs` (Swagger UI), `/api/v1/redoc`, `/api/v1/openapi.json`, and the
   "External API" chapter of the in-panel guide.

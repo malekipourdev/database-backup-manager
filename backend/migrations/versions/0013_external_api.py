@@ -122,14 +122,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("api_request_log", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_api_request_log_key_id"))
-        batch_op.drop_index(batch_op.f("ix_api_request_log_created_at"))
-
+    # Dropping a table drops its indexes; MySQL refuses to drop an index a foreign key still needs.
     op.drop_table("api_request_log")
-    with op.batch_alter_table("api_webhook_deliveries", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_api_webhook_deliveries_webhook_id"))
-
     op.drop_table("api_webhook_deliveries")
     op.drop_table("api_keys")
     op.drop_table("api_webhooks")
