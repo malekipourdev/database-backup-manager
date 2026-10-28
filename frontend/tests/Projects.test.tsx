@@ -39,6 +39,7 @@ const PROJECT = {
   backup_instance_id: null,
   backup_databases: [],
   backup_required: true,
+  folder: null,
   web_domains: [],
   web_target: null,
   build_server_id: null,
@@ -87,6 +88,73 @@ describe("Projects", () => {
     expect(JSON.parse(String(post[1]!.body)).build_server_id).toBe(4);
   });
 
+  it("fills the variables from a .env file", async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith("/instances")) return { status: 200, body: [] };
+      if (url.endsWith("/projects") && init.method === "POST")
+        return { status: 201, body: { ...PROJECT, last_deployment: null, last_success: null } };
+      if (url.endsWith("/projects"))
+        return { status: 200, body: [{ ...PROJECT, folder: "Airplus" }] };
+      return { status: 404, body: { code: "not_found" } };
+    });
+    renderWithProviders(<ProjectFormPage />, { path: "/projects/new", route: "/projects/new" });
+    await userEvent.type(await screen.findByLabelText(/^Name/), "shop");
+    await userEvent.type(screen.getByLabelText(/^Repository/), "https://github.com/acme/shop.git");
+    await userEvent.type(screen.getByPlaceholderText("e.g. Airplus"), "Airplus");
+    await userEvent.click(screen.getByRole("button", { name: "Add variable" }));
+    await userEvent.type(screen.getByLabelText("NAME"), "MODE");
+    await userEvent.type(screen.getByLabelText("Value"), "dev");
+    const file = new File(['MODE=prod\nDB_PASSWORD="s3cret #1"\nbroken line\n'], ".env", {
+      type: "text/plain",
+    });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, file);
+    expect(await screen.findByText(/1 variable\(s\) added, 1 updated/)).toBeInTheDocument();
+    expect(screen.getByText(/Lines not understood: 3/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Paste .env" }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Paste .env" }), "API_KEY=k1");
+    await userEvent.click(screen.getByRole("button", { name: "Fill the variables" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true),
+    );
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    const body = JSON.parse(String(post[1]!.body));
+    expect(body.folder).toBe("Airplus");
+    expect(body.env).toEqual([
+      { name: "MODE", value: "prod" },
+      { name: "DB_PASSWORD", value: "s3cret #1" },
+      { name: "API_KEY", value: "k1" },
+    ]);
+  });
+
+  it("groups projects by folder", async () => {
+    mockFetch(() => ({
+      status: 200,
+      body: [
+        { ...PROJECT, id: 1, name: "air-api", folder: "Airplus" },
+        { ...PROJECT, id: 2, name: "air-web", folder: "Airplus" },
+        { ...PROJECT, id: 3, name: "blog", folder: null },
+        { ...PROJECT, id: 4, name: "crm", folder: "Back office" },
+      ],
+    }));
+    renderWithProviders(<ProjectsPage />);
+    const air = await screen.findByTestId("folder-Airplus");
+    expect(within(air).getByTestId("project-air-api")).toBeInTheDocument();
+    expect(within(air).getByTestId("project-air-web")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("folder-none")).getByTestId("project-blog"),
+    ).toBeInTheDocument();
+    const order = screen.getAllByTestId(/^folder-/).map((el) => el.dataset.testid);
+    expect(order).toEqual(["folder-Airplus", "folder-Back office", "folder-none"]);
+    const heading = within(air).getByRole("button", { name: /Airplus/ });
+    expect(heading).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(heading);
+    expect(heading).toHaveAttribute("aria-expanded", "false");
+    expect(JSON.parse(localStorage.getItem("mbp.projects.closed")!)).toEqual(["Airplus"]);
+    localStorage.removeItem("mbp.projects.closed");
+  });
+
   it("creates a project without echoing secrets back", async () => {
     const fetchMock = mockFetch((url, init) => {
       if (url.endsWith("/instances")) return { status: 200, body: [] };
@@ -122,6 +190,7 @@ describe("Projects", () => {
       "compose_file",
       "credential",
       "env",
+      "folder",
       "name",
       "repo_url",
       "server_id",

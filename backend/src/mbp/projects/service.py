@@ -138,6 +138,7 @@ class ProjectService:
             self.repo.add(project)
         for field in (
             "name",
+            "folder",
             "server_id",
             "repo_url",
             "branch",

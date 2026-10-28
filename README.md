@@ -708,7 +708,13 @@ It uses the [agent](#containers), so turn that on first, including the projects 
 - **Environment variables**: written to a `.env` file next to the compose file on every
   deploy (readable only by the agent). Use them in the compose file with `env_file: .env` or
   `${NAME}`. Values are stored encrypted and never shown again; to change one, type the new
-  value, to keep it, leave the field empty.
+  value, to keep it, leave the field empty. **Upload .env file** or **Paste .env** fills them
+  from an existing `.env` (read in the browser, as docker compose reads it: comments,
+  `export`, quotes and multi-line values): names already listed get the new value, new
+  names are added, and lines that are not variables are reported.
+- **Folder** (optional): keeps related projects together on the Projects page, e.g. the
+  services of one product. Folders open and close and the page has a search. It is only for
+  the panel: files on the server stay in `<projects dir>/<name>`.
 - **Backup before deploy**: pick a database server and databases. They are backed up right
   before every deploy (shown in the backup history as "Before a deploy"). With **Stop the
   deploy if the backup fails** on, nothing is deployed without a fresh backup.

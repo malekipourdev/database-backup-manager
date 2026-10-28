@@ -1140,7 +1140,10 @@
       "serverLocked": "Cannot change after the first deploy; to move it, delete the project and add it on the other server.",
       "webDomains": "Domains",
       "webTarget": "Address of the application",
-      "webTargetHint": "The port your compose file publishes, e.g. http://127.0.0.1:8080."
+      "webTargetHint": "The port your compose file publishes, e.g. http://127.0.0.1:8080.",
+      "folder": "Folder",
+      "folderHint": "Optional: keeps related projects together in the list (e.g. one product's services). Only for the panel; files on the server do not move.",
+      "folderPlaceholder": "e.g. Airplus"
     },
     "validation": {
       "invalid_project_name": "Lowercase letters, digits, - and _, starting with a letter or digit (not the panel's own name).",
@@ -1161,7 +1164,8 @@
       "web_target_required": "Domains need an address to send visitors to (and the other way round).",
       "invalid_domain": "One of the domains is not valid.",
       "invalid_target": "Use http://host:port.",
-      "server_not_connected": "That server is not connected yet."
+      "server_not_connected": "That server is not connected yet.",
+      "invalid_folder": "A folder name cannot contain “/”."
     },
     "errors": {
       "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
@@ -1194,6 +1198,19 @@
       "here": "The project's server (default)",
       "hereHint": "Everything — fetching the code, building and starting — happens on the project's server.",
       "elsewhereHint": "The build server fetches the code and builds; the images are streamed through the panel to the project's server, which fetches the same commit (for its compose file and config) and starts them without building. Good when the project's server is small or its internet is limited; the transfer takes time for large images."
+    },
+    "noFolder": "Without a folder",
+    "search": "Search projects",
+    "noMatch": "No project matches.",
+    "envImport": {
+      "upload": "Upload .env file",
+      "paste": "Paste .env",
+      "apply": "Fill the variables",
+      "hint": "A .env file fills the variables: names already here get the new value, new names are added; nothing is saved until you press Save. The file is read in your browser.",
+      "done": "{{added}} variable(s) added, {{updated}} updated.",
+      "skipped": "Lines not understood: {{lines}}.",
+      "empty": "No variables were found in it.",
+      "tooLarge": "That file is too large for a .env file."
     }
   },
   "servers": {

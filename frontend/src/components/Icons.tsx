@@ -22,6 +22,7 @@ export {
   Database,
   DownloadSimple,
   Flag,
+  Folder,
   GearSix,
   Globe,
   HardDrives,
