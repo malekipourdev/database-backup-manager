@@ -185,3 +185,41 @@ export function useDeployment(id: number | null) {
     refetchInterval: (query) => (isActive(query.state.data) ? 1500 : false),
   });
 }
+
+export interface ProjectFolder {
+  id: number;
+  name: string;
+  created_at: string;
+  /** Projects in it, on every server. */
+  projects: number;
+}
+
+const folderKey = ["projects", "folders"] as const;
+
+export function useProjectFolders() {
+  return useQuery({
+    queryKey: folderKey,
+    queryFn: () => apiFetch<ProjectFolder[]>("/project-folders"),
+  });
+}
+
+export function useFolderMutations() {
+  const queryClient = useQueryClient();
+  const onSuccess = () => queryClient.invalidateQueries({ queryKey: projectKeys.all });
+  return {
+    create: useMutation({
+      mutationFn: (name: string) =>
+        apiFetch<ProjectFolder>("/project-folders", { method: "POST", body: { name } }),
+      onSuccess,
+    }),
+    rename: useMutation({
+      mutationFn: ({ id, name }: { id: number; name: string }) =>
+        apiFetch<ProjectFolder>(`/project-folders/${id}`, { method: "PATCH", body: { name } }),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) => apiFetch<void>(`/project-folders/${id}`, { method: "DELETE" }),
+      onSuccess,
+    }),
+  };
+}

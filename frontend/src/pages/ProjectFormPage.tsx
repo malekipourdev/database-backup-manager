@@ -23,7 +23,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { ApiError, errorMessage } from "../api/client";
 import { useDatabases, useInstances } from "../api/instances";
@@ -57,10 +57,11 @@ const row = (name = "", stored = false): EnvRow => ({ key: nextKey++, name, valu
 function initial(
   project?: Project,
   serverId: number | null = null,
+  folder: string | null = null,
 ): ProjectInput & { rows: EnvRow[] } {
   return {
     name: project?.name ?? "",
-    folder: project?.folder ?? null,
+    folder: project ? project.folder : folder,
     server_id: project?.server_id ?? serverId,
     repo_url: project?.repo_url ?? "",
     branch: project?.branch ?? "main",
@@ -185,7 +186,8 @@ function Form({ project }: { project?: Project }) {
   const currentId = useCurrentServer().id;
   const navigate = useNavigate();
   const save = useSaveProject(project?.id);
-  const [values, setValues] = useState(() => initial(project, currentId));
+  const [params] = useSearchParams();
+  const [values, setValues] = useState(() => initial(project, currentId, params.get("folder")));
   const set = <K extends keyof typeof values>(key: K, value: (typeof values)[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
   const fields = save.error instanceof ApiError ? (save.error.fields ?? {}) : {};

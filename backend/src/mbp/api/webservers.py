@@ -34,6 +34,7 @@ from mbp.api.schemas import (
     WebKind,
     WebLogLines,
     WebMaintenanceIn,
+    WebPathsIn,
     WebPhpSockets,
     WebRestoreIn,
     WebResult,
@@ -207,6 +208,22 @@ def set_maintenance(
         "maintenance_on" if body.on else "maintenance_off",
         body.path,
         lambda: svc.agent.web_maintenance(kind, body.path, body.on),
+        actor=admin.username,
+    )
+
+
+@router.post("/webservers/{kind}/broken-links/remove", response_model=WebResult)
+def remove_broken_links(
+    kind: WebKind,
+    body: WebPathsIn,
+    admin: AdminAccount = Depends(require_session),
+    svc: WebServerService = Depends(service),
+) -> dict:
+    return svc.change(
+        kind,
+        "remove_broken_links",
+        " ".join(body.paths)[:500],
+        lambda: svc.agent.web_remove_broken(kind, body.paths),
         actor=admin.username,
     )
 

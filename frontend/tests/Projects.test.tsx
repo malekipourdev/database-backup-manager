@@ -128,31 +128,79 @@ describe("Projects", () => {
     ]);
   });
 
-  it("groups projects by folder", async () => {
-    mockFetch(() => ({
-      status: 200,
-      body: [
-        { ...PROJECT, id: 1, name: "air-api", folder: "Airplus" },
-        { ...PROJECT, id: 2, name: "air-web", folder: "Airplus" },
-        { ...PROJECT, id: 3, name: "blog", folder: null },
-        { ...PROJECT, id: 4, name: "crm", folder: "Back office" },
-      ],
-    }));
-    renderWithProviders(<ProjectsPage />);
+  it("browses folders and adds a project inside one", async () => {
+    const fetchMock = mockFetch((url, init) => {
+      if (url.endsWith("/project-folders") && init.method === "POST")
+        return {
+          status: 201,
+          body: { id: 9, name: "New one", created_at: "2026-10-28T00:00:00Z", projects: 0 },
+        };
+      if (url.endsWith("/project-folders"))
+        return {
+          status: 200,
+          body: [
+            { id: 1, name: "Airplus", created_at: "2026-10-28T00:00:00Z", projects: 3 },
+            { id: 2, name: "Empty", created_at: "2026-10-28T00:00:00Z", projects: 0 },
+          ],
+        };
+      return {
+        status: 200,
+        body: [
+          { ...PROJECT, id: 1, name: "air-api", folder: "Airplus" },
+          {
+            ...PROJECT,
+            id: 2,
+            name: "air-web",
+            folder: "Airplus",
+            last_deployment: { ...DEPLOYMENT, status: "failed" },
+          },
+          { ...PROJECT, id: 3, name: "blog", folder: null },
+        ],
+      };
+    });
+    renderWithProviders(<ProjectsPage />, { path: "/projects", route: "/projects" });
+    // The top level: folders first, then projects without one.
     const air = await screen.findByTestId("folder-Airplus");
-    expect(within(air).getByTestId("project-air-api")).toBeInTheDocument();
-    expect(within(air).getByTestId("project-air-web")).toBeInTheDocument();
+    expect(air).toHaveTextContent("2 project(s)");
+    expect(air).toHaveTextContent("1 on other servers");
+    expect(air).toHaveTextContent("1 failed");
+    expect(screen.getByTestId("folder-Empty")).toHaveTextContent("Empty");
     expect(
       within(screen.getByTestId("folder-none")).getByTestId("project-blog"),
     ).toBeInTheDocument();
-    const order = screen.getAllByTestId(/^folder-/).map((el) => el.dataset.testid);
-    expect(order).toEqual(["folder-Airplus", "folder-Back office", "folder-none"]);
-    const heading = within(air).getByRole("button", { name: /Airplus/ });
-    expect(heading).toHaveAttribute("aria-expanded", "true");
-    await userEvent.click(heading);
-    expect(heading).toHaveAttribute("aria-expanded", "false");
-    expect(JSON.parse(localStorage.getItem("mbp.projects.closed")!)).toEqual(["Airplus"]);
-    localStorage.removeItem("mbp.projects.closed");
+    expect(screen.queryByTestId("project-air-api")).not.toBeInTheDocument();
+
+    // Into the folder: its projects, and a new project goes into it.
+    await userEvent.click(air);
+    expect(await screen.findByTestId("project-air-api")).toBeInTheDocument();
+    expect(screen.getByTestId("project-air-web")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-blog")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New project here" })).toHaveAttribute(
+      "href",
+      "/projects/new?folder=Airplus",
+    );
+    await userEvent.click(screen.getByRole("link", { name: /Projects/ }));
+
+    // A new folder, opened right away.
+    await userEvent.click(await screen.findByRole("button", { name: "New folder" }));
+    await userEvent.type(await screen.findByLabelText(/Folder name/), "New one");
+    await userEvent.click(screen.getByRole("button", { name: "Create folder" }));
+    expect(await screen.findByText("This folder is empty")).toBeInTheDocument();
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/project-folders") && init?.method === "POST",
+    )!;
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ name: "New one" });
+  });
+
+  it("starts a new project in the folder it was opened from", async () => {
+    mockFetch((url) =>
+      url.endsWith("/instances") ? { status: 200, body: [] } : { status: 200, body: [] },
+    );
+    renderWithProviders(<ProjectFormPage />, {
+      path: "/projects/new",
+      route: "/projects/new?folder=Airplus",
+    });
+    expect(await screen.findByPlaceholderText("e.g. Airplus")).toHaveValue("Airplus");
   });
 
   it("creates a project without echoing secrets back", async () => {

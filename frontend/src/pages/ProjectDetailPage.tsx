@@ -212,6 +212,11 @@ export function ProjectDetailPage() {
     <Stack gap={18}>
       <PageHeader
         help="deploy"
+        back={
+          p.folder
+            ? { to: `/projects?folder=${encodeURIComponent(p.folder)}`, label: p.folder }
+            : { to: "/projects", label: t("projects.title") }
+        }
         title={p.name}
         subtitle={`${p.repo_url} · ${p.branch}`}
         actions={

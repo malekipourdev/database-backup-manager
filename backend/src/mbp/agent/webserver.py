@@ -19,6 +19,7 @@ MAX_FILE_BYTES = 1024 * 1024
 MAX_INCLUDE_DEPTH = 16
 MAX_SYMLINKS = 40
 MAX_WARNINGS = 20
+MAX_PROBLEMS = 300
 
 NGINX_MAIN = "/etc/nginx/nginx.conf"
 APACHE_MAINS = ("/etc/apache2/apache2.conf", "/etc/httpd/conf/httpd.conf")
@@ -38,7 +39,11 @@ NGINX_LOGS = {"access": "/var/log/nginx/access.log", "error": "/var/log/nginx/er
 
 
 class ConfigError(Exception):
-    pass
+    """A file that cannot be used; `problem` says what, for the panel's problem list."""
+
+    def __init__(self, message: str, problem: dict | None = None) -> None:
+        super().__init__(message)
+        self.problem = problem or {"kind": "other", "message": message}
 
 
 @dataclass
@@ -55,8 +60,14 @@ class Reader:
     """Reads the host's files under `root`; tracks what was read and what went wrong."""
 
     root: str
+    # Files the mount could not give, read on the host instead (mbp.agent.webmanage): their
+    # text, None (unreadable there too) or {"broken": target} (a link to nothing).
+    preloaded: dict = field(default_factory=dict)
     files: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
+    problems: list[dict] = field(default_factory=list)
+    # Paths the mount could not give and that were not preloaded.
+    unreadable: set[str] = field(default_factory=set)
 
     def local(self, path: str) -> str:
         return self.root.rstrip("/") + path
@@ -130,23 +141,55 @@ class Reader:
         """(real host path, text) of a file; ConfigError if it cannot or may not be read."""
         if len(self.files) >= MAX_FILES:
             raise ConfigError("too many configuration files")
+        if path in self.preloaded:
+            value = self.preloaded[path]
+            if isinstance(value, str):
+                self.files.add(path)
+                return path, value
+            if isinstance(value, dict):
+                target = value.get("broken", "")
+                raise ConfigError(
+                    f"broken link: {path} -> {target}",
+                    {"kind": "broken_link", "path": path, "target": target},
+                )
+            raise ConfigError(
+                f"cannot read {path} on the server",
+                {"kind": "unreadable", "path": path, "reason": "unreadable"},
+            )
         real = self.resolve(path)
         local = self.local(real)
         try:
             if os.path.getsize(local) > MAX_FILE_BYTES:
-                raise ConfigError(f"file too large: {path}")
+                raise ConfigError(
+                    f"file too large: {path}",
+                    {"kind": "unreadable", "path": path, "reason": "too_large"},
+                )
             with open(local, encoding="utf-8", errors="replace") as handle:
                 text = handle.read()
         except PermissionError as exc:
-            raise ConfigError(f"permission denied: {path}") from exc
+            self.unreadable.add(path)
+            raise ConfigError(
+                f"permission denied: {path}",
+                {"kind": "unreadable", "path": path, "reason": "permission_denied"},
+            ) from exc
         except OSError as exc:
-            raise ConfigError(f"cannot read {path}: {exc.strerror or exc}") from exc
+            self.unreadable.add(path)
+            raise ConfigError(
+                f"cannot read {path}: {exc.strerror or exc}",
+                {"kind": "unreadable", "path": path, "reason": "not_found"},
+            ) from exc
         self.files.add(real)
         return real, text
 
-    def warn(self, message: str) -> None:
+    def warn(self, message: str, problem: dict | None = None) -> None:
         if len(self.warnings) < MAX_WARNINGS and message not in self.warnings:
             self.warnings.append(message)
+        problem = problem or {"kind": "other", "message": message}
+        if len(self.problems) < MAX_PROBLEMS and problem not in self.problems:
+            self.problems.append(problem)
+
+    def report(self, exc: ConfigError) -> None:
+        self.warn(str(exc), exc.problem)
 
 
 # --- nginx ---
@@ -242,20 +285,26 @@ class NginxParser:
         if words[0] != "include" or len(words) != 2:
             return [Directive(words[0], words[1:], path, line)]
         if depth >= MAX_INCLUDE_DEPTH:
-            self.reader.warn(f"includes nested too deeply in {path}:{line}")
+            self.reader.warn(
+                f"includes nested too deeply in {path}:{line}",
+                {"kind": "too_deep", "source": path, "line": line},
+            )
             return []
         pattern = words[1]
         if not pattern.startswith("/"):
             pattern = posixpath.join(self.prefix, pattern)
         found = self.reader.glob(pattern)
         if not found and not _MAGIC.search(pattern):
-            self.reader.warn(f"included file not found: {pattern} ({path}:{line})")
+            self.reader.warn(
+                f"included file not found: {pattern} ({path}:{line})",
+                {"kind": "include_missing", "path": pattern, "source": path, "line": line},
+            )
         out: list[Directive] = []
         for included in found:
             try:
                 out.extend(self.parse_file(included, depth + 1))
             except ConfigError as exc:
-                self.reader.warn(str(exc))
+                self.reader.report(exc)
         return out
 
 
@@ -422,8 +471,8 @@ def _nginx_sites(directives: list[Directive], enabled: bool, in_http: bool) -> l
     ]
 
 
-def scan_nginx(root: str) -> dict | None:
-    reader = Reader(root)
+def scan_nginx(root: str, preloaded: dict | None = None, missing: set | None = None) -> dict | None:
+    reader = Reader(root, preloaded=preloaded or {})
     if not reader.is_dir("/etc/nginx"):
         return None
     sites: list[dict] = []
@@ -443,11 +492,14 @@ def scan_nginx(root: str) -> dict | None:
     sites += _disabled(reader, "/etc/nginx/sites-available", parse)
     sites += _switched_off(reader, "/etc/nginx/conf.d", parse)
     _mark_maintenance(reader, "/etc/nginx", "nginx", sites)
+    if missing is not None:
+        missing.update(reader.unreadable)
     return {
         "kind": "nginx",
         "config": NGINX_MAIN,
         "error": error,
         "warnings": reader.warnings,
+        "problems": reader.problems,
         "files": len(reader.files),
         "sites": sites,
     }
@@ -462,7 +514,7 @@ def _switched_off(reader: Reader, directory: str, parse) -> list[dict]:
         try:
             out.extend(parse(posixpath.join(directory, name)))
         except ConfigError as exc:
-            reader.warn(str(exc))
+            reader.report(exc)
     return out
 
 
@@ -479,7 +531,7 @@ def _disabled(reader: Reader, directory: str, parse) -> list[dict]:
                 continue
             out.extend(parse(path))
         except ConfigError as exc:
-            reader.warn(str(exc))
+            reader.report(exc)
     return out
 
 
@@ -580,20 +632,26 @@ class ApacheParser:
         self, pattern: str, name: str, path: str, line: int, depth: int
     ) -> list[Directive]:
         if depth >= MAX_INCLUDE_DEPTH:
-            self.reader.warn(f"includes nested too deeply in {path}:{line}")
+            self.reader.warn(
+                f"includes nested too deeply in {path}:{line}",
+                {"kind": "too_deep", "source": path, "line": line},
+            )
             return []
         if not pattern.startswith("/"):
             pattern = posixpath.join(self.server_root, pattern)
         found = self.reader.glob(pattern.rstrip("/") or "/")
         if not found and name == "include" and not _MAGIC.search(pattern):
-            self.reader.warn(f"included file not found: {pattern} ({path}:{line})")
+            self.reader.warn(
+                f"included file not found: {pattern} ({path}:{line})",
+                {"kind": "include_missing", "path": pattern, "source": path, "line": line},
+            )
         out: list[Directive] = []
         for included in found:
             for file in self._files(included):
                 try:
                     out.extend(self.parse_file(file, depth + 1))
                 except ConfigError as exc:
-                    self.reader.warn(str(exc))
+                    self.reader.report(exc)
         return out
 
     def _files(self, path: str) -> list[str]:
@@ -728,8 +786,10 @@ def _apache_log_dir(reader: Reader, server_root: str) -> str:
     return match.group(1) if match else default
 
 
-def scan_apache(root: str) -> dict | None:
-    reader = Reader(root)
+def scan_apache(
+    root: str, preloaded: dict | None = None, missing: set | None = None
+) -> dict | None:
+    reader = Reader(root, preloaded=preloaded or {})
     main = next((path for path in APACHE_MAINS if reader.exists(path)), None)
     if main is None:
         if reader.is_dir("/etc/apache2") or reader.is_dir("/etc/httpd"):
@@ -739,6 +799,7 @@ def scan_apache(root: str) -> dict | None:
                 "config": main,
                 "error": f"{main} not found",
                 "warnings": [],
+                "problems": [],
                 "files": 0,
                 "sites": [],
             }
@@ -761,19 +822,26 @@ def scan_apache(root: str) -> dict | None:
     sites += _disabled(reader, "/etc/apache2/sites-available", parse)
     sites += _switched_off(reader, posixpath.join(server_root, "conf.d"), parse)
     _mark_maintenance(reader, server_root, "apache", sites)
+    if missing is not None:
+        missing.update(reader.unreadable)
     return {
         "kind": "apache",
         "config": main,
         "error": error,
         "warnings": reader.warnings,
+        "problems": reader.problems,
         "files": len(reader.files),
         "sites": sites,
     }
 
 
-def scan(root: str) -> dict:
-    """The web servers found under `root` (the host's / as mounted) and their sites."""
+def scan(root: str, preloaded: dict | None = None, missing: set | None = None) -> dict:
+    """The web servers found under `root` (the host's / as mounted) and their sites.
+
+    `preloaded`: files read on the host instead (see Reader); `missing` collects the paths the
+    mount could not give.
+    """
     if not os.path.isdir(os.path.join(root, "etc")):
         return {"available": False, "servers": []}
-    servers = [found for found in (scan_nginx(root), scan_apache(root)) if found]
-    return {"available": True, "servers": servers}
+    found = (scan_nginx(root, preloaded, missing), scan_apache(root, preloaded, missing))
+    return {"available": True, "servers": [server for server in found if server]}

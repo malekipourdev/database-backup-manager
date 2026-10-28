@@ -73,6 +73,7 @@ import {
 import { PageHeader } from "../components/PageHeader";
 import { ServerBadge } from "../components/ServerBadge";
 import { CertbotModal, JobPanel, NewSiteModal, WebResultAlert } from "../components/WebDialogs";
+import { ProblemsTab, problemsOf } from "../components/WebProblems";
 import { WebSiteDrawer } from "../components/WebSiteDrawer";
 import { formatDateTime, formatNumber } from "../i18n";
 import { useCurrentServer } from "../server/CurrentServer";
@@ -158,6 +159,7 @@ function ServiceCard(props: {
   statusError: unknown;
   server: ServerRef;
   readOnly: boolean;
+  onShowProblems: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
@@ -225,16 +227,18 @@ function ServiceCard(props: {
             </Text>
           </Alert>
         )}
-        {ws.warnings.length > 0 && (
-          <Alert color="yellow" p="xs" icon={<Warning size={16} />}>
-            <Stack gap={2}>
-              {ws.warnings.map((w) => (
-                <Text key={w} size="xs" dir="ltr" ta="start">
-                  {w}
-                </Text>
-              ))}
-            </Stack>
-          </Alert>
+        {(ws.problems ?? []).length > 0 && (
+          <Button
+            variant="light"
+            color={(ws.problems ?? []).some((p) => p.kind === "broken_link") ? "red" : "yellow"}
+            size="xs"
+            leftSection={<Warning size={14} />}
+            onClick={props.onShowProblems}
+            data-testid={`problems-${ws.kind}`}
+            style={{ alignSelf: "flex-start" }}
+          >
+            {t("webservers.problems.count", { n: formatNumber((ws.problems ?? []).length, lang) })}
+          </Button>
         )}
         <Group gap="xs" mt={4}>
           <Button
@@ -1108,7 +1112,8 @@ function SettingsTab({ server }: { server: ServerRef }) {
 // --- the page ---
 
 function Overview({ server }: { server: ServerRef }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [tab, setTab] = useState("sites");
   const list = useWebServers(server);
   const available = Boolean(list.data?.available && list.data.servers.length);
   const status = useWebStatus(server, available);
@@ -1117,6 +1122,7 @@ function Overview({ server }: { server: ServerRef }) {
   const readOnly = settings.data?.read_only ?? false;
   const [creating, setCreating] = useState(false);
   const servers = list.data?.servers ?? [];
+  const problemCount = problemsOf(servers).length + servers.filter((ws) => ws.error).length;
   const kinds = servers.filter((s) => !s.error).map((s) => s.kind);
   const targets = useMemo(
     () =>
@@ -1178,14 +1184,28 @@ function Overview({ server }: { server: ServerRef }) {
             statusError={status.error}
             server={server}
             readOnly={readOnly}
+            onShowProblems={() => setTab("problems")}
           />
         ))}
         <CertbotCard server={server} kind={kinds[0] ?? "nginx"} readOnly={readOnly} />
       </SimpleGrid>
-      <Tabs defaultValue="sites" keepMounted={false}>
+      <Tabs value={tab} onChange={(v) => setTab(v ?? "sites")} keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="sites" leftSection={<Globe size={16} />}>
             {t("webservers.tabs.sites")}
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="problems"
+            leftSection={<Warning size={16} />}
+            rightSection={
+              problemCount > 0 ? (
+                <Badge size="sm" color="red" variant="light">
+                  {formatNumber(problemCount, i18n.language)}
+                </Badge>
+              ) : null
+            }
+          >
+            {t("webservers.tabs.problems")}
           </Tabs.Tab>
           <Tabs.Tab value="checks" leftSection={<Play size={16} />}>
             {t("webservers.tabs.checks")}
@@ -1199,6 +1219,9 @@ function Overview({ server }: { server: ServerRef }) {
         </Tabs.List>
         <Tabs.Panel value="sites">
           <SitesTab server={server} servers={servers} readOnly={readOnly} />
+        </Tabs.Panel>
+        <Tabs.Panel value="problems">
+          <ProblemsTab server={server} servers={servers} readOnly={readOnly} />
         </Tabs.Panel>
         <Tabs.Panel value="checks">
           <ChecksTab server={server} />

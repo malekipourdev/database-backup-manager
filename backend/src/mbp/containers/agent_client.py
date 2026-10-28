@@ -276,6 +276,9 @@ class AgentClient:
     def web_maintenance(self, kind: str, path: str, on: bool) -> dict:
         return self._web("POST", f"/{kind}/maintenance", json={"path": path, "on": on})
 
+    def web_remove_broken(self, kind: str, paths: list[str]) -> dict:
+        return self._web("POST", f"/{kind}/broken-links/remove", json={"paths": paths})
+
     def web_create(self, kind: str, spec: dict) -> dict:
         return self._web("POST", f"/{kind}/sites", json=spec)
 

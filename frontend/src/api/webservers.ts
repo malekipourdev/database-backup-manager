@@ -35,11 +35,24 @@ export interface WebSite {
   logs?: { access?: string | null; error?: string | null };
 }
 
+export interface WebProblem {
+  kind: "broken_link" | "unreadable" | "include_missing" | "too_deep" | "other";
+  path?: string | null;
+  /** broken_link: where the link points. */
+  target?: string | null;
+  /** unreadable: not_found | permission_denied | too_large | unreadable */
+  reason?: string | null;
+  source?: string | null;
+  line?: number | null;
+  message?: string | null;
+}
+
 export interface WebServer {
   kind: WebServerKind;
   config: string;
   error: string | null;
   warnings: string[];
+  problems?: WebProblem[];
   files: number;
   sites: WebSite[];
 }
@@ -360,6 +373,15 @@ export function useSetMaintenance(server: ServerRef) {
       method: "POST",
       body,
     }),
+  );
+}
+
+export function useRemoveBrokenLinks(server: ServerRef) {
+  return useWebChange(server, ({ kind, paths }: { kind: string; paths: string[] }) =>
+    apiFetch<WebResult & { removed?: string[] | null }>(
+      withServer(`/webservers/${kind}/broken-links/remove`, server),
+      { method: "POST", body: { paths } },
+    ),
   );
 }
 

@@ -624,6 +624,10 @@ If a token leaked or was lost, press "New token" on the server's card. The old t
 - **Get / renew SSL certificate** and **Watch this site**: see [Certificates](#webservers-ssl) and [Health checks](#webservers-checks).
 - **Logs:** the access and error logs of the site, the last 100–2000 lines.
 
+## Problems
+
+The **Problems** tab (its count is on the web server's card) lists broken links in `sites-enabled` — leftovers of deleted sites, removed safely with one button (tested and reloaded, put back if the test fails) — files that could not be read, and includes of missing files.
+
 ## New site
 
 **New site** writes a site from a template — reverse proxy (to an address or a container's published port), PHP through PHP-FPM, static files, or a redirect — enables it, tests and reloads. If the test fails, it is removed again. Add HTTPS afterwards with Let's Encrypt.
@@ -784,7 +788,7 @@ Requirements: the [agent is on](#containers-enable) (on the panel's server), or 
   - **SSH deploy key (recommended):** create one with `ssh-keygen -t ed25519 -N "" -f deploy_key`, add `deploy_key.pub` to the repository as a read-only deploy key (GitHub: Settings → Deploy keys), and paste the private key into the panel.
   - **Token:** a token with read access (GitHub: Contents: read; GitLab/Gitea: `read_repository`).
 - **Environment variables:** written to a `.env` file next to the compose file on every deploy. Use them with `env_file: .env` or `${NAME}`. Values are stored encrypted and never shown again; leave a field empty to keep it. **Upload .env file** or **Paste .env** fills them from an existing `.env`: names already listed get the new value, new ones are added, and lines that are not variables are reported. Nothing is saved until you press Save.
-- **Folder:** optional; keeps related projects together (e.g. one product's services), on the Projects page and on the server, in `<projects dir>/<folder>/<name>`. Changing it moves the project on its next deploy (its services restart; data folders move with it). The project page shows where its files are.
+- **Folder:** optional (on the Projects page, **New folder**, open it and **New project here** puts the project straight in it); keeps related projects together (e.g. one product's services), on the Projects page and on the server, in `<projects dir>/<folder>/<name>`. Changing it moves the project on its next deploy (its services restart; data folders move with it). The project page shows where its files are.
 - **Backup before deploy:** pick a database server and databases. With "Stop the deploy if the backup fails", nothing is deployed without a fresh backup.
 
 > Keys and tokens are stored encrypted, never shown again, and masked in logs.
