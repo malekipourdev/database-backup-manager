@@ -1075,6 +1075,7 @@ Webhooks get the events they subscribe to whatever the [alert rules](#notificati
   "severity": "error",
   "subject": "backup_failed:3:shop",
   "message": "Backup of shop on prod failed: …",
+  "messages": { "en": "Backup of shop on prod failed: …", "fa": "پشتیبان‌گیری از shop …" },
   "params": { "instance": "prod", "db": "shop", "reason": "…" },
   "run_id": 42,
   "server": { "id": 2, "name": "edge" },
@@ -1082,7 +1083,7 @@ Webhooks get the events they subscribe to whatever the [alert rules](#notificati
 }
 ```
 
-`server` is the server the event is about, or `null` for the whole panel's events.
+`messages` holds the same text in each language the panel speaks (`en`, `fa`). `server` is the server the event is about, or `null` for the whole panel's events.
 
 Headers: `X-MBP-Event` (the event), `X-MBP-Delivery` (the payload's `id`; the same on retries, so you can ignore duplicates), `X-MBP-Timestamp` (Unix seconds) and `X-MBP-Signature`.
 

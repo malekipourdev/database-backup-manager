@@ -1075,6 +1075,7 @@ X-API-Key: mbp_…
   "severity": "error",
   "subject": "backup_failed:3:shop",
   "message": "Backup of shop on prod failed: …",
+  "messages": { "en": "Backup of shop on prod failed: …", "fa": "پشتیبان‌گیری از shop …" },
   "params": { "instance": "prod", "db": "shop", "reason": "…" },
   "run_id": 42,
   "server": { "id": 2, "name": "edge" },
@@ -1082,7 +1083,7 @@ X-API-Key: mbp_…
 }
 ```
 
-`server` سروری است که رویداد درباره‌ی آن است، یا `null` برای رویدادهای کل پنل.
+`messages` همین متن را به هر زبانی که پنل دارد (`en`، `fa`) نگه می‌دارد. `server` سروری است که رویداد درباره‌ی آن است، یا `null` برای رویدادهای کل پنل.
 
 هدرها: `X-MBP-Event` (رویداد)، `X-MBP-Delivery` (همان `id` بدنه؛ در تلاش دوباره هم یکسان است تا تکراری‌ها را کنار بگذارید)، `X-MBP-Timestamp` (ثانیه‌ی یونیکس) و `X-MBP-Signature`.
 

@@ -30,6 +30,7 @@ from mbp.db import utcnow
 from mbp.models import ApiWebhook, ApiWebhookDelivery, BackupRun, DbInstance, Server
 from mbp.notifications.events import EVENTS, Event
 from mbp.notifications.render import render
+from mbp.repositories.notification_repository import NotificationRepository
 from mbp.repositories.server_repository import instance_server_id
 from mbp.security import crypto
 
@@ -76,20 +77,43 @@ def event_server(db: Session, event: Event) -> Server | None:
     return db.get(Server, server_id) if server_id is not None else None
 
 
+PING_MESSAGES = {
+    "en": "Test delivery from DevOps Manager.",
+    "fa": "ارسال آزمایشی از DevOps Manager.",
+}
+
+
+def event_messages(event: Event, zone: ZoneInfo) -> dict[str, str]:
+    """The event as the panel's alerts say it, in each language (times in `zone` for "fa")."""
+    if event.type == "ping":
+        return dict(PING_MESSAGES)
+    return {"en": render(event, "en", ZoneInfo("UTC")), "fa": render(event, "fa", zone)}
+
+
+def alert_zone(db: Session) -> ZoneInfo:
+    try:
+        return ZoneInfo(NotificationRepository(db).get_settings().timezone)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
 def event_payload(
-    delivery_id: str, event: Event, created_at: datetime, server: Server | None = None
+    delivery_id: str,
+    event: Event,
+    created_at: datetime,
+    server: Server | None = None,
+    zone: ZoneInfo | None = None,
 ) -> dict:
+    messages = event_messages(event, zone or ZoneInfo("UTC"))
     return {
         "id": delivery_id,
         "event": event.type,
         "created_at": created_at.isoformat(),
         "severity": event.severity,
         "subject": event.subject,
-        "message": (
-            "Test delivery from DevOps Manager."
-            if event.type == "ping"
-            else render(event, "en", ZoneInfo("UTC"))
-        ),
+        "message": messages["en"],
+        # The same text in each language the panel speaks.
+        "messages": messages,
         "params": event.params,
         "run_id": event.run_id,
         # The server it is about; null for the whole panel's events.
@@ -132,8 +156,9 @@ class WebhookDispatcher:
             with self.session_factory() as db:
                 hooks = db.scalars(select(ApiWebhook).where(ApiWebhook.enabled.is_(True))).all()
                 server = event_server(db, event)
+                zone = alert_zone(db)
                 ids = [
-                    self._create(db, hook, event, created_at, server)
+                    self._create(db, hook, event, created_at, server, zone)
                     for hook in hooks
                     if subscribed(hook, event.type) and covers(hook, server.id if server else None)
                 ]
@@ -189,6 +214,7 @@ class WebhookDispatcher:
         event: Event,
         created_at: datetime,
         server: Server | None = None,
+        zone: ZoneInfo | None = None,
     ) -> int:
         delivery_id = str(uuid.uuid4())
         row = ApiWebhookDelivery(
@@ -196,7 +222,7 @@ class WebhookDispatcher:
             uuid=delivery_id,
             created_at=created_at,
             event=event.type,
-            payload=event_payload(delivery_id, event, created_at, server),
+            payload=event_payload(delivery_id, event, created_at, server, zone),
             status="pending",
             attempts=0,
         )

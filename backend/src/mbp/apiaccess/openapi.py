@@ -172,6 +172,7 @@ Each event is a `POST` of JSON:
   "severity": "error",
   "subject": "backup_failed:3:shop",
   "message": "Backup of shop on prod failed: …",
+  "messages": {{"en": "Backup of shop on prod failed: …", "fa": "پشتیبان‌گیری از shop …"}},
   "params": {{"instance": "prod", "db": "shop", "reason": "…"}},
   "run_id": 42,
   "server": {{"id": 2, "name": "edge"}},
@@ -179,9 +180,10 @@ Each event is a `POST` of JSON:
 }}
 ```
 
-`server` is the server the event is about (`null` for the whole panel's events, such as
-`disk_low` and `daily_summary`). A webhook can be limited to some servers: it then gets only
-their events.
+`messages` holds `message` in each language the panel speaks (`en`, `fa`; Persian times in
+the alert time zone). `server` is the server the event is about (`null` for the whole
+panel's events, such as `disk_low` and `daily_summary`). A webhook can be limited to some
+servers: it then gets only their events.
 
 with the headers `X-MBP-Event`, `X-MBP-Delivery` (the payload's `id`; the same on retries),
 `X-MBP-Timestamp` (Unix seconds) and `X-MBP-Signature`:

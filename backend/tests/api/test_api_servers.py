@@ -371,6 +371,8 @@ def test_webhooks_limited_to_servers_get_only_their_events(auth_client, app, db,
         .payload
     )
     assert payload["server"] == {"id": world.servers["a"], "name": "a"}
+    assert payload["messages"]["en"] == payload["message"]
+    assert payload["messages"]["fa"] and payload["messages"]["fa"] != payload["message"]
 
     path = f"/api/webhooks/{hook['id']}"
     assert auth_client.patch(path, json={"server_ids": None}).json()["server_ids"] is None
