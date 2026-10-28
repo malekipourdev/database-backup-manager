@@ -41,6 +41,9 @@ class FakeDocker:
         self.denied = False
         self.calls: list[tuple[str, str]] = []
         self.system_cpu = 10_000_000
+        # Images: `docker save` gives a fake tar of the names; `docker load` keeps what it got.
+        self.saved: list[list[str]] = []
+        self.loaded: list[bytes] = []
         self.lock = threading.Lock()
 
     def add(self, name: str, **kwargs) -> FakeContainer:
@@ -156,6 +159,19 @@ class FakeDocker:
                     "Name": "server-1",
                 },
             )
+        if path == "/images/get":
+            names = request.url.params.get_list("names")
+            self.saved.append(names)
+            # Big enough to arrive in several chunks.
+            return httpx.Response(200, content=("TAR:" + ",".join(names) + "\n").encode() * 50000)
+        if path == "/images/load" and method == "POST":
+            import gzip
+
+            data = gzip.decompress(request.read())
+            self.loaded.append(data)
+            names = data.split(b"\n", 1)[0].decode().removeprefix("TAR:").split(",")
+            lines = [json.dumps({"stream": f"Loaded image: {n}\n"}) for n in names if n]
+            return httpx.Response(200, content="\n".join(lines))
         if path == "/containers/json":
             return httpx.Response(200, json=[self._item(c) for c in self.containers.values()])
         match = re.fullmatch(r"/containers/([^/]+)/(json|stats|logs|start|stop|restart)", path)

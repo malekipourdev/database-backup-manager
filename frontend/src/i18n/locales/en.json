@@ -194,7 +194,11 @@
     "check_not_found": "The check no longer exists.",
     "host_helper_unavailable": "The agent could not start its helper on this server; is the agent's container running under the label mbp.role=agent?",
     "certificate_unreadable": "The certificate file could not be read.",
-    "certificate_invalid": "The certificate file is not valid."
+    "certificate_invalid": "The certificate file is not valid.",
+    "transfer_failed": "The images could not be sent from the build server.",
+    "image_load_failed": "The project's server could not load the images.",
+    "no_images": "The build made no images.",
+    "invalid_mode": "This agent does not know that kind of deploy; update it."
   },
   "validation": {
     "required": "This field is required.",
@@ -1081,7 +1085,8 @@
       "fetch": "fetching code",
       "build": "building",
       "up": "starting",
-      "check": "checking"
+      "check": "checking",
+      "transfer": "sending images"
     },
     "columns": {
       "status": "Status",
@@ -1095,7 +1100,8 @@
       "access": "Repository access",
       "env": "Environment variables",
       "backup": "Backup before deploy",
-      "web": "Domain (web server)"
+      "web": "Domain (web server)",
+      "build": "Where to build"
     },
     "accessHint": "For a private repository. Prefer a deploy key or a token with read-only access to this repository only.",
     "auth": {
@@ -1154,7 +1160,8 @@
       "server_not_found": "Server not found.",
       "web_target_required": "Domains need an address to send visitors to (and the other way round).",
       "invalid_domain": "One of the domains is not valid.",
-      "invalid_target": "Use http://host:port."
+      "invalid_target": "Use http://host:port.",
+      "server_not_connected": "That server is not connected yet."
     },
     "errors": {
       "fetch_failed": "Fetching the code from git failed. Check the repository address, the branch and the access settings.",
@@ -1180,7 +1187,14 @@
       "job_not_found": "The agent no longer knows this deploy.",
       "agent_error": "The agent hit an unexpected error."
     },
-    "webHint": "Optional. After every successful deploy, these domains are served by a reverse proxy on the server's nginx or Apache, unless a site has them already. Add HTTPS afterwards on the Web servers page."
+    "webHint": "Optional. After every successful deploy, these domains are served by a reverse proxy on the server's nginx or Apache, unless a site has them already. Add HTTPS afterwards on the Web servers page.",
+    "build": {
+      "intro": "Building images (docker compose build) uses a lot of CPU, memory and bandwidth. It can run on the project's own server, or on another connected server; the built images are then sent to the project's server, which only starts them.",
+      "label": "Build on",
+      "here": "The project's server (default)",
+      "hereHint": "Everything — fetching the code, building and starting — happens on the project's server.",
+      "elsewhereHint": "The build server fetches the code and builds; the images are streamed through the panel to the project's server, which fetches the same commit (for its compose file and config) and starts them without building. Good when the project's server is small or its internet is limited; the transfer takes time for large images."
+    }
   },
   "servers": {
     "title": "Servers",

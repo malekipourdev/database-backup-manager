@@ -89,6 +89,13 @@ class ProjectService:
         server_id = data.get("server_id")
         if server_id is not None and self.db.get(Server, server_id) is None:
             fields["server_id"] = "server_not_found"
+        build_id = data.get("build_server_id")
+        if build_id is not None:
+            build = self.db.get(Server, build_id)
+            if build is None:
+                fields["build_server_id"] = "server_not_found"
+            elif not build.paired:
+                fields["build_server_id"] = "server_not_connected"
         instance_id = data.get("backup_instance_id")
         if instance_id is not None and self.db.get(DbInstance, instance_id) is None:
             fields["backup_instance_id"] = "instance_not_found"
@@ -141,6 +148,7 @@ class ProjectService:
             "backup_required",
             "web_domains",
             "web_target",
+            "build_server_id",
         ):
             if field in data:
                 setattr(project, field, data[field])
@@ -153,6 +161,8 @@ class ProjectService:
             self._apply_env(project, data["env"])
         if not project.backup_instance_id:
             project.backup_databases = []
+        if project.build_server_id == project.server_id:
+            project.build_server_id = None  # building where it runs is the default
         self.db.commit()
         return project
 

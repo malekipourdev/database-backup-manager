@@ -23,6 +23,8 @@ WEB_PASSED_ON = PASSED_ON | {400, 409, 413}
 UNAUTHORIZED_CODES = {"agent_clock_skew"}
 # A dump may pause while the server works on a big table.
 DUMP_READ_TIMEOUT = 600.0
+# Images can be large and the link between two servers slow.
+IMAGE_TIMEOUT = 3600.0
 
 
 class SignedAuth(httpx.Auth):
@@ -152,6 +154,62 @@ class AgentClient:
 
     def deploy_job(self, job_id: str, offset: int) -> dict:
         return self._call("GET", f"/v1/deploy/{job_id}", params={"offset": offset})
+
+    def capabilities(self) -> dict:
+        try:
+            return self._call("GET", "/v1/capabilities")
+        except ApiError as exc:
+            if exc.status == 404 and exc.code == "agent_error":
+                raise ApiError(409, "agent_outdated") from exc
+            raise
+
+    def send_images(
+        self, job_id: str, target: "AgentClient", project: str, progress=None
+    ) -> tuple[int, list[str]]:
+        """Streams a build job's images from this agent into `target` (never to disk here).
+
+        Returns (bytes sent, names loaded). `progress(bytes)` is called as the data flows.
+        """
+        kwargs: dict = {"headers": self._headers}
+        if self._auth is not None:
+            kwargs["auth"] = self._auth
+        sent = 0
+
+        def body():
+            nonlocal sent
+            for chunk in response.iter_raw(1024 * 1024):
+                sent += len(chunk)
+                if progress is not None:
+                    progress(sent)
+                yield chunk
+
+        timeout = httpx.Timeout(40.0, read=IMAGE_TIMEOUT)
+        try:
+            with self._client.stream(
+                "GET", f"/v1/deploy/{job_id}/images", timeout=timeout, **kwargs
+            ) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    raise self._error(response)
+                loaded = target.load_images(project, body())
+        except httpx.TransportError as exc:
+            raise _transport_error(exc) from exc
+        return sent, loaded
+
+    def load_images(self, project: str, chunks) -> list[str]:
+        kwargs: dict = {"headers": {**self._headers, "Content-Type": "application/gzip"}}
+        if self._auth is not None:
+            kwargs["auth"] = self._auth
+        timeout = httpx.Timeout(40.0, read=IMAGE_TIMEOUT, write=IMAGE_TIMEOUT)
+        try:
+            response = self._client.post(
+                f"/v1/projects/{project}/images", content=chunks, timeout=timeout, **kwargs
+            )
+        except httpx.TransportError as exc:
+            raise _transport_error(exc) from exc
+        if response.status_code >= 400:
+            raise self._error(response)
+        return response.json()["loaded"]
 
     def project_state(self, name: str) -> dict:
         return self._call("GET", f"/v1/projects/{name}/state")

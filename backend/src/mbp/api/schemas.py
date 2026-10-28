@@ -944,6 +944,9 @@ class ProjectIn(BaseModel):
     # After a successful deploy: these domains proxied to web_target by the web server.
     web_domains: list[str] = Field(default=[], max_length=20)
     web_target: str | None = Field(default=None, max_length=300)
+    # Build the images on this server and send them to the project's server; None: build
+    # where it runs.
+    build_server_id: int | None = None
 
     @field_validator("web_domains")
     @classmethod
@@ -1038,6 +1041,8 @@ class ProjectOut(BaseModel):
     backup_required: bool
     web_domains: list[str] = []
     web_target: str | None = None
+    build_server_id: int | None = None
+    build_server_name: str | None = None
     created_at: datetime
     updated_at: datetime
     last_deployment: DeploymentSummary | None = None

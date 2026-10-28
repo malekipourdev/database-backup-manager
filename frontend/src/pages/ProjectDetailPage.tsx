@@ -251,6 +251,12 @@ export function ProjectDetailPage() {
             {t("projects.onServer")}
           </Title>
           <Stack gap={8}>
+            {project.data?.build_server_name && (
+              <div className="cl-kv" data-testid="build-server-note">
+                <span>{t("projects.build.label")}</span>
+                <span>{project.data.build_server_name}</span>
+              </div>
+            )}
             <div className="cl-kv">
               <span>{t("projects.current")}</span>
               <code dir="ltr">

@@ -804,6 +804,20 @@ Press **Deploy** on the project's page (or in the bot). A live log shows:
 - **From the bot:** Projects → project → Deploy, then the Google Authenticator code.
 - **Deleting a project** removes it from the panel and, if ticked, stops and removes its containers (`docker compose down`; volumes and data are kept). The deploy history stays.
 
+@@article build-elsewhere /projects
+@title Building on another server
+@summary Build the images on one server and run them on another.
+
+By default the project's own server fetches the code, builds the images (`docker compose build`, which needs a lot of CPU, memory and downloads) and starts them.
+
+In the project's form, **Where to build → Build on** can name another connected server instead:
+
+1. That server fetches the code and builds; nothing is started there.
+2. The panel streams the images, compressed, from its agent to the project's server.
+3. The project's server fetches the same commit (for its compose file and configuration) and starts the images without building.
+
+The deploy log shows **sending images** and the size sent. Choose it when the project's server is small or its internet is limited. Large images take time to send, and both servers' agents must be up to date ([Updating an agent](#server-maintenance)).
+
 @@article rollback /projects
 @title Rolling back
 @summary Put a broken deploy back with one click.

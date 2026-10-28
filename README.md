@@ -743,6 +743,23 @@ account with two-step verification on.
 its containers (`docker compose down`; volumes and data directories are kept) and deletes its
 checkout. The deploy history is kept.
 
+### Building on another server
+
+By default everything happens on the project's server: fetching the code, `docker compose
+build` (the heavy part: CPU, memory, downloads) and starting. Under **Where to build** a
+project can instead be built on another connected server:
+
+1. The build server fetches the code and runs `docker compose build`; nothing is started there.
+2. The built images are streamed, gzip-compressed, from its agent through the panel to the
+   project's server (`docker save` → `docker load`; nothing is stored on the panel's disk).
+3. The project's server fetches exactly the commit that was built (for its compose file and
+   configuration), pulls the images that are not built, and starts everything with
+   `up --no-build`.
+
+The deploy log shows each step and how much was sent. Useful when the project's server is small
+or its internet is limited; for large images the transfer takes time, and both agents must be
+up to date (an older one is reported as outdated instead of deploying another way).
+
 ### On a server in Iran
 
 Pulling images from Docker Hub may be blocked or rate-limited. Configure a registry mirror

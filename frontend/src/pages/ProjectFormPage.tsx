@@ -69,6 +69,7 @@ function initial(
     backup_required: project?.backup_required ?? true,
     web_domains: project?.web_domains ?? [],
     web_target: project?.web_target ?? null,
+    build_server_id: project?.build_server_id ?? null,
   };
 }
 
@@ -119,6 +120,42 @@ function BackupFields(props: {
           />
         </>
       )}
+    </Stack>
+  );
+}
+
+/** Where the images are built: the project's server, or another connected one. */
+function BuildServerField(props: {
+  serverId: number | null;
+  value: number | null;
+  error: string | null;
+  onChange: (id: number | null) => void;
+}) {
+  const { t } = useTranslation();
+  const { servers } = useCurrentServer();
+  const runsOn = props.serverId ?? servers.find((s) => s.kind === "local")?.id ?? null;
+  const options = [
+    { value: "", label: t("projects.build.here") },
+    ...servers
+      .filter((s) => s.paired && s.id !== runsOn)
+      .map((s) => ({ value: String(s.id), label: s.name })),
+  ];
+  return (
+    <Stack gap="xs">
+      <Select
+        label={t("projects.build.label")}
+        data={options}
+        value={props.value === null || props.value === runsOn ? "" : String(props.value)}
+        onChange={(v) => props.onChange(v ? Number(v) : null)}
+        allowDeselect={false}
+        error={props.error}
+        data-testid="build-server"
+      />
+      <Text size="xs" c="dimmed">
+        {props.value === null || props.value === runsOn
+          ? t("projects.build.hereHint")
+          : t("projects.build.elsewhereHint")}
+      </Text>
     </Stack>
   );
 }
@@ -377,6 +414,21 @@ function Form({ project }: { project?: Project }) {
                 ...(v.required !== undefined ? { backup_required: v.required } : {}),
               }))
             }
+          />
+        </Paper>
+
+        <Paper withBorder p="lg">
+          <Title order={4} mb={4}>
+            {t("projects.sections.build")}
+          </Title>
+          <Text size="sm" c="dimmed" mb="sm">
+            {t("projects.build.intro")}
+          </Text>
+          <BuildServerField
+            serverId={values.server_id}
+            value={values.build_server_id}
+            error={fieldError("build_server_id")}
+            onChange={(id) => setValues((prev) => ({ ...prev, build_server_id: id }))}
           />
         </Paper>
 
